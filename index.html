@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PhysioVision</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>PhysioVision</h1>
+    <p class="subtitle">AI-powered physiotherapy assistant</p>
+  </header>
+
+  <main>
+    <div class="stage">
+      <video id="webcam" autoplay playsinline></video>
+      <canvas id="overlay"></canvas>
+      <div id="status" class="status">Loading model…</div>
+      <div class="setup-tip">
+        Place camera at chest height, 2–3 m away · Stand facing camera · Full body in frame
+      </div>
+    </div>
+
+    <aside class="panel">
+
+      <!-- Controls -->
+      <div class="control-row">
+        <label for="exerciseSelect">Exercise</label>
+        <select id="exerciseSelect"></select>
+      </div>
+      <div class="control-row">
+        <label for="sideSelect">Affected side</label>
+        <select id="sideSelect">
+          <option value="right">Right</option>
+          <option value="left">Left</option>
+        </select>
+      </div>
+
+      <button id="toggle" disabled>Start camera</button>
+
+      <!-- Tracking warning (shown for exercises with occlusion risk) -->
+      <div id="trackingWarning" class="tracking-warning hidden"></div>
+
+      <!-- Prescription -->
+      <div id="prescription" class="prescription"></div>
+
+      <!-- Rep counter -->
+      <div class="rep-block">
+        <span id="repCount" class="rep-count">0</span>
+        <span class="rep-label">reps</span>
+      </div>
+
+      <!-- Phase flow: STANDING → [ SQUAT ] → STANDING -->
+      <div id="phaseFlow" class="phase-flow"></div>
+
+      <!-- Progress toward next phase -->
+      <div class="progress-wrap">
+        <div id="progressFill" class="progress-fill"></div>
+      </div>
+      <p class="progress-label" id="progressLabel">Position yourself to start</p>
+
+      <!-- Coaching cues -->
+      <ul id="cueList" class="cue-list"></ul>
+
+      <!-- Symmetry warning -->
+      <div id="symWarning" class="sym-warning hidden"></div>
+
+      <!-- Debug angles (collapsed by default) -->
+      <details class="metrics">
+        <summary>Joint angles</summary>
+        <ul id="angleList">
+          <li><span>Left knee</span><b data-angle="leftKnee">—</b></li>
+          <li><span>Right knee</span><b data-angle="rightKnee">—</b></li>
+          <li><span>Left hip</span><b data-angle="leftHip">—</b></li>
+          <li><span>Right hip</span><b data-angle="rightHip">—</b></li>
+          <li><span>Left ankle</span><b data-angle="leftAnkle">—</b></li>
+          <li><span>Right ankle</span><b data-angle="rightAnkle">—</b></li>
+          <li><span>Left elbow</span><b data-angle="leftElbow">—</b></li>
+          <li><span>Right elbow</span><b data-angle="rightElbow">—</b></li>
+        </ul>
+        <ul id="symList">
+          <li><span>Knee L/R diff</span><b data-sym="knee">—</b></li>
+          <li><span>Elbow L/R diff</span><b data-sym="elbow">—</b></li>
+        </ul>
+        <p class="fps">FPS: <b id="fps">—</b></p>
+      </details>
+
+    </aside>
+  </main>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>

@@ -1917,6 +1917,215 @@ textarea:focus-visible {
   font-size: 20px;
 }
 
+/* ── Draft exercise library ─────────────────────────────────────────── */
+.exercise-library {
+  margin-top: 32px;
+  padding: clamp(24px, 4vw, 52px);
+  border: 1px solid rgba(255, 255, 255, 0.17);
+  border-radius: 24px;
+  background: var(--ink-deep);
+}
+
+.exercise-library-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.exercise-library-heading .eyebrow {
+  margin-bottom: 12px;
+  color: var(--mint);
+}
+
+.exercise-library-heading h3 {
+  margin: 0;
+  color: var(--white);
+  font-size: clamp(32px, 4vw, 54px);
+}
+
+.exercise-library-status {
+  flex: none;
+  padding: 8px 12px;
+  border: 1px solid rgba(243, 215, 125, 0.4);
+  border-radius: 999px;
+  color: var(--yellow);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.exercise-library-notice {
+  display: grid;
+  gap: 4px;
+  margin: 30px 0;
+  padding: 18px 20px;
+  border-left: 4px solid var(--yellow);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(243, 215, 125, 0.08);
+}
+
+.exercise-library-notice strong {
+  color: var(--white);
+}
+
+.exercise-library-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(220px, 0.5fr);
+  gap: 16px;
+}
+
+.exercise-library-controls label {
+  display: grid;
+  gap: 7px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.exercise-library-controls input,
+.exercise-library-controls select {
+  width: 100%;
+  min-height: 52px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  color: var(--white);
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 16px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.exercise-library-controls input::placeholder {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.exercise-library-controls option {
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.exercise-library-count {
+  margin: 24px 0 12px;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 13px;
+}
+
+.exercise-library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(290px, 100%), 1fr));
+  gap: 16px;
+}
+
+.exercise-library-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 24px;
+  border-radius: 16px;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.exercise-card-metadata {
+  margin-bottom: 10px;
+  color: var(--coral-dark);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.exercise-library-card h4 {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-size: 24px;
+  letter-spacing: -0.04em;
+  line-height: 1.08;
+}
+
+.exercise-card-status {
+  margin-bottom: 15px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.exercise-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.exercise-card-tags span {
+  padding: 5px 7px;
+  border-radius: 6px;
+  color: var(--ink-soft);
+  background: var(--mint-light);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.exercise-card-label {
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.exercise-card-uses {
+  margin-bottom: 18px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.exercise-card-details {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.exercise-card-details summary {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.exercise-card-details p {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.exercise-card-safety {
+  margin: 18px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.exercise-library-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 36px;
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.68);
+  text-align: center;
+}
+
 /* ── Debug metrics (collapsible) ─────────────────────────────────────── */
 details.metrics {
   margin-top: 17px;
@@ -3446,6 +3655,23 @@ details.metrics summary {
 
   .practice-heading h2 {
     font-size: clamp(46px, 14vw, 68px);
+  }
+
+  .exercise-library {
+    padding: 22px 16px;
+  }
+
+  .exercise-library-heading {
+    display: block;
+  }
+
+  .exercise-library-status {
+    display: inline-block;
+    margin-top: 18px;
+  }
+
+  .exercise-library-controls {
+    grid-template-columns: 1fr;
   }
 
   .stage {

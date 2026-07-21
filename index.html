@@ -451,6 +451,45 @@
         </aside>
       </div>
       <div class="pose-strip" id="poseStrip" aria-label="Exercise phase guide"></div>
+
+      <div class="exercise-library" aria-labelledby="exerciseLibraryTitle">
+        <div class="exercise-library-heading">
+          <div>
+            <p class="eyebrow">Exercise library</p>
+            <h3 id="exerciseLibraryTitle">More movements, added safely</h3>
+          </div>
+          <span class="exercise-library-status">Draft library</span>
+        </div>
+
+        <div class="exercise-library-notice" role="note">
+          <strong>These exercises are not active in the camera guide yet.</strong>
+          <span>
+            Each needs clinician review and validated movement rules. Hand and finger
+            exercises also need a hand-tracking model.
+          </span>
+        </div>
+
+        <div class="exercise-library-controls">
+          <label>
+            <span>Search exercises</span>
+            <input
+              id="exerciseLibrarySearch"
+              type="search"
+              placeholder="Try wrist, balance or shoulder"
+              autocomplete="off"
+            />
+          </label>
+          <label>
+            <span>Body area</span>
+            <select id="exerciseLibraryRegion">
+              <option value="all">All body areas</option>
+            </select>
+          </label>
+        </div>
+
+        <p class="exercise-library-count" id="exerciseLibraryCount" aria-live="polite"></p>
+        <div class="exercise-library-grid" id="exerciseLibraryGrid"></div>
+      </div>
     </section>
 
     <section class="progress-section" id="care-team">
@@ -937,6 +976,7 @@
   </div>
 
   <script type="module" src="ui.js"></script>
+  <script type="module" src="exercise-library.js"></script>
   <script type="module" src="main.js"></script>
 </body>
 </html>

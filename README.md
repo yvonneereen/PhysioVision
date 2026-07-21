@@ -12,6 +12,7 @@ connected to progress trends.
 - On-device personal profile for goals, focus side, mobility, and coaching style
 - Guided half-squat calibration using natural standing and three comfortable depths
 - MediaPipe-powered pose tracking with live form cues and repetition counting
+- Searchable library of 23 additional draft exercises with tracking and safety labels
 - Patient progress and clinical escalation preview
 - Online physiotherapist booking prototype
 - Physiotherapist monitoring dashboard
@@ -33,6 +34,10 @@ is required for the full exercise-guidance experience.
 Profile and calibration data are stored in browser `localStorage` for this
 prototype. Half-squat calibration personalizes comfortable knee and hip ranges;
 it does not loosen torso, knee-position, or maximum-depth safety limits.
+
+The additional exercise library is educational draft content. Its entries are
+kept outside the live movement-scoring registry until a clinician reviews them
+and their required pose or hand-tracking rules are implemented and tested.
 
 ## Safety
 

@@ -1,6 +1,6 @@
 {
   "type": "module",
   "scripts": {
-    "test": "node tests/geometry.test.js && node tests/feedback-engine.test.js && node tests/personalization.test.js"
+    "test": "node tests/geometry.test.js && node tests/feedback-engine.test.js && node tests/personalization.test.js && node tests/exercise-catalog.test.js"
   }
 }

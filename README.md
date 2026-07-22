@@ -12,9 +12,9 @@ connected to progress trends.
 - On-device personal profile for goals, focus side, mobility, and coaching style
 - Guided half-squat calibration using natural standing and three comfortable depths
 - MediaPipe-powered pose tracking with live form cues and repetition counting
-- Searchable library of 23 additional exercises with tracking and safety labels
-- Primary-motion camera prototypes for ankle pumps, heel slides, and hip bridges
-- Synchronized Pose + Hand prototypes for wrist extension/flexion and an ordered tendon-glide hand-shape sequence
+- Searchable library of 23 supplied exercises, all connected to selectable recognition prototypes
+- Pose phase tracking for lower-limb, balance, gait, spine and shoulder exercises
+- Synchronized Pose + Hand tracking for wrist/forearm exercises and ordered hand-shape sequences
 - Patient progress and clinical escalation preview
 - Online physiotherapist booking prototype
 - Physiotherapist monitoring dashboard
@@ -37,13 +37,12 @@ Profile and calibration data are stored in browser `localStorage` for this
 prototype. Half-squat calibration personalizes comfortable knee and hip ranges;
 it does not loosen torso, knee-position, or maximum-depth safety limits.
 
-Most of the additional exercise library remains educational draft content.
-Ankle pumps, heel slides, and hip bridges have restricted primary-motion
-tracking. Wrist extension/flexion and tendon glides have engineering sequence
-prototypes using the hand tracker. Their warnings list important factors the
-camera cannot assess, and none of these additions should be described as
-clinically validated. All other additions remain outside the live
-movement-scoring registry.
+All 23 supplied exercises now have executable engineering prototypes. The
+quality varies by what one RGB camera can observe: some track a complete phase
+sequence, while ball, band, balance, gait, step, support and mobility-aid
+exercises provide explicitly labelled partial-motion or proxy recognition.
+Their warnings list factors the camera cannot assess, and none of these
+additions should be described as clinically validated.
 Draft landmark, phase and measurement plans are documented in
 [`TRACKING_RULES.md`](TRACKING_RULES.md).
 

@@ -90,6 +90,10 @@ export const LM = {
 
 // Joint definitions: [pointA, vertexB, pointC] as landmark index keys.
 const JOINTS = {
+  // Shoulder elevation: hip-shoulder-elbow. Arm beside the trunk is near 0°;
+  // an arm raised overhead approaches 180°.
+  leftShoulder: ["leftHip", "leftShoulder", "leftElbow"],
+  rightShoulder: ["rightHip", "rightShoulder", "rightElbow"],
   leftKnee:   ["leftHip",      "leftKnee",   "leftAnkle"],
   rightKnee:  ["rightHip",     "rightKnee",  "rightAnkle"],
   leftElbow:  ["leftShoulder", "leftElbow",  "leftWrist"],

@@ -11,6 +11,18 @@ const handPrototypeIds = [
   "tendon_glides",
 ];
 
+const allSuppliedIds = Object.keys(DRAFT_EXERCISE_MAP);
+
+assert.equal(allSuppliedIds.length, 23);
+for (const id of allSuppliedIds) {
+  assert.equal(DRAFT_EXERCISE_MAP[id].liveTracking, true, id);
+  assert.ok(EXERCISE_MAP[id], `${id} must have executable recognition rules`);
+  assert.ok(EXERCISE_MAP[id].trackingMaturity, `${id} needs a maturity label`);
+  assert.ok(EXERCISE_MAP[id].trackingWarning, `${id} needs a limitation warning`);
+  assert.ok(EXERCISE_MAP[id].phaseConfirmationMs >= 250, id);
+  assert.ok(EXERCISE_MAP[id].phases.length >= 2, id);
+}
+
 for (const id of posePrototypeIds) {
   const catalogExercise = DRAFT_EXERCISE_MAP[id];
   const liveExercise = EXERCISE_MAP[id];
@@ -45,5 +57,11 @@ for (const id of handPrototypeIds) {
   assert.ok(liveExercise.phaseConfirmationMs >= 300);
   assert.ok(["hand", "pose_and_hand"].includes(liveExercise.trackingMode));
 }
+
+assert.equal(
+  EXERCISE_MAP.forearm_supination_pronation_strengthening.trackingMode,
+  "pose_and_hand"
+);
+assert.equal(EXERCISE_MAP.stress_ball_squeeze.trackingMode, "hand");
 
 console.log("promoted exercise tests passed");

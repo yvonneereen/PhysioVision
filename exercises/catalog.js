@@ -1,10 +1,10 @@
 /**
- * Draft exercise knowledge-base records.
+ * Exercise knowledge-base records and prototype tracking labels.
  *
  * These entries are intentionally separate from registry.js. The registry is
  * executable movement-scoring logic; this catalog is reviewed educational
- * content. A catalog item must not be promoted into the live camera selector
- * until its tracker, phase rules, cues, and safety gates are validated.
+ * content. `liveTracking` means an engineering prototype is selectable, not
+ * that its thresholds or clinical safety have been validated.
  */
 
 export const EXERCISE_TAGS = Object.freeze({
@@ -16,20 +16,28 @@ export const EXERCISE_TAGS = Object.freeze({
   POSE_LIMITED: "POSE_LIMITED",
 });
 
-const draftExercise = (record) => ({
-  ...record,
-  reviewStatus: record.reviewStatus ?? (record.liveTracking
-    ? "prototype_primary_motion_tracking"
-    : "pending_clinician_review"),
-  liveTracking: Boolean(record.liveTracking),
-  trackingRequirement: record.trackingRequirement ?? (record.liveTracking
-    ? "pose_primary_motion_prototype"
-    : record.tags.includes(EXERCISE_TAGS.HAND_TRACKING_REQUIRED)
-    ? "hand_landmarks"
-    : record.tags.includes(EXERCISE_TAGS.POSE_LIMITED)
-      ? "pose_limited"
-      : "pose_rules_not_validated"),
-});
+const draftExercise = (record) => {
+  // Every exercise in this supplied catalogue now has an executable prototype.
+  // "Live" means selectable camera rules exist, not that the rules have been
+  // clinically validated or can observe every safety-relevant property.
+  const liveTracking = record.liveTracking !== false;
+  return {
+    ...record,
+    reviewStatus: record.reviewStatus ?? (liveTracking
+      ? "prototype_primary_motion_tracking"
+      : "pending_clinician_review"),
+    liveTracking,
+    trackingRequirement: record.trackingRequirement ?? (liveTracking
+      ? record.tags.includes(EXERCISE_TAGS.HAND_TRACKING_REQUIRED)
+        ? "hand_sequence_prototype"
+        : "pose_primary_motion_prototype"
+      : record.tags.includes(EXERCISE_TAGS.HAND_TRACKING_REQUIRED)
+        ? "hand_landmarks"
+        : record.tags.includes(EXERCISE_TAGS.POSE_LIMITED)
+          ? "pose_limited"
+          : "pose_rules_not_validated"),
+  };
+};
 
 export const DRAFT_EXERCISES = [
   draftExercise({
@@ -70,6 +78,8 @@ export const DRAFT_EXERCISES = [
   }),
   draftExercise({
     id: "forearm_supination_pronation_strengthening",
+    reviewStatus: "prototype_sequence_tracking",
+    trackingRequirement: "pose_and_hand_sequence_prototype",
     name: "Forearm Supination and Pronation",
     region: "Hand & wrist",
     category: "Strengthening",
@@ -79,6 +89,8 @@ export const DRAFT_EXERCISES = [
   }),
   draftExercise({
     id: "stress_ball_squeeze",
+    reviewStatus: "prototype_sequence_tracking",
+    trackingRequirement: "hand_sequence_prototype",
     name: "Stress Ball Squeeze",
     region: "Hand & wrist",
     category: "Strengthening",

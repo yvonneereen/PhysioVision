@@ -2,10 +2,9 @@
  * Machine-measurement plans for the draft exercise catalog.
  *
  * These are engineering hypotheses, not clinically validated limits. They map
- * human instructions to landmarks and features that could be measured. They
- * deliberately remain outside registry.js and cannot drive live feedback.
- * Every seed threshold must be replaced or confirmed using personal
- * calibration plus clinician-labelled validation videos.
+ * human instructions to landmarks and features that can drive the explicitly
+ * labelled prototypes in registry.js. Every seed threshold must be replaced
+ * or confirmed using personal calibration plus clinician-labelled videos.
  */
 
 export const TRACKING_SPEC_STATUS = "engineering_draft_requires_validation";
@@ -46,15 +45,18 @@ const rule = (metric, type, landmarks, acceptance, cue) => ({
   cue,
 });
 
-const spec = (exerciseId, definition) => ({
-  exerciseId,
-  status: definition.liveTracking
-    ? PROTOTYPE_TRACKING_SPEC_STATUS
-    : TRACKING_SPEC_STATUS,
-  liveTracking: false,
-  qualityGates: DEFAULT_QUALITY_GATES,
-  ...definition,
-});
+const spec = (exerciseId, definition) => {
+  const liveTracking = definition.liveTracking !== false;
+  return {
+    exerciseId,
+    status: liveTracking
+      ? PROTOTYPE_TRACKING_SPEC_STATUS
+      : TRACKING_SPEC_STATUS,
+    qualityGates: DEFAULT_QUALITY_GATES,
+    ...definition,
+    liveTracking,
+  };
+};
 
 const ALL_HAND_LANDMARKS = [
   "wrist",
@@ -119,7 +121,7 @@ export const DRAFT_TRACKING_SPECS = [
   }),
 
   spec("forearm_supination_pronation_strengthening", {
-    readiness: "requires_pose_and_hand_tracker",
+    readiness: "implemented_pose_and_hand_prototype_requires_validation",
     tracker: "holistic_pose_and_hands",
     camera: "Close frontal-oblique view of the working arm, hand and object",
     requiredLandmarks: {
@@ -136,7 +138,7 @@ export const DRAFT_TRACKING_SPECS = [
   }),
 
   spec("stress_ball_squeeze", {
-    readiness: "manual_review_only_until_occlusion_testing",
+    readiness: "implemented_partial_observation_occlusion_limited",
     tracker: "hands_plus_optional_object_detector",
     camera: "Close view of the hand and ball with forearm supported",
     requiredLandmarks: { pose: [], hand: ALL_HAND_LANDMARKS },
@@ -148,7 +150,7 @@ export const DRAFT_TRACKING_SPECS = [
   }),
 
   spec("ankle_pumps", {
-    readiness: "requires_pose_feature_implementation",
+    readiness: "implemented_primary_motion_prototype_requires_validation",
     tracker: "pose",
     camera: "Close side view with the supported leg and complete foot visible",
     requiredLandmarks: { pose: ["working_hip", "working_knee", "working_ankle", "working_heel", "working_foot_index"], hand: [] },
@@ -161,7 +163,7 @@ export const DRAFT_TRACKING_SPECS = [
   }),
 
   spec("ankle_rotations", {
-    readiness: "pose_limited_requires_trajectory_validation",
+    readiness: "implemented_pose_limited_trajectory_requires_validation",
     tracker: "pose",
     camera: "Close frontal-oblique view with the supported lower leg and foot visible",
     requiredLandmarks: { pose: ["working_knee", "working_ankle", "working_heel", "working_foot_index"], hand: [] },
@@ -174,7 +176,7 @@ export const DRAFT_TRACKING_SPECS = [
   }),
 
   spec("ankle_range_of_motion", {
-    readiness: "pose_limited_requires_trajectory_classifier",
+    readiness: "implemented_motion_trajectory_not_letter_classifier",
     tracker: "pose",
     camera: "Close frontal-oblique view with the raised foot filling a substantial part of the frame",
     requiredLandmarks: { pose: ["working_hip", "working_knee", "working_ankle", "working_foot_index"], hand: [] },
@@ -187,7 +189,7 @@ export const DRAFT_TRACKING_SPECS = [
   }),
 
   spec("ankle_dorsiflexion_plantar_flexion", {
-    readiness: "requires_pose_feature_implementation",
+    readiness: "implemented_primary_motion_prototype_requires_validation",
     tracker: "pose",
     camera: "Close side view with the supported leg, ankle, foot and band path visible",
     requiredLandmarks: { pose: ["working_hip", "working_knee", "working_ankle", "working_heel", "working_foot_index"], hand: [] },
@@ -200,7 +202,7 @@ export const DRAFT_TRACKING_SPECS = [
   }),
 
   spec("supported_single_leg_balance", {
-    readiness: "requires_pose_feature_implementation_and_support_check",
+    readiness: "implemented_pose_proxy_support_not_verified",
     tracker: "pose",
     camera: "Full-body frontal view beside a clearly visible fixed support",
     requiredLandmarks: { pose: ["both_shoulders", "both_hips", "both_knees", "both_ankles", "both_heels", "both_foot_indices", "both_wrists"], hand: [] },
@@ -215,7 +217,7 @@ export const DRAFT_TRACKING_SPECS = [
   }),
 
   spec("clamshell", {
-    readiness: "pose_limited_due_to_side_lying_occlusion",
+    readiness: "implemented_pose_limited_by_side_lying_occlusion",
     tracker: "pose",
     camera: "Elevated frontal-oblique view of the entire side-lying body",
     requiredLandmarks: { pose: ["both_shoulders", "both_hips", "both_knees", "both_ankles"], hand: [] },
@@ -229,7 +231,7 @@ export const DRAFT_TRACKING_SPECS = [
   }),
 
   spec("supported_forward_step_up", {
-    readiness: "requires_pose_feature_implementation_and_step_detection",
+    readiness: "implemented_pose_proxy_step_not_segmented",
     tracker: "pose_plus_optional_step_detector",
     camera: "Full-body 45-degree side view including the complete step and support",
     requiredLandmarks: { pose: ["both_shoulders", "both_hips", "both_knees", "both_ankles", "both_heels", "both_foot_indices", "both_wrists"], hand: [] },
@@ -243,7 +245,7 @@ export const DRAFT_TRACKING_SPECS = [
   }),
 
   spec("walking_progression", {
-    readiness: "requires_gait_cycle_model_and_longer_capture_area",
+    readiness: "implemented_alternating_step_proxy_requires_validation",
     tracker: "pose",
     camera: "Full-body side or 45-degree view with several uninterrupted steps visible",
     requiredLandmarks: { pose: ["both_shoulders", "both_hips", "both_knees", "both_ankles", "both_heels", "both_foot_indices"], hand: [] },
@@ -258,7 +260,7 @@ export const DRAFT_TRACKING_SPECS = [
   }),
 
   spec("walking_with_mobility_aid", {
-    readiness: "manual_review_only_until_aid_and_weight_bearing_sensors_exist",
+    readiness: "implemented_hand_motion_proxy_aid_not_recognised",
     tracker: "pose_plus_custom_mobility_aid_detector",
     camera: "Full-body side or 45-degree view including the complete mobility aid",
     requiredLandmarks: { pose: ["both_shoulders", "both_hips", "both_knees", "both_ankles", "both_heels", "both_foot_indices", "both_wrists"], hand: [] },
@@ -270,7 +272,7 @@ export const DRAFT_TRACKING_SPECS = [
   }),
 
   spec("hip_bridge", {
-    readiness: "requires_pose_feature_implementation",
+    readiness: "implemented_primary_motion_prototype_requires_validation",
     tracker: "pose",
     camera: "Full-body side view at approximately bed or floor height",
     requiredLandmarks: { pose: ["working_shoulder", "working_hip", "working_knee", "working_ankle", "working_heel"], hand: [] },
@@ -284,7 +286,7 @@ export const DRAFT_TRACKING_SPECS = [
   }),
 
   spec("heel_slides", {
-    readiness: "requires_pose_feature_implementation",
+    readiness: "implemented_primary_motion_prototype_requires_validation",
     tracker: "pose",
     camera: "Elevated side-oblique view of the entire supine body and both feet",
     requiredLandmarks: { pose: ["both_shoulders", "both_hips", "both_knees", "both_ankles", "both_heels"], hand: [] },
@@ -298,7 +300,7 @@ export const DRAFT_TRACKING_SPECS = [
   }),
 
   spec("single_knee_to_chest_stretch", {
-    readiness: "requires_pose_feature_implementation",
+    readiness: "implemented_primary_motion_prototype_requires_validation",
     tracker: "pose",
     camera: "Elevated side-oblique view of the complete supine body",
     requiredLandmarks: { pose: ["both_shoulders", "both_hips", "both_knees", "both_ankles", "both_wrists"], hand: [] },
@@ -311,7 +313,7 @@ export const DRAFT_TRACKING_SPECS = [
   }),
 
   spec("hip_flexor_stretch", {
-    readiness: "pose_limited_due_to_bed_edge_and_occlusion",
+    readiness: "implemented_pose_limited_by_bed_edge_and_occlusion",
     tracker: "pose",
     camera: "Full-body side view including the bed edge and hanging leg",
     requiredLandmarks: { pose: ["both_shoulders", "both_hips", "both_knees", "both_ankles", "both_wrists"], hand: [] },
@@ -325,7 +327,7 @@ export const DRAFT_TRACKING_SPECS = [
   }),
 
   spec("pendulum", {
-    readiness: "pose_limited_because_passive_motion_is_not_observable",
+    readiness: "implemented_motion_proxy_passivity_not_observable",
     tracker: "pose",
     camera: "Full upper-body side-oblique view including the support surface and hanging arm",
     requiredLandmarks: { pose: ["both_shoulders", "both_elbows", "both_wrists", "both_hips"], hand: [] },
@@ -339,7 +341,7 @@ export const DRAFT_TRACKING_SPECS = [
   }),
 
   spec("crossover_arm_stretch", {
-    readiness: "requires_pose_feature_implementation",
+    readiness: "implemented_primary_motion_prototype_requires_validation",
     tracker: "pose",
     camera: "Frontal upper-body view with both arms and hands visible",
     requiredLandmarks: { pose: ["both_shoulders", "both_elbows", "both_wrists", "both_hips"], hand: [] },
@@ -353,7 +355,7 @@ export const DRAFT_TRACKING_SPECS = [
   }),
 
   spec("standing_row", {
-    readiness: "requires_pose_feature_implementation",
+    readiness: "implemented_primary_motion_prototype_requires_validation",
     tracker: "pose",
     camera: "45-degree upper-body view including the band anchor, torso and working arm",
     requiredLandmarks: { pose: ["both_shoulders", "working_elbow", "working_wrist", "both_hips"], hand: [] },
@@ -367,7 +369,7 @@ export const DRAFT_TRACKING_SPECS = [
   }),
 
   spec("external_rotation_with_resistance_band", {
-    readiness: "requires_pose_feature_implementation",
+    readiness: "implemented_primary_motion_prototype_requires_validation",
     tracker: "pose",
     camera: "Frontal upper-body view including both shoulders, hips and working forearm",
     requiredLandmarks: { pose: ["both_shoulders", "working_elbow", "working_wrist", "both_hips"], hand: [] },
@@ -382,7 +384,7 @@ export const DRAFT_TRACKING_SPECS = [
   }),
 
   spec("shoulder_forward_elevation_assisted", {
-    readiness: "requires_pose_feature_implementation_and_clinician_target",
+    readiness: "implemented_prototype_requires_clinician_target",
     tracker: "pose",
     camera: "Frontal or 45-degree upper-body view with both complete arms visible",
     requiredLandmarks: { pose: ["both_shoulders", "both_elbows", "both_wrists", "both_hips"], hand: [] },

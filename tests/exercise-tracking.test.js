@@ -2,10 +2,15 @@ import assert from "node:assert/strict";
 
 import {
   matchHandToPoseWrist,
+  measureCombinedExerciseFrame,
   measureCombinedWristFrame,
+  measureHandExerciseFrame,
   measureHandSequenceFrame,
+  measurePoseExerciseFrame,
   signedWristBend,
 } from "../exercise-tracking.js";
+import { DRAFT_EXERCISES } from "../exercises/catalog.js";
+import { EXERCISE_MAP } from "../exercises/registry.js";
 
 const point = (x, y, z = 0, visibility = 1) => ({ x, y, z, visibility });
 
@@ -126,3 +131,104 @@ function poseResult() {
 }
 
 console.log("exercise-level Pose and Hand fusion tests passed");
+
+function fullBodyPoseResult() {
+  const landmarks = Array.from({ length: 33 }, () => point(0.5, 0.5));
+  const coordinates = {
+    0: [0.5, 0.08],
+    11: [0.4, 0.22], 12: [0.6, 0.22],
+    13: [0.35, 0.4], 14: [0.65, 0.4],
+    15: [0.3, 0.58], 16: [0.7, 0.58],
+    23: [0.45, 0.5], 24: [0.55, 0.5],
+    25: [0.45, 0.7], 26: [0.55, 0.7],
+    27: [0.45, 0.9], 28: [0.55, 0.9],
+    29: [0.43, 0.93], 30: [0.57, 0.93],
+    31: [0.48, 0.94], 32: [0.62, 0.94],
+  };
+  Object.entries(coordinates).forEach(([index, [x, y]]) => {
+    landmarks[Number(index)] = point(x, y);
+  });
+  return {
+    landmarks: [landmarks],
+    worldLandmarks: [landmarks.map((landmark) => ({ ...landmark }))],
+  };
+}
+
+{
+  const nonPoseIds = new Set([
+    "wrist_extension_stretch",
+    "wrist_flexion_stretch",
+    "forearm_supination_pronation_strengthening",
+    "tendon_glides",
+    "stress_ball_squeeze",
+  ]);
+  const poseOnlyIds = DRAFT_EXERCISES
+    .map((exercise) => exercise.id)
+    .filter((id) => !nonPoseIds.has(id));
+  const pose = fullBodyPoseResult();
+  const poseHistory = [0, 100, 200, 300, 400, 500, 600, 700]
+    .map((timestampMs) => ({
+      timestampMs,
+      landmarks: pose.landmarks[0].map((landmark) => ({ ...landmark })),
+    }));
+
+  for (const id of poseOnlyIds) {
+    const exercise = EXERCISE_MAP[id];
+    const measurements = measurePoseExerciseFrame({
+      poseResult: pose,
+      exercise,
+      side: "right",
+      poseHistory,
+    });
+    const requiredKeys = new Set(exercise.phases.flatMap((phase) =>
+      Object.keys(phase).filter((key) => key !== "name")
+    ));
+    for (const key of requiredKeys) {
+      const resolvedKey = key in measurements
+        ? key
+        : `right${key[0].toUpperCase()}${key.slice(1)}`;
+      assert.ok(
+        measurements[resolvedKey],
+        `${id} did not produce required measurement ${resolvedKey}`
+      );
+    }
+  }
+}
+
+{
+  const pose = poseResult();
+  const hand = handResult(openHandAt(0.62, 0.65));
+  const history = [0, 100, 200, 300].map((timestampMs) => ({
+    timestampMs,
+    landmarks: pose.landmarks[0].map((landmark) => ({ ...landmark })),
+  }));
+  const measurements = measureCombinedExerciseFrame({
+    exercise: EXERCISE_MAP.forearm_supination_pronation_strengthening,
+    poseResult: pose,
+    handResult: hand,
+    side: "right",
+    frame: { width: 640, height: 480 },
+    poseHistory: history,
+  });
+  for (const key of [
+    "elbow",
+    "palmDirection",
+    "handFrameReady",
+    "wristMatch",
+    "upperArmMotion",
+  ]) {
+    assert.ok(measurements[key], key);
+  }
+}
+
+{
+  const measurements = measureHandExerciseFrame({
+    exercise: EXERCISE_MAP.stress_ball_squeeze,
+    handResult: handResult(openHandAt(0.5, 0.82)),
+    side: "right",
+    frame: { width: 640, height: 480 },
+  });
+  assert.equal(measurements.handShape.value, "open_hand");
+}
+
+console.log("all supplied exercise adapters produce their required measurements");

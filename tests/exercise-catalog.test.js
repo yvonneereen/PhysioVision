@@ -70,14 +70,7 @@ assert.deepEqual(
   DRAFT_EXERCISES.filter((exercise) => exercise.liveTracking)
     .map((exercise) => exercise.id)
     .sort(),
-  [
-    "ankle_pumps",
-    "heel_slides",
-    "hip_bridge",
-    "tendon_glides",
-    "wrist_extension_stretch",
-    "wrist_flexion_stretch",
-  ]
+  DRAFT_EXERCISES.map((exercise) => exercise.id).sort()
 );
 
 console.log("exercise catalog tests passed");

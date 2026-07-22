@@ -100,7 +100,9 @@ function initialiseExerciseLibrary() {
   }
   if (noticeDetail) {
     noticeDetail.textContent =
-      `${pendingCount} remain in the draft library. Live prototypes check defined primary motions or hand-shape sequences and still require clinician-approved use and real-video validation.`;
+      pendingCount
+        ? `${pendingCount} remain in the draft library. Live prototypes check defined primary motions or hand-shape sequences and still require clinician-approved use and real-video validation.`
+        : "All supplied exercises now have selectable recognition prototypes. Some provide partial visual recognition only, and every prototype still requires clinician review and real-video validation.";
   }
 
   [...new Set(DRAFT_EXERCISES.map((exercise) => exercise.region))]

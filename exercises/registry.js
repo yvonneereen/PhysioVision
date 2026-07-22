@@ -643,6 +643,418 @@ export const EXERCISES = [
     trackingNotes:
       "Primary shoulder-hip-knee alignment only. Lumbar curvature is not represented by the current landmark model.",
   },
+
+  // ── Additional supplied exercise-recognition prototypes ────────────────
+
+  {
+    id: "forearm_supination_pronation_strengthening",
+    name: "Forearm Supination and Pronation",
+    category: "strengthening",
+    trackingMode: "pose_and_hand",
+    trackingMaturity: "engineering_prototype_requires_validation",
+    requiresClinicianPlan: true,
+    prescription: { mode: "clinician_plan", sets: null, reps: null, holdSeconds: 0, daysPerWeek: "as prescribed" },
+    camera: "close_front_oblique",
+    phaseConfirmationMs: 350,
+    maxCues: 1,
+    trackingWarning:
+      "Engineering prototype: keep the working shoulder, elbow and complete hand visible in an upright close frontal-oblique view. It recognises camera-relative palm rotation and elbow position, but cannot verify object weight, grip security, resistance or pain.",
+    phases: [
+      { name: "neutral", elbow: [70, 110], palmDirection: { oneOf: ["left", "right", "toward_camera", "away_from_camera"] }, handFrameReady: [1, 1], wristMatch: [0, 0.14], upperArmMotion: [0, 0.25] },
+      { name: "palm_up", elbow: [70, 110], palmDirection: { equals: "upward" }, handFrameReady: [1, 1], wristMatch: [0, 0.14], upperArmMotion: [0, 0.25] },
+      { name: "palm_down", elbow: [70, 110], palmDirection: { equals: "downward" }, handFrameReady: [1, 1], wristMatch: [0, 0.14], upperArmMotion: [0, 0.25] },
+    ],
+    repRule: "neutral → palm_up → neutral → palm_down → neutral",
+    stageImages: [],
+    cues: {
+      "elbow<70": "Keep your elbow bent near a right angle",
+      "elbow>110": "Keep your elbow bent near a right angle",
+      "upperArmMotion>0.25": "Keep your upper arm and elbow still while rotating your forearm",
+      "wristMatch>0.14": "Keep the complete working hand aligned with the tracked wrist",
+    },
+  },
+
+  {
+    id: "stress_ball_squeeze",
+    name: "Stress Ball Squeeze",
+    category: "strengthening",
+    trackingMode: "hand",
+    trackingMaturity: "engineering_prototype_partial_observation",
+    requiresClinicianPlan: true,
+    prescription: { mode: "clinician_plan", sets: null, reps: null, holdSeconds: 0, daysPerWeek: "as prescribed" },
+    camera: "hand_close_up",
+    phaseConfirmationMs: 350,
+    maxCues: 1,
+    trackingWarning:
+      "Partial-observation prototype: the camera counts a visible open-hand → closed-hand → open-hand sequence only. A ball can hide finger landmarks, and the guide cannot measure grip force, maximum effort, ball softness or pain.",
+    phases: [
+      { name: "open_hand", handShape: { equals: "open_hand" }, handShapeScore: [0.7, 1], handFrameReady: [1, 1] },
+      { name: "closed_hand", handShape: { oneOf: ["full_fist", "straight_fist"] }, handShapeScore: [0.7, 1], handFrameReady: [1, 1] },
+    ],
+    repRule: "open_hand → closed_hand → open_hand",
+    stageImages: [],
+    cues: {},
+  },
+
+  {
+    id: "ankle_rotations",
+    name: "Ankle Rotations",
+    category: "mobility",
+    trackingMaturity: "engineering_prototype_partial_observation",
+    requiresClinicianPlan: true,
+    prescription: { mode: "clinician_plan", sets: null, reps: null, holdSeconds: 0, daysPerWeek: "as prescribed" },
+    camera: "close_front_oblique",
+    phaseConfirmationMs: 350,
+    maxCues: 1,
+    trackingWarning:
+      "Partial-observation prototype: use a close view of the working knee, ankle and complete foot. It recognises small toe trajectories relative to the ankle; a single foot-tip landmark cannot fully measure ankle inversion, eversion or pain.",
+    phases: [
+      { name: "neutral", toeMotion: [0, 0.06], legMotion: [0, 0.12], circleDirection: { equals: "none" }, circleScore: [0, 0.45] },
+      { name: "clockwise_circle", toeMotion: [0.08, 1.5], legMotion: [0, 0.12], circleDirection: { equals: "clockwise" }, circleScore: [0.35, 1] },
+      { name: "counterclockwise_circle", toeMotion: [0.08, 1.5], legMotion: [0, 0.12], circleDirection: { equals: "counterclockwise" }, circleScore: [0.35, 1] },
+    ],
+    repRule: "neutral → clockwise_circle → neutral → counterclockwise_circle → neutral",
+    stageImages: [],
+    cues: {
+      "legMotion>0.12": "Keep your knee and lower leg still while moving from the ankle",
+    },
+  },
+
+  {
+    id: "ankle_range_of_motion",
+    name: "Ankle Range of Motion",
+    category: "mobility",
+    trackingMaturity: "engineering_prototype_partial_observation",
+    requiresClinicianPlan: true,
+    prescription: { mode: "clinician_plan", sets: null, reps: null, holdSeconds: 0, daysPerWeek: "as prescribed" },
+    camera: "close_front_oblique",
+    phaseConfirmationMs: 350,
+    maxCues: 1,
+    trackingWarning:
+      "Partial-observation prototype: keep the knee, ankle and entire foot close and visible. It recognises a deliberate ankle-relative toe trajectory, but does not identify individual alphabet letters or assess pain.",
+    phases: [
+      { name: "foot_ready", toeMotion: [0, 0.06], legMotion: [0, 0.12] },
+      { name: "letter_motion", toeMotion: [0.12, 1.8], legMotion: [0, 0.12] },
+    ],
+    repRule: "foot_ready → letter_motion → foot_ready",
+    stageImages: [],
+    cues: {
+      "legMotion>0.12": "Keep your knee and hip still and make the movement from your ankle",
+    },
+  },
+
+  {
+    id: "ankle_dorsiflexion_plantar_flexion",
+    name: "Ankle Dorsiflexion and Plantar Flexion",
+    category: "strengthening",
+    trackingMaturity: "prototype_primary_motion_only",
+    requiresClinicianPlan: true,
+    prescription: { mode: "clinician_plan", sets: null, reps: null, holdSeconds: 0, daysPerWeek: "as prescribed" },
+    camera: "side",
+    phaseConfirmationMs: 300,
+    maxCues: 1,
+    trackingWarning:
+      "Prototype tracking: use a close side view containing the working knee, ankle and complete foot. The guide recognises ankle direction only; it cannot see band resistance, anchor security, loading or pain.",
+    phases: [
+      { name: "toes_up", ankle: [45, 88], knee: [60, 130] },
+      { name: "toes_down", ankle: [98, 150], knee: [60, 130] },
+    ],
+    repRule: "toes_up → toes_down → toes_up",
+    stageImages: [],
+    cues: {
+      "knee<60": "Keep the supported knee in a comfortable, steady position",
+      "knee>130": "Keep the supported knee in a comfortable, steady position",
+    },
+  },
+
+  {
+    id: "supported_single_leg_balance",
+    name: "Supported Single-Leg Balance",
+    category: "balance",
+    trackingMaturity: "engineering_prototype_partial_observation",
+    requiresClinicianPlan: true,
+    prescription: { mode: "clinician_plan", sets: null, reps: null, holdSeconds: 0, daysPerWeek: "as prescribed" },
+    camera: "front",
+    phaseConfirmationMs: 350,
+    maxCues: 1,
+    trackingWarning:
+      "Safety-limited prototype: use a full-body frontal view beside a fixed support with another person nearby if prescribed. It recognises foot lift and upright posture, but cannot verify your grip, support stability or imminent fall risk.",
+    phases: [
+      { name: "both_feet_down", workingFootClearance: [0, 0.05], standingKnee: [140, 180], torsoLean: [0, 20] },
+      { name: "supported_single_leg", workingFootClearance: [0.08, 0.5], standingKnee: [140, 180], torsoLean: [0, 20] },
+    ],
+    repRule: "both_feet_down → supported_single_leg → both_feet_down",
+    stageImages: [],
+    cues: {
+      "workingFootClearance>0.5": "Lift the foot only slightly from the floor",
+      "torsoLean>20": "Stand upright and use your fixed support",
+    },
+  },
+
+  {
+    id: "clamshell",
+    name: "Clamshell",
+    category: "strengthening",
+    trackingMaturity: "engineering_prototype_partial_observation",
+    requiresClinicianPlan: true,
+    prescription: { mode: "clinician_plan", sets: null, reps: null, holdSeconds: 0, daysPerWeek: "as prescribed" },
+    camera: "elevated_front_oblique",
+    phaseConfirmationMs: 350,
+    maxCues: 1,
+    trackingWarning:
+      "Partial-observation prototype: use an elevated oblique view with both knees and ankles visible. It recognises knee separation while the feet remain together; overlapping side-lying hip landmarks can make pelvic rotation unreliable.",
+    phases: [
+      { name: "knees_together", kneeSeparation: [0, 0.18], ankleSeparation: [0, 0.3] },
+      { name: "upper_knee_raised", kneeSeparation: [0.25, 1.2], ankleSeparation: [0, 0.3] },
+    ],
+    repRule: "knees_together → upper_knee_raised → knees_together",
+    stageImages: [],
+    cues: {
+      "ankleSeparation>0.3": "Keep your feet together as the upper knee opens",
+    },
+  },
+
+  {
+    id: "supported_forward_step_up",
+    name: "Supported Forward Step-Up",
+    category: "strengthening",
+    trackingMaturity: "engineering_prototype_partial_observation",
+    requiresClinicianPlan: true,
+    prescription: { mode: "clinician_plan", sets: null, reps: null, holdSeconds: 0, daysPerWeek: "as prescribed" },
+    camera: "side_oblique",
+    phaseConfirmationMs: 300,
+    maxCues: 1,
+    trackingWarning:
+      "Safety-limited prototype: include the whole body, step and fixed support in a 45-degree side view. It recognises foot lift and knee extension only; it cannot verify step stability, full-foot placement, rail grip or loading.",
+    phases: [
+      { name: "floor", workingFootClearance: [0, 0.1], knee: [145, 180], torsoLean: [0, 25] },
+      { name: "foot_on_step", workingFootClearance: [0.12, 0.65], knee: [60, 144], torsoLean: [0, 25] },
+      { name: "body_raised", workingFootClearance: [0.12, 0.65], knee: [145, 178], torsoLean: [0, 25] },
+    ],
+    repRule: "floor → foot_on_step → body_raised → foot_on_step → floor",
+    stageImages: [],
+    cues: {
+      "knee>178": "Straighten the supporting leg without locking the knee",
+      "torsoLean>25": "Keep your trunk upright over the step",
+    },
+  },
+
+  {
+    id: "walking_progression",
+    name: "Walking Progression",
+    category: "gait",
+    trackingMaturity: "engineering_prototype_partial_observation",
+    requiresClinicianPlan: true,
+    prescription: { mode: "clinician_plan", sets: null, reps: null, holdSeconds: 0, daysPerWeek: "as prescribed" },
+    camera: "side",
+    phaseConfirmationMs: 250,
+    maxCues: 1,
+    trackingWarning:
+      "Gait prototype: use a wide full-body side view with several clear steps. It recognises alternating foot lead and upright posture; it cannot assess endurance, floor hazards, pain or clinically validate heel strike and toe-off.",
+    phases: [
+      { name: "feet_aligned", footLead: [-0.15, 0.15], torsoLean: [0, 25] },
+      { name: "working_foot_forward", footLead: [0.2, 1.5], torsoLean: [0, 25] },
+      { name: "other_foot_forward", footLead: [-1.5, -0.2], torsoLean: [0, 25] },
+    ],
+    repRule: "feet_aligned → working_foot_forward → other_foot_forward → feet_aligned",
+    stageImages: [],
+    cues: {
+      "torsoLean>25": "Walk upright without leaning",
+    },
+  },
+
+  {
+    id: "walking_with_mobility_aid",
+    name: "Walking with a Mobility Aid",
+    category: "gait",
+    trackingMaturity: "engineering_prototype_partial_observation",
+    requiresClinicianPlan: true,
+    prescription: { mode: "clinician_plan", sets: null, reps: null, holdSeconds: 0, daysPerWeek: "as prescribed" },
+    camera: "side_oblique",
+    phaseConfirmationMs: 300,
+    maxCues: 1,
+    trackingWarning:
+      "Safety-limited proxy: the camera uses hand movement and foot order as a proxy for aid → recovering leg → other leg. It does not recognise or inspect the aid itself and cannot verify weight-bearing restrictions, fit, stability, grip or fall risk. Clinician supervision is required.",
+    phases: [
+      { name: "ready", footLead: [-0.15, 0.15], handMotion: [0, 0.08], torsoLean: [0, 30] },
+      { name: "aid_forward_proxy", footLead: [-0.15, 0.15], handMotion: [0.12, 1.5], torsoLean: [0, 30] },
+      { name: "recovering_leg_forward", footLead: [0.2, 1.5], torsoLean: [0, 30] },
+      { name: "other_leg_through", footLead: [-1.5, -0.2], torsoLean: [0, 30] },
+    ],
+    repRule: "ready → aid_forward_proxy → recovering_leg_forward → other_leg_through → ready",
+    stageImages: [],
+    cues: {
+      "torsoLean>30": "Stay inside your prescribed aid and keep your trunk upright",
+    },
+  },
+
+  {
+    id: "single_knee_to_chest_stretch",
+    name: "Single Knee-to-Chest Stretch",
+    category: "stretch",
+    trackingMaturity: "prototype_primary_motion_only",
+    requiresClinicianPlan: true,
+    requiresReturnAfterHold: true,
+    trackingHoldSeconds: 3,
+    prescription: { mode: "clinician_plan", sets: null, reps: null, holdSeconds: null, daysPerWeek: "as prescribed" },
+    camera: "elevated_side_oblique",
+    phaseConfirmationMs: 350,
+    maxCues: 1,
+    trackingWarning:
+      "Prototype tracking: show the full supine body from an elevated side-oblique view. The 3-second timer confirms the visible position, not a therapeutic dose. The camera cannot detect spreading pain, numbness, tingling or where pressure is applied.",
+    phases: [
+      { name: "both_knees_bent", hip: [70, 135], knee: [55, 125] },
+      { name: "knee_to_chest", hip: [10, 65], knee: [30, 125] },
+    ],
+    repRule: "both_knees_bent → knee_to_chest → hold",
+    stageImages: [],
+    cues: {},
+  },
+
+  {
+    id: "hip_flexor_stretch",
+    name: "Hip Flexor Stretch",
+    category: "stretch",
+    trackingMaturity: "engineering_prototype_partial_observation",
+    requiresClinicianPlan: true,
+    requiresReturnAfterHold: true,
+    trackingHoldSeconds: 3,
+    prescription: { mode: "clinician_plan", sets: null, reps: null, holdSeconds: null, daysPerWeek: "as prescribed" },
+    camera: "side",
+    phaseConfirmationMs: 350,
+    maxCues: 1,
+    trackingWarning:
+      "Partial-observation prototype: include the entire bed edge, trunk and both legs in a side view. The 3-second timer only confirms the visible position. The camera cannot verify bed safety, lower-back comfort, stretch force or pain.",
+    phases: [
+      { name: "setup", hip: [70, 135], oppositeHip: [100, 180] },
+      { name: "stretch", hip: [10, 65], oppositeHip: [145, 180] },
+    ],
+    repRule: "setup → stretch → hold",
+    stageImages: [],
+    cues: {},
+  },
+
+  {
+    id: "pendulum",
+    name: "Shoulder Pendulum",
+    category: "mobility",
+    trackingMaturity: "engineering_prototype_partial_observation",
+    requiresClinicianPlan: true,
+    prescription: { mode: "clinician_plan", sets: null, reps: null, holdSeconds: 0, daysPerWeek: "as prescribed" },
+    camera: "side_oblique",
+    phaseConfirmationMs: 350,
+    maxCues: 1,
+    trackingWarning:
+      "Partial-observation prototype: show the supported lean and complete hanging arm. It recognises a small wrist trajectory with a straight elbow, but cannot determine whether the shoulder is passive, whether the support is stable or whether pain is present.",
+    phases: [
+      { name: "supported_lean", torsoLean: [20, 70], elbow: [145, 180], wristMotion: [0, 0.06] },
+      { name: "gentle_swing", torsoLean: [20, 70], elbow: [145, 180], wristMotion: [0.08, 0.9] },
+    ],
+    repRule: "supported_lean → gentle_swing → supported_lean",
+    stageImages: [],
+    cues: {
+      "elbow<145": "Let the hanging elbow stay relaxed and nearly straight",
+      "wristMotion>0.9": "Keep the pendulum movement small and gentle",
+    },
+  },
+
+  {
+    id: "crossover_arm_stretch",
+    name: "Crossover Arm Stretch",
+    category: "stretch",
+    trackingMaturity: "engineering_prototype_partial_observation",
+    requiresClinicianPlan: true,
+    requiresReturnAfterHold: true,
+    trackingHoldSeconds: 3,
+    prescription: { mode: "clinician_plan", sets: null, reps: null, holdSeconds: null, daysPerWeek: "as prescribed" },
+    camera: "front",
+    phaseConfirmationMs: 350,
+    maxCues: 1,
+    trackingWarning:
+      "Partial-observation prototype: use a frontal upper-body view with both shoulders and complete arms visible. The 3-second timer confirms arm position only; it cannot detect pressure on the elbow, stretch force or pain.",
+    phases: [
+      { name: "arms_relaxed", shoulder: [0, 45], wristAcrossMidline: [-2, 0.05], torsoLean: [0, 20] },
+      { name: "arm_across_chest", shoulder: [55, 125], wristAcrossMidline: [0.1, 2], torsoLean: [0, 20] },
+    ],
+    repRule: "arms_relaxed → arm_across_chest → hold",
+    stageImages: [],
+    cues: {
+      "torsoLean>20": "Keep your trunk upright and facing the camera",
+    },
+  },
+
+  {
+    id: "standing_row",
+    name: "Standing Row",
+    category: "strengthening",
+    trackingMaturity: "prototype_primary_motion_only",
+    requiresClinicianPlan: true,
+    prescription: { mode: "clinician_plan", sets: null, reps: null, holdSeconds: 0, daysPerWeek: "as prescribed" },
+    camera: "front_oblique",
+    phaseConfirmationMs: 300,
+    maxCues: 1,
+    trackingWarning:
+      "Prototype tracking: show the torso and complete working arm in a 45-degree view. It recognises elbow extension and bending with trunk control; it cannot verify band resistance, anchor security, grip or scapular muscle activation.",
+    phases: [
+      { name: "arm_forward", elbow: [145, 180], torsoLean: [0, 25] },
+      { name: "elbow_pulled_back", elbow: [60, 120], torsoLean: [0, 25] },
+    ],
+    repRule: "arm_forward → elbow_pulled_back → arm_forward",
+    stageImages: [],
+    cues: {
+      "torsoLean>25": "Keep your trunk still instead of leaning to pull",
+    },
+  },
+
+  {
+    id: "external_rotation_with_resistance_band",
+    name: "External Rotation with Resistance Band",
+    category: "strengthening",
+    trackingMaturity: "prototype_primary_motion_only",
+    requiresClinicianPlan: true,
+    prescription: { mode: "clinician_plan", sets: null, reps: null, holdSeconds: 0, daysPerWeek: "as prescribed" },
+    camera: "front",
+    phaseConfirmationMs: 300,
+    maxCues: 1,
+    trackingWarning:
+      "Prototype tracking: use a frontal upper-body view with the working elbow and wrist visible. It recognises the forearm moving outward while the elbow stays bent; it cannot verify band resistance, anchor security, elbow contact force or pain.",
+    phases: [
+      { name: "forearm_forward", elbow: [70, 110], wristOutwardRatio: [0, 0.35], torsoLean: [0, 20] },
+      { name: "forearm_rotated_out", elbow: [70, 110], wristOutwardRatio: [0.55, 1], torsoLean: [0, 20] },
+    ],
+    repRule: "forearm_forward → forearm_rotated_out → forearm_forward",
+    stageImages: [],
+    cues: {
+      "elbow<70": "Keep your elbow bent near a right angle",
+      "elbow>110": "Keep your elbow bent near a right angle",
+      "torsoLean>20": "Keep your trunk still while the forearm rotates",
+    },
+  },
+
+  {
+    id: "shoulder_forward_elevation_assisted",
+    name: "Assisted Shoulder Forward Elevation",
+    category: "mobility",
+    trackingMaturity: "engineering_prototype_requires_clinician_target",
+    requiresClinicianPlan: true,
+    prescription: { mode: "clinician_plan", sets: null, reps: null, holdSeconds: 0, daysPerWeek: "as prescribed" },
+    camera: "front_oblique",
+    phaseConfirmationMs: 350,
+    maxCues: 1,
+    trackingWarning:
+      "Clinician-target prototype: use a frontal or 45-degree view with both complete arms visible. It recognises arms-down → elevated → arms-down and hand proximity. It cannot know which arm supplies assistance or enforce a post-operative height until the clinician target is configured.",
+    phases: [
+      { name: "arms_down", shoulder: [0, 40], handProximity: [0, 0.65], torsoLean: [0, 20] },
+      { name: "assisted_elevation", shoulder: [70, 155], handProximity: [0, 0.65], torsoLean: [0, 20] },
+    ],
+    repRule: "arms_down → assisted_elevation → arms_down",
+    stageImages: [],
+    cues: {
+      "shoulder>155": "Stop at your clinician-approved height",
+      "handProximity>0.65": "Keep your hands clasped or together on the stick",
+      "torsoLean>20": "Keep your body still as your arms rise",
+    },
+  },
 ];
 
 // Quick lookup by exercise id.

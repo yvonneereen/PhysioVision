@@ -1,12 +1,13 @@
-# How draft movement-tracking rules are produced
+# How prototype movement-tracking rules are produced
 
 Human exercise instructions describe intent. A camera engine needs a separate,
 measurable specification: visible landmarks, calculated features, movement
 phases, confidence gates and a cue for each detectable error.
 
-The draft specifications are in `exercises/tracking-specs.js`. They cover every
-exercise in `exercises/catalog.js`, but they are deliberately excluded from the
-live registry.
+The engineering specifications are in `exercises/tracking-specs.js`. They cover
+every exercise in `exercises/catalog.js`; all now have executable prototype
+rules in `exercises/registry.js`. Prototype availability is not clinical
+validation.
 
 ## Translation process
 
@@ -116,10 +117,12 @@ Wrist exercises cannot be activated using the current pose tracker alone. They
 require the hand tracker, close camera framing and tests for self-occlusion by
 the assisting hand.
 
-## Activation rule
+## Prototype and validation rule
 
-The complete tracking specification must remain `liveTracking: false` until all
-of the following exist:
+An exercise may be exposed as a clearly labelled engineering prototype once
+its measurements, phase state machine, confidence gates, tests and camera
+limitations are implemented. It must not be presented as validated or relied
+on for clinical safety until all of the following exist:
 
 - implemented feature calculations;
 - clinician-approved rules and cues;
@@ -129,10 +132,11 @@ of the following exist:
 - acceptable per-cue false-positive and false-negative results;
 - a documented list of conditions the camera cannot assess.
 
-The ankle-pump, heel-slide and hip-bridge options are narrower
-`prototype_primary_motion_only` implementations. Wrist extension and flexion
-now use synchronized Pose + Hand frames, while tendon glides use a complete
-ordered hand-shape sequence. These three hand/wrist options remain engineering
-prototypes: the wrist thresholds and rule-based hand shapes have unit tests but
-not clinician-labelled real-video validation. All six prototypes require a
-clinician-approved plan and must not be described as validated tracking.
+All 23 supplied exercises are selectable prototypes. Wrist and forearm
+exercises use synchronized Pose + Hand frames where needed; hand sequences use
+classified finger shapes; trajectory exercises use body-normalised time
+windows. Exercises involving a ball, resistance band, support, step, gait or
+mobility aid remain partial-observation or proxy trackers because the camera
+cannot measure force, weight bearing, equipment stability or pain. Every
+prototype requires clinician review and clinician-labelled real-video
+validation before its thresholds can be considered reliable.

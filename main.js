@@ -5,13 +5,14 @@ import {
   DrawingUtils,
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 
-import { jointAngles, symmetry, VISIBILITY_THRESHOLD } from "./geometry.js";
+import { symmetry, VISIBILITY_THRESHOLD } from "./geometry.js";
 import { selectTrackedHand, summarizeHandResult } from "./hand-geometry.js";
 import {
   TRACKING_MODES,
   exerciseUsesHand,
-  measureCombinedWristFrame,
-  measureHandSequenceFrame,
+  measureCombinedExerciseFrame,
+  measureHandExerciseFrame,
+  measurePoseExerciseFrame,
 } from "./exercise-tracking.js";
 import { FeedbackEngine, EXERCISES } from "./feedback/engine.js";
 import { POSES } from "./poses.js";
@@ -38,6 +39,13 @@ class AngleSmoother {
 
   smooth(name, raw) {
     if (raw.lowConfidence) {
+      delete this.state[name];
+      return raw;
+    }
+    // Categorical phase measurements (for example palm direction and hand
+    // shape) must pass through unchanged; arithmetic smoothing only applies
+    // to finite numeric measurements.
+    if (typeof raw.value !== "number" || !Number.isFinite(raw.value)) {
       delete this.state[name];
       return raw;
     }
@@ -429,7 +437,9 @@ function rememberCombinedPose(result, timestampMs) {
   }
   combinedPoseHistory.push({ timestampMs, landmarks });
   combinedPoseHistory = combinedPoseHistory.filter(
-    (frame) => timestampMs - frame.timestampMs <= 800
+    // Long enough for an ankle circle, pendulum swing, gait step, or mobility
+    // aid movement while still discarding stale motion from an earlier rep.
+    (frame) => timestampMs - frame.timestampMs <= 2500
   );
 }
 
@@ -507,8 +517,9 @@ function renderFrame() {
       if (trackingMode === TRACKING_MODES.HAND) {
         const handResult = handLandmarker.detectForVideo(video, frameTimestamp);
         drawHandResult(handResult);
-        const measurements = measureHandSequenceFrame({
+        const measurements = measureHandExerciseFrame({
           handResult,
+          exercise: engine.exercise,
           side: sideSelect.value,
           frame: { width: video.videoWidth, height: video.videoHeight },
         });
@@ -526,9 +537,10 @@ function renderFrame() {
         drawPoseResult(poseResult);
         drawHandResult(handResult);
         rememberCombinedPose(poseResult, frameTimestamp);
-        const measurements = measureCombinedWristFrame({
+        const measurements = measureCombinedExerciseFrame({
           poseResult,
           handResult,
+          exercise: engine.exercise,
           side: sideSelect.value,
           frame: { width: video.videoWidth, height: video.videoHeight },
           poseHistory: combinedPoseHistory,
@@ -543,9 +555,16 @@ function renderFrame() {
         if (result.landmarks.length > 0) {
           const landmarks = result.landmarks[0];
           drawPoseResult(result);
+          rememberCombinedPose(result, frameTimestamp);
 
-          // worldLandmarks for angle math, landmarks for visibility gating
-          const raw = jointAngles(result.worldLandmarks[0], landmarks);
+          // Standard angles plus the selected exercise's body-normalised and
+          // temporal features. Visibility gates still use image landmarks.
+          const raw = measurePoseExerciseFrame({
+            poseResult: result,
+            exercise: engine.exercise,
+            side: sideSelect.value,
+            poseHistory: combinedPoseHistory,
+          });
           const angles = Object.fromEntries(
             Object.entries(raw).map(([k, a]) => [k, smoother.smooth(k, a)])
           );
@@ -559,6 +578,7 @@ function renderFrame() {
             statusEl.textContent = "Tracking your movement";
           }
         } else {
+          combinedPoseHistory = [];
           updateCalibrationCapture(null, frameTimestamp);
           const interruptedHold = engine.inHold;
           if (holdInterval) {
@@ -616,7 +636,9 @@ function updateFeedbackPanel(angles, timestampMs) {
   // Phase flow chips
   phaseFlowEl.innerHTML = fb.stages
     .map((s, i) => {
-      const active = s === fb.phase ? " active" : "";
+      // Sequence stages may repeat (for example open hand between every tendon
+      // glide shape), so phase name alone cannot identify the active chip.
+      const active = i === fb.stageIndex ? " active" : "";
       const arrow =
         i < fb.stages.length - 1
           ? '<span class="phase-arrow">→</span>'
@@ -646,7 +668,7 @@ function updateFeedbackPanel(angles, timestampMs) {
     // Progress bar
     const pct = Math.round(fb.progress * 100);
     progressEl.style.width = `${pct}%`;
-    const nextIdx = fb.stages.indexOf(fb.phase) + 1;
+    const nextIdx = fb.stageIndex + 1;
     const nextPhase = fb.stages[nextIdx] ?? fb.stages[0];
     progressLbl.textContent =
       pct >= 100
@@ -677,7 +699,7 @@ function updateFeedbackPanel(angles, timestampMs) {
       `Follow the order — move to ${fb.expectedNextPhase.replaceAll("_", " ")} next`
     );
   } else if (!fb.positionRecognized && !personalizedCues.length) {
-    const nextIdx = fb.stages.indexOf(fb.phase) + 1;
+    const nextIdx = fb.stageIndex + 1;
     const nextPhase = fb.stages[nextIdx] ?? fb.stages[0];
     setFeedbackBanner(
       "adjust",
@@ -1030,6 +1052,20 @@ function renderTrackingWarning(ex) {
   } else {
     trackWarnEl.classList.add("hidden");
   }
+  if (!video.srcObject && !exerciseUsesHand(ex)) {
+    setupTip.textContent = cameraSetupTip(ex);
+  }
+}
+
+function cameraSetupTip(exercise) {
+  const camera = exercise.camera ?? "front";
+  if (camera.includes("close")) {
+    return "Close view · Upright phone · Keep every required joint visible";
+  }
+  if (camera.includes("side") || camera.includes("oblique")) {
+    return "Side/oblique view · Keep the complete moving limb visible";
+  }
+  return "Front view · Phone at chest height · Keep required joints visible";
 }
 
 function renderStaticPhaseFlow(activeEngine) {
@@ -1127,6 +1163,8 @@ async function activateCameraGuide() {
       setupTip.textContent = combined
         ? "Combined mode · Upright phone · Working elbow and complete hand visible"
         : "Hand mode · One complete hand close to the camera";
+    } else {
+      setupTip.textContent = cameraSetupTip(engine.exercise);
     }
     toggleBtn.innerHTML = 'Stop camera guide <span aria-hidden="true">■</span>';
     toggleBtn.disabled = false;
@@ -1153,7 +1191,7 @@ function deactivateCameraGuide() {
   cameraStage?.classList.remove("camera-active");
   handFrameGuide.classList.add("hidden");
   handFrameGuide.classList.remove("is-arm-mode");
-  setupTip.textContent = "Phone at chest height · 2–3 m away · Full body visible";
+  setupTip.textContent = cameraSetupTip(engine.exercise);
   toggleBtn.innerHTML = 'Start camera guide <span aria-hidden="true">→</span>';
   handTrackingToggle.disabled = !handLandmarker;
   statusEl.textContent = "Stopped";

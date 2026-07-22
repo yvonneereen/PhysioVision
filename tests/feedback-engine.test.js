@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 
 import { FeedbackEngine } from "../feedback/engine.js";
+import { DRAFT_EXERCISES } from "../exercises/catalog.js";
+import { EXERCISE_MAP } from "../exercises/registry.js";
 
 const visible = (value) => ({
   value,
@@ -28,6 +30,29 @@ const hidden = {
   lowConfidence: true,
   weakPoints: ["rightKnee"],
 };
+
+function valueForCondition(condition) {
+  if (Array.isArray(condition)) return (condition[0] + condition[1]) / 2;
+  if (condition && Object.hasOwn(condition, "equals")) return condition.equals;
+  if (condition && Array.isArray(condition.oneOf)) return condition.oneOf[0];
+  throw new Error(`Unsupported test condition ${JSON.stringify(condition)}`);
+}
+
+function measurementsForPhase(exercise, phaseName) {
+  const phase = exercise.phases.find((candidate) => candidate.name === phaseName);
+  const defaults = {};
+  exercise.phases.forEach((candidate) => {
+    Object.entries(candidate).forEach(([key, condition]) => {
+      if (key !== "name" && !(key in defaults)) {
+        defaults[key] = visible(valueForCondition(condition));
+      }
+    });
+  });
+  Object.entries(phase).forEach(([key, condition]) => {
+    if (key !== "name") defaults[key] = visible(valueForCondition(condition));
+  });
+  return defaults;
+}
 
 const halfSquatPose = (overrides = {}) => ({
   leftKnee: visible(170),
@@ -277,6 +302,32 @@ const halfSquatBottom = (overrides = {}) =>
   engine.update(wristFrame(0), 1300);
   const returned = engine.update(wristFrame(0), 1650);
   assert.equal(returned.startConfirmed, true);
+}
+
+// Every supplied prototype has an executable, stable phase sequence. This
+// verifies the registry/engine contract independently of camera-landmark tests.
+for (const catalogExercise of DRAFT_EXERCISES) {
+  const exercise = EXERCISE_MAP[catalogExercise.id];
+  const engine = new FeedbackEngine(exercise.id, "right");
+  const confirmationMs = exercise.phaseConfirmationMs ?? 0;
+  let timestamp = 0;
+
+  engine.update(measurementsForPhase(exercise, engine.stages[0]), timestamp);
+  timestamp += confirmationMs;
+  engine.update(measurementsForPhase(exercise, engine.stages[0]), timestamp);
+
+  for (const stage of engine.stages.slice(1)) {
+    timestamp += 20;
+    engine.update(measurementsForPhase(exercise, stage), timestamp);
+    timestamp += confirmationMs;
+    engine.update(measurementsForPhase(exercise, stage), timestamp);
+  }
+
+  if (exercise.category === "stretch") {
+    assert.equal(engine.inHold, true, `${exercise.id} did not enter its hold`);
+    engine.completeHold();
+  }
+  assert.equal(engine.repCount, 1, `${exercise.id} did not complete its sequence`);
 }
 
 console.log("feedback engine tracking tests passed");

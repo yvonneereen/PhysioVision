@@ -5,25 +5,49 @@ PhysioVision is a physiotherapy exercise guidance app using MediaPipe pose detec
 
 Built for a hackathon. Stack: vanilla JS frontend + Django REST backend.
 
-## How to run
+## First-time setup (new developer / friend)
 
-### Backend
 ```bash
-cd /Users/brandon06/PhysioVision
+# 1. Clone
+git clone https://github.com/yvonneereen/PhysioVision.git
+cd PhysioVision
+
+# 2. Environment — copy the example and fill in your own secret key
+cp .env.example .env
+# The defaults in .env.example work out of the box for local dev
+
+# 3. Install Python dependencies
 pip3 install -r requirements.txt
+
+# 4. Create your own local database
 python3 manage.py migrate
-python3 manage.py seed_exercises   # seeds 12 exercises into DB
+
+# 5. Seed the 12 exercises into the DB
+python3 manage.py seed_exercises
+
+# 6. Create a superuser (optional — for /admin/ access)
+python3 manage.py createsuperuser
+```
+
+Then run both servers (two terminal tabs):
+
+**Terminal 1 — Django backend:**
+```bash
 python3 manage.py runserver 8000
 ```
 
-### Frontend
+**Terminal 2 — Frontend:**
 ```bash
 python3 -m http.server 3000
-# open http://localhost:3000
 ```
 
-### Environment
-Copy `.env.example` → `.env`. Django reads from `.env` automatically via django-environ.
+Open `http://localhost:3000` in your browser.
+
+> **Note:** `db.sqlite3` is gitignored — every developer gets their own clean local database. Never commit `db.sqlite3` or `.env`.
+
+---
+
+## How to run (if already set up)
 
 ## Architecture
 

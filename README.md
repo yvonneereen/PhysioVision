@@ -10,7 +10,7 @@ connected to progress trends.
 - Editorial landing page and product story
 - Three-step AI plan intake based on goals and profile information
 - On-device personal profile for goals, focus side, mobility, and coaching style
-- Guided half-squat calibration using natural standing and three comfortable depths
+- Guided per-exercise calibration using a starting position and three comfortable movement samples
 - MediaPipe-powered pose tracking with live form cues and repetition counting
 - Searchable library of 23 supplied exercises, all connected to selectable recognition prototypes
 - Pose phase tracking for lower-limb, balance, gait, spine and shoulder exercises
@@ -34,8 +34,11 @@ The pose model and web fonts load from external CDNs, so an internet connection
 is required for the full exercise-guidance experience.
 
 Profile and calibration data are stored in browser `localStorage` for this
-prototype. Half-squat calibration personalizes comfortable knee and hip ranges;
-it does not loosen torso, knee-position, or maximum-depth safety limits.
+prototype. Every exercise has a calibration contract. Numeric movement
+endpoints can be narrowed around the user's comfortable samples without
+loosening the exercise's outer limits; form, visibility, categorical hand
+shapes and safety gates remain fixed. Hand-shape-only exercises record a
+personal tracking baseline rather than changing their anatomical definitions.
 
 All 23 supplied exercises now have executable engineering prototypes. The
 quality varies by what one RGB camera can observe: some track a complete phase

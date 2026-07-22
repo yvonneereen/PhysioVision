@@ -33,11 +33,19 @@ class CalibrationViewSet(ModelViewSet):
     def perform_create(self, serializer):
         patient  = self.request.user.patient_profile
         exercise = serializer.validated_data['exercise']
+        affected_side = serializer.validated_data['affected_side']
 
-        # Deactivate any existing active calibration for this patient+exercise
+        # Left and right movement baselines are stored independently.
         Calibration.objects.filter(
-            patient=patient, exercise=exercise, is_active=True
+            patient=patient,
+            exercise=exercise,
+            affected_side=affected_side,
+            is_active=True,
         ).update(is_active=False)
 
-        version = Calibration.objects.filter(patient=patient, exercise=exercise).count() + 1
+        version = Calibration.objects.filter(
+            patient=patient,
+            exercise=exercise,
+            affected_side=affected_side,
+        ).count() + 1
         serializer.save(patient=patient, version=version)

@@ -822,6 +822,112 @@ EXERCISES.extend([
 ])
 
 
+PERSONAL_CALIBRATION_KEYS = {
+    "heel-cord-stretch": ["ankle"],
+    "standing-quad-stretch": ["knee"],
+    "supine-hamstring-stretch": ["hip"],
+    "hamstring-curls": ["knee"],
+    "calf-raises": ["footInclination"],
+    "leg-extensions": ["knee"],
+    "straight-leg-raises-supine": ["hip"],
+    "straight-leg-raises-prone": ["hip"],
+    "hip-abduction": ["hip"],
+    "hip-adduction": ["hip"],
+    "leg-presses": ["hip", "knee"],
+    "wrist_extension_stretch": ["wristBend"],
+    "wrist_flexion_stretch": ["wristBend"],
+    "tendon_glides": [],
+    "ankle_pumps": ["ankle"],
+    "heel_slides": ["knee"],
+    "hip_bridge": ["hip"],
+    "forearm_supination_pronation_strengthening": [],
+    "stress_ball_squeeze": [],
+    "ankle_rotations": ["toeMotion", "circleScore"],
+    "ankle_range_of_motion": ["toeMotion"],
+    "ankle_dorsiflexion_plantar_flexion": ["ankle"],
+    "supported_single_leg_balance": ["workingFootClearance"],
+    "clamshell": ["kneeSeparation"],
+    "supported_forward_step_up": ["workingFootClearance", "knee"],
+    "walking_progression": ["footLead"],
+    "walking_with_mobility_aid": ["handMotion"],
+    "single_knee_to_chest_stretch": ["hip"],
+    "hip_flexor_stretch": ["hip", "oppositeHip"],
+    "pendulum": ["wristMotion"],
+    "crossover_arm_stretch": ["shoulder", "wristAcrossMidline"],
+    "standing_row": ["elbow"],
+    "external_rotation_with_resistance_band": ["wristOutwardRatio"],
+    "shoulder_forward_elevation_assisted": ["shoulder"],
+}
+
+RATIO_MEASUREMENTS = {
+    "toeMotion", "circleScore", "workingFootClearance", "kneeSeparation",
+    "footLead", "handMotion", "wristMotion", "wristAcrossMidline",
+    "wristOutwardRatio",
+}
+
+
+def add_generic_calibration(record):
+    if record.get("calibration_config"):
+        return
+    stages = []
+    for stage in (part.strip() for part in record["rep_rule"].split("→")):
+        if stage != "hold" and stage not in stages:
+            stages.append(stage)
+    phases = {phase["name"]: phase for phase in record["phases_config"]}
+    if len(stages) < 2 or stages[0] not in phases or stages[1] not in phases:
+        return
+    start_phase = phases[stages[0]]
+    target_phase = phases[stages[1]]
+    personalized_keys = PERSONAL_CALIBRATION_KEYS.get(record["id"], [])
+    capture_keys = list(dict.fromkeys([
+        *[key for key in start_phase if key != "name"],
+        *[key for key in target_phase if key != "name"],
+    ]))
+    start_ranges = {
+        key: value for key, value in start_phase.items()
+        if key != "name" and isinstance(value, list)
+    }
+    target_ranges = {
+        key: value for key, value in target_phase.items()
+        if key != "name" and isinstance(value, list)
+    }
+    for key in personalized_keys:
+        start = start_ranges.get(key)
+        target = target_ranges.get(key)
+        if start and target:
+            target_ranges[key] = [
+                min(start[0], target[0]),
+                max(start[1], target[1]),
+            ]
+    record["calibration_config"] = {
+        "mode": "personal_range" if personalized_keys else "tracking_baseline",
+        "startPhase": stages[0],
+        "targetPhase": stages[1],
+        "captureKeys": capture_keys,
+        "personalizedKeys": personalized_keys,
+        "tolerances": {
+            key: 0.06 if key in RATIO_MEASUREMENTS else 8
+            for key in personalized_keys
+        },
+        "safeRanges": {"start": start_ranges, "target": target_ranges},
+        "safeConditions": {
+            "start": {
+                key: value for key, value in start_phase.items()
+                if key != "name" and not isinstance(value, list)
+            },
+            "target": {
+                key: value for key, value in target_phase.items()
+                if key != "name" and not isinstance(value, list)
+            },
+        },
+        "captureErrors": {},
+    }
+
+
+for exercise_record in EXERCISES:
+    add_generic_calibration(exercise_record)
+
+
 class Command(BaseCommand):
     help = "Seed exercise catalogue from registry.js data"
 

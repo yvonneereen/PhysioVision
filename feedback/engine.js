@@ -13,7 +13,11 @@ export class FeedbackEngine {
   }
 
   _init(exerciseId, affectedSide, calibration = null) {
-    this.exercise = applyCalibration(EXERCISE_MAP[exerciseId], calibration);
+    const sideCalibration = calibration?.affectedSide
+      && calibration.affectedSide !== affectedSide
+      ? null
+      : calibration;
+    this.exercise = applyCalibration(EXERCISE_MAP[exerciseId], sideCalibration);
     this.side = affectedSide;
     // Parse "standing → squat → standing"; drop "hold" (handled by UI timer)
     this.stages = this.exercise.repRule

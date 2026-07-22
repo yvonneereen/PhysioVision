@@ -188,7 +188,7 @@ sideSelect.value = profile.focusSide;
 let engine = new FeedbackEngine(
   EXERCISES[0].id,
   profile.focusSide,
-  getCalibration(EXERCISES[0].id)
+  getCalibration(EXERCISES[0].id, profile.focusSide)
 );
 renderPrescription(engine.exercise);
 renderTrackingWarning(engine.exercise);
@@ -202,7 +202,7 @@ exSelect.addEventListener("change", () => {
   engine.changeExercise(
     exSelect.value,
     sideSelect.value,
-    getCalibration(exSelect.value)
+    getCalibration(exSelect.value, sideSelect.value)
   );
   smoother.state = {};
   combinedPoseHistory = [];
@@ -227,7 +227,7 @@ sideSelect.addEventListener("change", () => {
   engine.changeExercise(
     exSelect.value,
     sideSelect.value,
-    getCalibration(exSelect.value)
+    getCalibration(exSelect.value, sideSelect.value)
   );
   smoother.state = {};
   combinedPoseHistory = [];
@@ -251,7 +251,7 @@ window.addEventListener("physiovision:profile-updated", (event) => {
   engine.changeExercise(
     exSelect.value,
     sideSelect.value,
-    getCalibration(exSelect.value)
+    getCalibration(exSelect.value, sideSelect.value)
   );
   smoother.state = {};
   repCountEl.textContent = "0";
@@ -523,10 +523,15 @@ function renderFrame() {
           side: sideSelect.value,
           frame: { width: video.videoWidth, height: video.videoHeight },
         });
-        const feedback = updateFeedbackPanel(measurements, frameTimestamp);
-        statusEl.textContent = feedback.trackingReady
-          ? "Tracking the hand-shape sequence"
-          : "Keep one complete hand close and fully visible";
+        if (calibrationSession) {
+          updateCalibrationCapture(measurements, frameTimestamp);
+          statusEl.textContent = "Personal calibration in progress";
+        } else {
+          const feedback = updateFeedbackPanel(measurements, frameTimestamp);
+          statusEl.textContent = feedback.trackingReady
+            ? "Tracking the hand-shape sequence"
+            : "Keep one complete hand close and fully visible";
+        }
       } else if (trackingMode === TRACKING_MODES.POSE_AND_HAND) {
         // Freeze one image so both models receive identical pixels and the same
         // timestamp. Do not combine their world landmarks: cross-model wrist
@@ -546,10 +551,15 @@ function renderFrame() {
           poseHistory: combinedPoseHistory,
         });
         updateDebugPanel(measurements);
-        const feedback = updateFeedbackPanel(measurements, frameTimestamp);
-        statusEl.textContent = feedback.trackingReady
-          ? "Tracking your elbow, wrist and hand together"
-          : "Keep the working elbow and complete hand visible";
+        if (calibrationSession) {
+          updateCalibrationCapture(measurements, frameTimestamp);
+          statusEl.textContent = "Personal calibration in progress";
+        } else {
+          const feedback = updateFeedbackPanel(measurements, frameTimestamp);
+          statusEl.textContent = feedback.trackingReady
+            ? "Tracking your elbow, wrist and hand together"
+            : "Keep the working elbow and complete hand visible";
+        }
       } else {
         const result = poseLandmarker.detectForVideo(video, frameTimestamp);
         if (result.landmarks.length > 0) {
@@ -760,7 +770,7 @@ function setSymRow(key, left, right) {
 
 function renderPersonalization() {
   const savedProfile = hasSavedProfile();
-  const calibration = getCalibration(exSelect.value);
+  const calibration = getCalibration(exSelect.value, sideSelect.value);
   const supportsCalibration = Boolean(engine.exercise.calibration);
 
   personalizationTitle.textContent = savedProfile
@@ -771,27 +781,52 @@ function renderPersonalization() {
     : "Save your goals, preferences, and comfortable range.";
 
   if (calibration) {
-    const kneeValues = [
-      calibration.target?.leftKnee?.median,
-      calibration.target?.rightKnee?.median,
-    ].filter(Number.isFinite);
-    const depth = kneeValues.length
-      ? `${Math.round(kneeValues.reduce((sum, value) => sum + value, 0) / kneeValues.length)}° knee target`
-      : "comfortable target saved";
-    calibrationBadge.textContent = "Personal range active";
-    calibrationDetail.textContent = `${depth} · safety limits unchanged`;
+    const personalRange = engine.exercise.calibration?.personalizedKeys?.length;
+    calibrationBadge.textContent = personalRange
+      ? "Personal range active"
+      : "Personal tracking baseline active";
+    calibrationDetail.textContent = `${calibrationSummary(
+      calibration,
+      engine.exercise.calibration
+    )} · safety limits unchanged`;
     openCalibrationBtn.textContent = "Recalibrate";
   } else if (supportsCalibration) {
     calibrationBadge.textContent = "Standard range";
-    calibrationDetail.textContent = `Calibrate ${engine.exercise.name} to your comfortable depth.`;
+    calibrationDetail.textContent =
+      `Calibrate ${engine.exercise.name} to your movement.`;
     openCalibrationBtn.textContent = "Calibrate";
   } else {
     calibrationBadge.textContent = "Standard range";
-    calibrationDetail.textContent = "Personal calibration is currently available for Half Squats.";
+    calibrationDetail.textContent = "Personal calibration is unavailable for this exercise.";
     openCalibrationBtn.textContent = "Unavailable";
   }
 
-  openCalibrationBtn.disabled = !poseLandmarker || !supportsCalibration;
+  const requiredModelsReady = Boolean(
+    poseLandmarker && (!exerciseUsesHand(engine.exercise) || handLandmarker)
+  );
+  openCalibrationBtn.disabled = !requiredModelsReady || !supportsCalibration;
+}
+
+function calibrationSummary(calibration, config) {
+  const keys = config?.personalizedKeys ?? [];
+  const summaries = keys
+    .map((key) => {
+      const value = calibration.target?.[key]?.median;
+      if (!Number.isFinite(value)) return null;
+      const angleLike = /(knee|hip|ankle|shoulder|elbow|wrist|inclination)/i
+        .test(key);
+      return `${friendlyMeasurement(key)} ${angleLike
+        ? `${Math.round(value)}°`
+        : value.toFixed(2)}`;
+    })
+    .filter(Boolean);
+  return summaries.slice(0, 2).join(" · ") || "personal tracking baseline saved";
+}
+
+function friendlyMeasurement(key) {
+  return key
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (letter) => letter.toUpperCase());
 }
 
 function cueStyleLabel(style) {
@@ -869,7 +904,9 @@ calibrationAction.addEventListener("click", () => {
     renderPersonalization();
     setFeedbackBanner("ready");
     cancelCalibration();
-    statusEl.textContent = "Personal range saved — movement guide ready";
+    statusEl.textContent = engine.exercise.calibration.personalizedKeys.length
+      ? "Personal range saved — movement guide ready"
+      : "Personal tracking baseline saved — movement guide ready";
   }
 });
 
@@ -888,39 +925,52 @@ function renderCalibrationStep() {
     calibrationStepLabel.textContent = "Personal calibration · about 1 minute";
     calibrationTitle.textContent = `Fit ${engine.exercise.name} to your movement`;
     calibrationInstructions.textContent =
-      "Keep a sturdy chair nearby. We’ll measure your natural standing position, then three comfortable half-squat depths. Stop if you feel pain, dizziness, or unsteadiness.";
+      `We’ll measure your ${engine.exercise.calibration.startPhase.replaceAll("_", " ")} position, then three comfortable ${engine.exercise.calibration.targetPhase.replaceAll("_", " ")} samples. Follow your clinician’s restrictions and stop for pain, dizziness, numbness or unsteadiness.`;
     calibrationAction.textContent = "Begin";
   } else if (calibrationSession.step === "start") {
     calibrationStepLabel.textContent = "Step 1 · Starting position";
-    calibrationTitle.textContent = "Stand naturally and look forward";
-    calibrationInstructions.textContent =
-      "Keep both feet, knees, hips, shoulders, and your head visible. Hold still while we measure for two seconds.";
-    calibrationAction.textContent = "Measure standing position";
+    calibrationTitle.textContent = engine.exercise.calibration.startTitle
+      ?? `Hold ${engine.exercise.calibration.startPhase.replaceAll("_", " ")}`;
+    calibrationInstructions.textContent = engine.exercise.calibration.startInstruction
+      ?? "Keep every required joint visible and hold still while we measure.";
+    calibrationAction.textContent = "Measure starting position";
   } else if (calibrationSession.step === "target") {
     const nextRep = calibrationSession.targetCaptures.length + 1;
-    calibrationStepLabel.textContent = `Step 2 · Comfortable squat ${nextRep} of 3`;
-    calibrationTitle.textContent = "Move to a comfortable half squat";
-    calibrationInstructions.textContent =
-      "Use the chair for support if needed. Keep your chest lifted and knees over your feet, then hold your comfortable depth.";
-    calibrationAction.textContent = `Measure squat ${nextRep}`;
+    calibrationStepLabel.textContent = `Step 2 · Comfortable sample ${nextRep} of 3`;
+    calibrationTitle.textContent = engine.exercise.calibration.targetTitle
+      ?? `Move to ${engine.exercise.calibration.targetPhase.replaceAll("_", " ")}`;
+    calibrationInstructions.textContent = engine.exercise.calibration.targetInstruction
+      ?? "Move only as far as is comfortable, then hold the position.";
+    calibrationAction.textContent = `Measure sample ${nextRep}`;
   } else {
-    const knees = [
-      calibrationDraft?.target.leftKnee?.median,
-      calibrationDraft?.target.rightKnee?.median,
-    ].filter(Number.isFinite);
-    const target = knees.length
-      ? Math.round(knees.reduce((sum, value) => sum + value, 0) / knees.length)
-      : null;
     calibrationStepLabel.textContent = "Step 3 · Review";
-    calibrationTitle.textContent = "Your personal range is ready";
+    calibrationTitle.textContent = engine.exercise.calibration.personalizedKeys.length
+      ? "Your personal range is ready"
+      : "Your personal tracking baseline is ready";
     calibrationInstructions.textContent =
-      "This adjusts when a comfortable squat is recognized. Form and safety limits are not relaxed.";
-    calibrationResult.innerHTML = `
-      <span><strong>${target ?? "—"}°</strong>comfortable knee target</span>
-      <span><strong>${calibrationDraft?.naturalKneeDifference ?? "—"}°</strong>natural left/right difference</span>
-    `;
+      engine.exercise.calibration.safetyStatement
+      ?? "This adjusts recognition around your movement. Safety limits are not relaxed.";
+    const summaryKeys = engine.exercise.calibration.personalizedKeys.slice(0, 2);
+    const resultItems = summaryKeys.map((key) => {
+      const value = calibrationDraft?.target?.[key]?.median;
+      const angleLike = /(knee|hip|ankle|shoulder|elbow|wrist|inclination)/i
+        .test(key);
+      const display = Number.isFinite(value)
+        ? angleLike ? `${Math.round(value)}°` : value.toFixed(2)
+        : "—";
+      return `<span><strong>${display}</strong>${escapeHtml(friendlyMeasurement(key))}</span>`;
+    });
+    if (!resultItems.length) {
+      resultItems.push("<span><strong>✓</strong>tracking baseline captured</span>");
+    }
+    if (Number.isFinite(calibrationDraft?.naturalKneeDifference)) {
+      resultItems.push(`<span><strong>${calibrationDraft.naturalKneeDifference}°</strong>natural left/right difference</span>`);
+    }
+    calibrationResult.innerHTML = resultItems.join("");
     calibrationResult.classList.remove("hidden");
-    calibrationAction.textContent = "Save personal range";
+    calibrationAction.textContent = engine.exercise.calibration.personalizedKeys.length
+      ? "Save personal range"
+      : "Save tracking baseline";
   }
   calibrationAction.focus();
 }
@@ -939,22 +989,26 @@ function updateCalibrationCapture(angles, timestampMs) {
   const capture = calibrationSession?.capture;
   if (!capture) return;
 
+  let capturedUsableFrame = false;
   if (angles) {
     const frame = extractCalibrationFrame(
       engine.exercise,
       angles,
       sideSelect.value
     );
-    if (frame) capture.frames.push(frame);
+    if (frame) {
+      capture.frames.push(frame);
+      capturedUsableFrame = true;
+    }
   }
 
   const remaining = Math.max(
     0,
     Math.ceil((CALIBRATION_CAPTURE_MS - (timestampMs - capture.startedAt)) / 1000)
   );
-  calibrationStatus.textContent = angles
+  calibrationStatus.textContent = capturedUsableFrame
     ? `Measuring… ${remaining || "almost done"}`
-    : "Pause — make sure your full body is visible";
+    : "Pause — move into the requested phase and keep every required landmark visible";
 
   if (timestampMs - capture.startedAt < CALIBRATION_CAPTURE_MS) return;
   finishCalibrationCapture(capture);

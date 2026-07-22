@@ -86,6 +86,16 @@ const halfSquatBottom = (overrides = {}) =>
 }
 
 {
+  const engine = new FeedbackEngine("half-squats", "left", {
+    version: 1,
+    exerciseId: "half-squats",
+    affectedSide: "right",
+    phaseRanges: { squat: { leftKnee: [120, 130] } },
+  });
+  assert.equal(engine.exercise.activeCalibration, undefined);
+}
+
+{
   const engine = new FeedbackEngine("half-squats", "right");
   const result = engine.update(halfSquatPose());
 

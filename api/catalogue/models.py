@@ -179,13 +179,16 @@ class Calibration(TimestampedModel):
         db_table  = "catalogue_calibration"
         ordering  = ["-captured_at"]
         indexes   = [
-            models.Index(fields=["patient", "exercise", "is_active"]),
+            models.Index(
+                fields=["patient", "exercise", "affected_side", "is_active"],
+                name="catalogue_cal_side_lookup",
+            ),
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=["patient", "exercise"],
+                fields=["patient", "exercise", "affected_side"],
                 condition=models.Q(is_active=True),
-                name="unique_active_calibration_per_patient_exercise",
+                name="unique_active_calibration_patient_exercise_side",
             )
         ]
         verbose_name        = _("calibration")

@@ -1057,6 +1057,149 @@ export const EXERCISES = [
   },
 ];
 
+// Measurements that describe a user's movement endpoint may be narrowed around
+// their comfortable calibration. Form checks, visibility gates, equipment
+// proxies and categorical phase definitions deliberately stay fixed.
+const PERSONAL_CALIBRATION_KEYS = Object.freeze({
+  "heel-cord-stretch": ["ankle"],
+  "standing-quad-stretch": ["knee"],
+  "supine-hamstring-stretch": ["hip"],
+  "hamstring-curls": ["knee"],
+  "calf-raises": ["footInclination"],
+  "leg-extensions": ["knee"],
+  "straight-leg-raises-supine": ["hip"],
+  "straight-leg-raises-prone": ["hip"],
+  "hip-abduction": ["hip"],
+  "hip-adduction": ["hip"],
+  "leg-presses": ["hip", "knee"],
+  wrist_extension_stretch: ["wristBend"],
+  wrist_flexion_stretch: ["wristBend"],
+  tendon_glides: [],
+  ankle_pumps: ["ankle"],
+  heel_slides: ["knee"],
+  hip_bridge: ["hip"],
+  forearm_supination_pronation_strengthening: [],
+  stress_ball_squeeze: [],
+  ankle_rotations: ["toeMotion", "circleScore"],
+  ankle_range_of_motion: ["toeMotion"],
+  ankle_dorsiflexion_plantar_flexion: ["ankle"],
+  supported_single_leg_balance: ["workingFootClearance"],
+  clamshell: ["kneeSeparation"],
+  supported_forward_step_up: ["workingFootClearance", "knee"],
+  walking_progression: ["footLead"],
+  walking_with_mobility_aid: ["handMotion"],
+  single_knee_to_chest_stretch: ["hip"],
+  hip_flexor_stretch: ["hip", "oppositeHip"],
+  pendulum: ["wristMotion"],
+  crossover_arm_stretch: ["shoulder", "wristAcrossMidline"],
+  standing_row: ["elbow"],
+  external_rotation_with_resistance_band: ["wristOutwardRatio"],
+  shoulder_forward_elevation_assisted: ["shoulder"],
+});
+
+const RATIO_MEASUREMENTS = new Set([
+  "toeMotion",
+  "circleScore",
+  "workingFootClearance",
+  "kneeSeparation",
+  "footLead",
+  "handMotion",
+  "wristMotion",
+  "wristAcrossMidline",
+  "wristOutwardRatio",
+]);
+
+function uniqueMovementStages(exercise) {
+  return exercise.repRule
+    .split("→")
+    .map((stage) => stage.trim())
+    .filter((stage) => stage !== "hold")
+    .filter((stage, index, stages) => stages.indexOf(stage) === index);
+}
+
+function humanizePhase(phase) {
+  return phase.replaceAll("_", " ");
+}
+
+function calibrationTolerance(key) {
+  return RATIO_MEASUREMENTS.has(key) ? 0.06 : 8;
+}
+
+function conditionMap(phase, predicate) {
+  return Object.fromEntries(
+    Object.entries(phase)
+      .filter(([key, condition]) => key !== "name" && predicate(condition))
+  );
+}
+
+function attachPersonalCalibration(exercise) {
+  if (exercise.calibration) return;
+  const stages = uniqueMovementStages(exercise);
+  const startPhase = exercise.phases.find((phase) => phase.name === stages[0]);
+  const targetPhase = exercise.phases.find((phase) => phase.name === stages[1]);
+  if (!startPhase || !targetPhase) return;
+
+  const personalizedKeys = PERSONAL_CALIBRATION_KEYS[exercise.id] ?? [];
+  const captureKeys = [...new Set([
+    ...Object.keys(startPhase),
+    ...Object.keys(targetPhase),
+  ])].filter((key) => key !== "name");
+  const startRanges = conditionMap(startPhase, Array.isArray);
+  const targetRanges = conditionMap(targetPhase, Array.isArray);
+
+  // A comfortable target may fall between the standard starting and endpoint
+  // bands, but never beyond the outer limits already defined by the exercise.
+  for (const key of personalizedKeys) {
+    const start = startRanges[key];
+    const target = targetRanges[key];
+    if (!start || !target) continue;
+    targetRanges[key] = [
+      Math.min(start[0], target[0]),
+      Math.max(start[1], target[1]),
+    ];
+  }
+
+  const continuousTarget = [
+    "ankle_rotations",
+    "ankle_range_of_motion",
+    "pendulum",
+    "walking_progression",
+    "walking_with_mobility_aid",
+  ].includes(exercise.id);
+  const hasPersonalRange = personalizedKeys.length > 0;
+
+  exercise.calibration = {
+    mode: hasPersonalRange ? "personal_range" : "tracking_baseline",
+    startPhase: startPhase.name,
+    targetPhase: targetPhase.name,
+    captureKeys,
+    personalizedKeys,
+    tolerances: Object.fromEntries(
+      personalizedKeys.map((key) => [key, calibrationTolerance(key)])
+    ),
+    safeRanges: { start: startRanges, target: targetRanges },
+    safeConditions: {
+      start: conditionMap(startPhase, (condition) => !Array.isArray(condition)),
+      target: conditionMap(targetPhase, (condition) => !Array.isArray(condition)),
+    },
+    captureErrors: {},
+    startTitle: `Hold the ${humanizePhase(startPhase.name)} position`,
+    startInstruction:
+      `Move into the ${humanizePhase(startPhase.name)} position shown by the guide and keep every required joint visible.`,
+    targetTitle: continuousTarget
+      ? `Perform ${humanizePhase(targetPhase.name)} slowly`
+      : `Hold your comfortable ${humanizePhase(targetPhase.name)} position`,
+    targetInstruction: continuousTarget
+      ? `Continue the ${humanizePhase(targetPhase.name)} movement slowly throughout the measurement. Stop if it is uncomfortable.`
+      : `Move only as far as is comfortable within your clinician-approved limit, then hold the position for measurement.`,
+    safetyStatement: hasPersonalRange
+      ? "This personalizes the movement endpoint only. Form and safety gates remain unchanged."
+      : "This records your personal tracking baseline. Anatomical shape definitions and safety gates remain unchanged.",
+  };
+}
+
+EXERCISES.forEach(attachPersonalCalibration);
+
 // Quick lookup by exercise id.
 // basic fildering
 export const EXERCISE_MAP = Object.fromEntries(EXERCISES.map((e) => [e.id, e]));

@@ -91,6 +91,15 @@ them. A defensible threshold is obtained as follows:
 8. A physiotherapist approves the final range, wording and escalation behaviour
    before the specification can move into `exercises/registry.js`.
 
+Every executable exercise now exposes the same two-stage calibration contract:
+one starting-position capture and three comfortable target captures. Only
+measurements listed in that exercise's `personalizedKeys` are changed. The
+personal range is clamped between the exercise's existing start and endpoint
+limits. Posture checks, confidence gates, categorical phases and stated safety
+limits are never loosened. For categorical hand sequences, calibration records
+the user's framing and classification baseline but keeps the required shapes
+unchanged.
+
 Published rehabilitation-pose research also shows why exercise- and
 camera-specific validation matters: reported joint-angle error varies with pose
 and viewpoint rather than producing one universally accurate angle.

@@ -78,14 +78,29 @@ export function loadCalibrations() {
   return readJson(CALIBRATION_KEY, {});
 }
 
-export function getCalibration(exerciseId) {
-  return loadCalibrations()[exerciseId] ?? null;
+function calibrationStorageKey(exerciseId, affectedSide) {
+  return affectedSide ? `${exerciseId}:${affectedSide}` : exerciseId;
+}
+
+export function getCalibration(exerciseId, affectedSide = null) {
+  const calibrations = loadCalibrations();
+  const exact = calibrations[calibrationStorageKey(exerciseId, affectedSide)];
+  if (exact) return exact;
+  // Read pre-side-specific v1 data only when it belongs to the requested side.
+  const legacy = calibrations[exerciseId];
+  return legacy
+    && (!affectedSide || legacy.affectedSide === affectedSide)
+    ? legacy
+    : null;
 }
 
 export function saveCalibration(calibration) {
   if (!calibration?.exerciseId) throw new Error("Calibration needs an exercise ID.");
   const calibrations = loadCalibrations();
-  calibrations[calibration.exerciseId] = calibration;
+  calibrations[calibrationStorageKey(
+    calibration.exerciseId,
+    calibration.affectedSide
+  )] = calibration;
   writeJson(CALIBRATION_KEY, calibrations);
   window.dispatchEvent(
     new CustomEvent("physiovision:calibration-updated", {
@@ -95,13 +110,19 @@ export function saveCalibration(calibration) {
   return calibration;
 }
 
-export function clearCalibration(exerciseId) {
+export function clearCalibration(exerciseId, affectedSide = null) {
   const calibrations = loadCalibrations();
-  delete calibrations[exerciseId];
+  if (affectedSide) {
+    delete calibrations[calibrationStorageKey(exerciseId, affectedSide)];
+  } else {
+    Object.keys(calibrations)
+      .filter((key) => key === exerciseId || key.startsWith(`${exerciseId}:`))
+      .forEach((key) => delete calibrations[key]);
+  }
   writeJson(CALIBRATION_KEY, calibrations);
   window.dispatchEvent(
     new CustomEvent("physiovision:calibration-updated", {
-      detail: { exerciseId, removed: true },
+      detail: { exerciseId, affectedSide, removed: true },
     })
   );
 }
@@ -122,7 +143,7 @@ export function extractCalibrationFrame(exercise, angles, affectedSide) {
     if (
       !measurement ||
       measurement.lowConfidence ||
-      !Number.isFinite(measurement.value)
+      !isCalibrationValue(measurement.value)
     ) {
       return null;
     }
@@ -138,18 +159,31 @@ export function summariseFrames(frames, keys) {
   for (const key of keys) {
     const values = frames
       .map((frame) => frame[key])
-      .filter(Number.isFinite)
-      .sort((a, b) => a - b);
+      .filter(isCalibrationValue);
     if (values.length < 5) {
       throw new Error("Keep all required joints visible for the full measurement.");
     }
-    const centre = median(values);
-    const deviations = values.map((value) => Math.abs(value - centre));
-    summary[key] = {
-      median: round(centre),
-      variability: round(median(deviations)),
-      sampleCount: values.length,
-    };
+    if (values.every(Number.isFinite)) {
+      values.sort((a, b) => a - b);
+      const centre = median(values);
+      const deviations = values.map((value) => Math.abs(value - centre));
+      summary[key] = {
+        median: round(centre),
+        variability: round(median(deviations)),
+        sampleCount: values.length,
+      };
+    } else if (values.every((value) => typeof value === "string")) {
+      const value = mode(values);
+      summary[key] = {
+        value,
+        consistency: round(
+          values.filter((candidate) => candidate === value).length / values.length
+        ),
+        sampleCount: values.length,
+      };
+    } else {
+      throw new Error("The movement measurement changed type during calibration.");
+    }
   }
   return summary;
 }
@@ -166,6 +200,17 @@ export function validateCalibrationCapture(exercise, frames, captureType) {
       const message = config.captureErrors?.[key];
       throw new Error(
         message ?? `Your ${friendlyMeasurement(key)} was outside the safe calibration range.`
+      );
+    }
+  }
+  const safeConditions = config.safeConditions?.[captureType] ?? {};
+  for (const [key, condition] of Object.entries(safeConditions)) {
+    const result = summary[key];
+    const value = result?.value ?? result?.median;
+    if (!conditionMatches(value, condition) || (result.consistency ?? 1) < 0.8) {
+      const message = config.captureErrors?.[key];
+      throw new Error(
+        message ?? `Hold the ${friendlyMeasurement(key)} consistently and try again.`
       );
     }
   }
@@ -189,12 +234,34 @@ export function createCalibration(
   const target = {};
 
   for (const key of config.captureKeys) {
-    const values = targetSummaries.map((summary) => summary[key].median);
-    target[key] = {
-      median: round(median(values)),
-      variability: round(median(values.map((value) => Math.abs(value - median(values))))),
-      repetitions: values.length,
-    };
+    const numericValues = targetSummaries
+      .map((summary) => summary[key]?.median)
+      .filter(Number.isFinite);
+    if (numericValues.length === targetSummaries.length) {
+      const centre = median(numericValues);
+      target[key] = {
+        median: round(centre),
+        variability: round(median(
+          numericValues.map((value) => Math.abs(value - centre))
+        )),
+        repetitions: numericValues.length,
+      };
+      continue;
+    }
+    const categoricalValues = targetSummaries
+      .map((summary) => summary[key]?.value)
+      .filter((value) => typeof value === "string");
+    if (categoricalValues.length === targetSummaries.length) {
+      const value = mode(categoricalValues);
+      target[key] = {
+        value,
+        consistency: round(
+          categoricalValues.filter((candidate) => candidate === value).length
+            / categoricalValues.length
+        ),
+        repetitions: categoricalValues.length,
+      };
+    }
   }
 
   const phaseRanges = {
@@ -202,13 +269,13 @@ export function createCalibration(
       config.personalizedKeys,
       start,
       config.safeRanges.start,
-      config.toleranceDegrees
+      config.tolerances ?? config.toleranceDegrees
     ),
     [config.targetPhase]: makePersonalRanges(
       config.personalizedKeys,
       target,
       config.safeRanges.target,
-      config.toleranceDegrees
+      config.tolerances ?? config.toleranceDegrees
     ),
   };
 
@@ -216,7 +283,7 @@ export function createCalibration(
   const rightKnee = target.rightKnee?.median;
   const naturalKneeDifference =
     Number.isFinite(leftKnee) && Number.isFinite(rightKnee)
-      ? round(Math.abs(leftKnee - rightKnee))
+      ? Math.round(Math.abs(leftKnee - rightKnee) * 10) / 10
       : null;
 
   return {
@@ -232,14 +299,17 @@ export function createCalibration(
   };
 }
 
-function makePersonalRanges(keys, summary, safetyRanges, tolerance = 8) {
+function makePersonalRanges(keys, summary, safetyRanges, tolerances = 8) {
   const ranges = {};
   for (const key of keys) {
     const centre = summary[key]?.median;
     const safe = safetyRanges[key];
     if (!Number.isFinite(centre) || !safe) continue;
     const variability = summary[key]?.variability ?? 0;
-    const radius = Math.max(tolerance, variability * 3);
+    const configuredTolerance = typeof tolerances === "number"
+      ? tolerances
+      : tolerances?.[key] ?? 8;
+    const radius = Math.max(configuredTolerance, variability * 3);
     ranges[key] = [
       round(Math.max(safe[0], centre - radius)),
       round(Math.min(safe[1], centre + radius)),
@@ -264,10 +334,29 @@ export function applyCalibration(exercise, calibration) {
     return copy;
   }
 
-  copy.phases = copy.phases.map((phase) => ({
-    ...phase,
-    ...(calibration.phaseRanges?.[phase.name] ?? {}),
-  }));
+  const config = exercise.calibration;
+  const safeByPhase = {
+    [config?.startPhase]: config?.safeRanges?.start ?? {},
+    [config?.targetPhase]: config?.safeRanges?.target ?? {},
+  };
+  const allowedKeys = new Set(config?.personalizedKeys ?? []);
+  copy.phases = copy.phases.map((phase) => {
+    const safeRanges = safeByPhase[phase.name] ?? {};
+    const storedRanges = calibration.phaseRanges?.[phase.name] ?? {};
+    const acceptedRanges = {};
+    for (const [key, stored] of Object.entries(storedRanges)) {
+      const safe = safeRanges[key];
+      if (!allowedKeys.has(key) || !isNumericRange(stored) || !isNumericRange(safe)) {
+        continue;
+      }
+      const clamped = [
+        Math.max(stored[0], safe[0]),
+        Math.min(stored[1], safe[1]),
+      ];
+      if (clamped[0] <= clamped[1]) acceptedRanges[key] = clamped;
+    }
+    return { ...phase, ...acceptedRanges };
+  });
   copy.activeCalibration = calibration;
 
   // Natural asymmetry is recorded for trend comparisons, but calibration is
@@ -289,8 +378,45 @@ function median(values) {
     : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
+function mode(values) {
+  const counts = new Map();
+  values.forEach((value) => counts.set(value, (counts.get(value) ?? 0) + 1));
+  return [...counts.entries()]
+    .sort((left, right) => right[1] - left[1])[0]?.[0];
+}
+
+function isCalibrationValue(value) {
+  return Number.isFinite(value)
+    || (typeof value === "string" && value.length > 0);
+}
+
+function conditionMatches(value, condition) {
+  if (Array.isArray(condition)) {
+    return Number.isFinite(value)
+      && value >= condition[0]
+      && value <= condition[1];
+  }
+  if (condition && Object.hasOwn(condition, "equals")) {
+    return value === condition.equals;
+  }
+  if (condition && Array.isArray(condition.oneOf)) {
+    return condition.oneOf.includes(value);
+  }
+  return false;
+}
+
+function isNumericRange(value) {
+  return Array.isArray(value)
+    && value.length === 2
+    && Number.isFinite(value[0])
+    && Number.isFinite(value[1])
+    && value[0] <= value[1];
+}
+
 function round(value) {
-  return Math.round(value * 10) / 10;
+  // Ratios such as foot clearance and trajectory size need more precision
+  // than degree measurements; two decimals still keeps stored profiles small.
+  return Math.round(value * 100) / 100;
 }
 
 function friendlyMeasurement(key) {

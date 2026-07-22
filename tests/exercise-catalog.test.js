@@ -22,13 +22,21 @@ for (const exercise of DRAFT_EXERCISES) {
   assert.ok(exercise.instruction);
   assert.ok(exercise.typicalUse.length > 0);
   assert.ok(exercise.tags.length > 0);
-  assert.equal(exercise.liveTracking, false);
-  assert.equal(exercise.reviewStatus, "pending_clinician_review");
-  assert.equal(
-    EXERCISE_MAP[exercise.id],
-    undefined,
-    `${exercise.id} must not enter the live pose registry before validation`
-  );
+  if (exercise.liveTracking) {
+    assert.equal(exercise.reviewStatus, "prototype_primary_motion_tracking");
+    assert.equal(exercise.trackingRequirement, "pose_primary_motion_prototype");
+    assert.ok(
+      EXERCISE_MAP[exercise.id],
+      `${exercise.id} is labelled live and must exist in the executable registry`
+    );
+  } else {
+    assert.equal(exercise.reviewStatus, "pending_clinician_review");
+    assert.equal(
+      EXERCISE_MAP[exercise.id],
+      undefined,
+      `${exercise.id} must not enter the live pose registry before promotion`
+    );
+  }
 
   if (exercise.tags.includes(EXERCISE_TAGS.HAND_TRACKING_REQUIRED)) {
     assert.equal(exercise.trackingRequirement, "hand_landmarks");
@@ -52,6 +60,13 @@ assert.ok(
   DRAFT_EXERCISE_MAP.supported_single_leg_balance.tags.includes(
     EXERCISE_TAGS.SUPPORT_REQUIRED
   )
+);
+
+assert.deepEqual(
+  DRAFT_EXERCISES.filter((exercise) => exercise.liveTracking)
+    .map((exercise) => exercise.id)
+    .sort(),
+  ["ankle_pumps", "heel_slides", "hip_bridge"]
 );
 
 console.log("exercise catalog tests passed");

@@ -140,4 +140,62 @@ const halfSquatBottom = (overrides = {}) =>
   assert.deepEqual(trackingLost.cues, []);
 }
 
+{
+  const engine = new FeedbackEngine("ankle_pumps", "right");
+  const toesUp = { rightAnkle: visible(75), rightKnee: visible(165) };
+  const toesDown = { rightAnkle: visible(120), rightKnee: visible(165) };
+
+  engine.update(toesUp, 0);
+  assert.equal(engine.update(toesUp, 300).startConfirmed, true);
+  engine.update(toesDown, 400);
+  assert.equal(engine.update(toesDown, 700).phase, "toes_down");
+  engine.update(toesUp, 800);
+  const completed = engine.update(toesUp, 1100);
+
+  assert.equal(completed.repCount, 1);
+  assert.equal(completed.phase, "toes_up");
+}
+
+{
+  const engine = new FeedbackEngine("ankle_pumps", "right");
+  const transition = engine.update({
+    rightAnkle: visible(93),
+    rightKnee: visible(165),
+  });
+
+  assert.equal(transition.trackingReady, true);
+  assert.equal(transition.positionRecognized, false);
+  assert.equal(transition.detectedPhase, null);
+}
+
+{
+  const engine = new FeedbackEngine("heel_slides", "left");
+  const bent = { leftKnee: visible(90) };
+  const extended = { leftKnee: visible(165) };
+
+  engine.update(bent, 0);
+  engine.update(bent, 300);
+  engine.update(extended, 400);
+  engine.update(extended, 700);
+  engine.update(bent, 800);
+  const completed = engine.update(bent, 1100);
+
+  assert.equal(completed.repCount, 1);
+}
+
+{
+  const engine = new FeedbackEngine("hip_bridge", "right");
+  const down = { rightHip: visible(130), rightKnee: visible(90) };
+  const raised = { rightHip: visible(168), rightKnee: visible(90) };
+
+  engine.update(down, 0);
+  engine.update(down, 300);
+  engine.update(raised, 400);
+  engine.update(raised, 700);
+  engine.update(down, 800);
+  const completed = engine.update(down, 1100);
+
+  assert.equal(completed.repCount, 1);
+}
+
 console.log("feedback engine tracking tests passed");

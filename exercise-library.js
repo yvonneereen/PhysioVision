@@ -1,6 +1,7 @@
 import { DRAFT_EXERCISES, requiresClinicianPlan } from "./exercises/catalog.js";
 
 const TRACKING_LABELS = {
+  pose_primary_motion_prototype: "Prototype camera tracking active",
   hand_landmarks: "Hand tracking required",
   pose_limited: "Camera tracking limited",
   pose_rules_not_validated: "Live rules pending",
@@ -28,6 +29,7 @@ const searchableText = (exercise) =>
 function createExerciseCard(exercise) {
   const card = document.createElement("article");
   card.className = "exercise-library-card";
+  card.classList.toggle("is-live", exercise.liveTracking);
 
   const metadata = document.createElement("p");
   metadata.className = "exercise-card-metadata";
@@ -38,7 +40,10 @@ function createExerciseCard(exercise) {
 
   const status = document.createElement("p");
   status.className = "exercise-card-status";
-  status.textContent = `Draft · ${TRACKING_LABELS[exercise.trackingRequirement]}`;
+  status.classList.toggle("is-live", exercise.liveTracking);
+  status.textContent = exercise.liveTracking
+    ? TRACKING_LABELS[exercise.trackingRequirement]
+    : `Draft · ${TRACKING_LABELS[exercise.trackingRequirement]}`;
 
   const tags = document.createElement("div");
   tags.className = "exercise-card-tags";
@@ -79,8 +84,22 @@ function initialiseExerciseLibrary() {
   const search = document.getElementById("exerciseLibrarySearch");
   const region = document.getElementById("exerciseLibraryRegion");
   const count = document.getElementById("exerciseLibraryCount");
+  const libraryStatus = document.getElementById("exerciseLibraryStatus");
+  const noticeTitle = document.getElementById("exerciseLibraryNoticeTitle");
+  const noticeDetail = document.getElementById("exerciseLibraryNoticeDetail");
 
   if (!grid || !search || !region || !count) return;
+
+  const liveCount = DRAFT_EXERCISES.filter((exercise) => exercise.liveTracking).length;
+  const pendingCount = DRAFT_EXERCISES.length - liveCount;
+  if (libraryStatus) libraryStatus.textContent = `${liveCount} live prototypes`;
+  if (noticeTitle) {
+    noticeTitle.textContent = `${liveCount} exercises now have prototype camera tracking.`;
+  }
+  if (noticeDetail) {
+    noticeDetail.textContent =
+      `${pendingCount} remain in the draft library. Live prototypes check only their primary movement and still require clinician-approved use and real-video validation.`;
+  }
 
   [...new Set(DRAFT_EXERCISES.map((exercise) => exercise.region))]
     .sort()
@@ -101,7 +120,7 @@ function initialiseExerciseLibrary() {
     );
 
     grid.replaceChildren(...matches.map(createExerciseCard));
-    count.textContent = `${matches.length} of ${DRAFT_EXERCISES.length} draft exercises shown`;
+    count.textContent = `${matches.length} of ${DRAFT_EXERCISES.length} exercises shown · ${liveCount} live prototypes`;
 
     if (!matches.length) {
       const empty = document.createElement("p");

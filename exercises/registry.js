@@ -1,6 +1,10 @@
 /**
- * Exercise rule specifications for the AAOS Knee Conditioning Programme.
- * Source: https://www.orthoinfo.org/recovery/knee-conditioning-program
+ * Executable exercise rule specifications.
+ *
+ * The original entries use the AAOS Knee Conditioning Programme:
+ * https://www.orthoinfo.org/recovery/knee-conditioning-program
+ * Newly promoted catalog entries are explicitly labelled as prototype
+ * primary-motion tracking and remain subject to clinician/video validation.
  *
  * Each entry defines:
  *   - Which joint angles to measure (using the landmark triples from geometry.js)
@@ -390,6 +394,111 @@ export const EXERCISES = [
       "knee<150": "Press fully against the band — straighten your leg completely",
     },
     trackingNotes: "Supine. Side camera gives cleanest sagittal-plane read.",
+  },
+
+  // ── Newly promoted primary-motion prototypes ─────────────────────────────
+
+  {
+    id: "ankle_pumps",
+    name: "Ankle Pumps",
+    category: "mobility",
+    trackingMaturity: "prototype_primary_motion_only",
+    requiresClinicianPlan: true,
+    prescription: {
+      mode: "clinician_plan",
+      sets: null,
+      reps: null,
+      holdSeconds: 0,
+      daysPerWeek: "as prescribed",
+    },
+    camera: "side",
+    phaseConfirmationMs: 300,
+    maxCues: 1,
+    trackingWarning:
+      "Prototype tracking: lie with the working leg supported and use a close side view that includes the knee, ankle and complete foot. The guide checks ankle direction and whether the knee stays nearly straight; it cannot assess pain, swelling, circulation or post-operative restrictions. Use only if included in your clinician-approved plan.",
+    trackedAngles: {
+      ankle: { points: ["knee", "ankle", "footIndex"], side: "affected" },
+      knee: { points: ["hip", "knee", "ankle"], side: "affected" },
+    },
+    phases: [
+      { name: "toes_up", ankle: [45, 88], knee: [145, 180] },
+      { name: "toes_down", ankle: [98, 150], knee: [145, 180] },
+    ],
+    repRule: "toes_up → toes_down → toes_up",
+    stageImages: ["ankle-toes-up", "ankle-toes-down", "ankle-toes-up"],
+    cues: {
+      "knee<145": "Keep your knee and upper leg still while moving your ankle",
+      "ankle>150": "Use a smaller, comfortable ankle movement",
+    },
+    trackingNotes:
+      "Only the supported, nearly straight-leg variant is enabled. The seated bent-knee variant needs a separate calibration and phase definition.",
+  },
+
+  {
+    id: "heel_slides",
+    name: "Heel Slides",
+    category: "mobility",
+    trackingMaturity: "prototype_primary_motion_only",
+    requiresClinicianPlan: true,
+    prescription: {
+      mode: "clinician_plan",
+      sets: null,
+      reps: null,
+      holdSeconds: 0,
+      daysPerWeek: "as prescribed",
+    },
+    camera: "side",
+    phaseConfirmationMs: 300,
+    trackingWarning:
+      "Prototype tracking: use an elevated side view with the working hip, knee and ankle visible. The guide counts knee bending and straightening only; it cannot confirm heel contact, pelvic stability, trunk bracing or pain. Use only if included in your clinician-approved plan.",
+    trackedAngles: {
+      knee: { points: ["hip", "knee", "ankle"], side: "affected" },
+    },
+    phases: [
+      { name: "knee_bent", knee: [60, 120] },
+      { name: "leg_extended", knee: [150, 180] },
+    ],
+    repRule: "knee_bent → leg_extended → knee_bent",
+    stageImages: ["heel-slide-bent", "heel-slide-extended", "heel-slide-bent"],
+    cues: {},
+    trackingNotes:
+      "Primary knee motion only. Pelvic displacement and surface contact require additional features before full-form feedback can be enabled.",
+  },
+
+  {
+    id: "hip_bridge",
+    name: "Hip Bridge",
+    category: "strengthening",
+    trackingMaturity: "prototype_primary_motion_only",
+    requiresClinicianPlan: true,
+    prescription: {
+      mode: "clinician_plan",
+      sets: null,
+      reps: null,
+      holdSeconds: 0,
+      daysPerWeek: "as prescribed",
+    },
+    camera: "side",
+    phaseConfirmationMs: 300,
+    maxCues: 1,
+    trackingWarning:
+      "Prototype tracking: use a full side view at bed or floor height with the working shoulder, hip, knee and ankle visible. The guide checks primary hip alignment and knee position; it cannot assess abdominal activation, buttock activation, lower-back arching or pain. Use only if included in your clinician-approved plan.",
+    trackedAngles: {
+      hip: { points: ["shoulder", "hip", "knee"], side: "affected" },
+      knee: { points: ["hip", "knee", "ankle"], side: "affected" },
+    },
+    phases: [
+      { name: "pelvis_down", hip: [105, 148], knee: [55, 125] },
+      { name: "bridge", hip: [155, 180], knee: [55, 125] },
+    ],
+    repRule: "pelvis_down → bridge → pelvis_down",
+    stageImages: ["bridge-down", "bridge-up", "bridge-down"],
+    cues: {
+      "knee<55": "Move your foot slightly farther away to keep the knee comfortable",
+      "knee>125": "Move your foot slightly closer before lifting again",
+    },
+    trackingNotes:
+      "Primary shoulder-hip-knee alignment only. Lumbar curvature is not represented by the current landmark model.",
   },
 ];
 

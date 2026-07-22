@@ -11,6 +11,7 @@ from api.core.models import TimestampedModel, PatientProfile, ClinicianProfile
 class ExerciseCategory(models.TextChoices):
     STRENGTHENING = "strengthening", _("Strengthening")
     STRETCH       = "stretch",       _("Stretch")
+    MOBILITY      = "mobility",      _("Mobility")
 
 
 class CameraDirection(models.TextChoices):

@@ -1,6 +1,6 @@
 {
   "type": "module",
   "scripts": {
-    "test": "node tests/geometry.test.js && node tests/feedback-engine.test.js && node tests/personalization.test.js && node tests/exercise-catalog.test.js"
+    "test": "node tests/geometry.test.js && node tests/feedback-engine.test.js && node tests/personalization.test.js && node tests/exercise-catalog.test.js && node tests/tracking-specs.test.js && node tests/promoted-exercises.test.js && node tests/hand-geometry.test.js && node tests/movement-measurements.test.js"
   }
 }

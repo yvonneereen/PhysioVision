@@ -317,8 +317,12 @@
                 <span aria-hidden="true">◖))</span> Voice on
               </button>
             </div>
-            <div class="setup-tip">
+            <div class="setup-tip" id="setupTip">
               Phone at chest height · 2–3 m away · Full body visible
+            </div>
+            <div id="handFrameGuide" class="hand-frame-guide hidden" aria-hidden="true">
+              <div class="hand-guide-outline">✋</div>
+              <span>Keep one complete hand inside this area</span>
             </div>
             <div id="calibrationOverlay" class="calibration-overlay hidden" aria-live="polite">
               <div class="calibration-dialog">
@@ -448,6 +452,33 @@
           </div>
           <div id="trackingWarning" class="tracking-warning hidden"></div>
 
+          <section class="hand-tracking-card" aria-labelledby="handTrackingTitle">
+            <div class="hand-tracking-heading">
+              <div>
+                <span>Close-up camera check</span>
+                <strong id="handTrackingTitle">Hand and wrist tracking</strong>
+              </div>
+              <span id="handModelStatus" class="hand-model-status">Loading model…</span>
+            </div>
+            <p>
+              Use this before a hand exercise. Bring one complete hand close to
+              the camera; full-body framing is usually too far away.
+            </p>
+            <button id="handTrackingToggle" class="button hand-tracking-button" type="button" disabled>
+              Check hand tracking
+            </button>
+            <dl id="handTrackingReadout" class="hand-tracking-readout hidden" aria-live="polite">
+              <div><dt>Detected side</dt><dd data-hand-metric="handedness">—</dd></div>
+              <div><dt>Image coverage</dt><dd data-hand-metric="coverage">—</dd></div>
+              <div><dt>Palm direction</dt><dd data-hand-metric="palm">—</dd></div>
+              <div><dt>Thumb CMC / MCP / IP</dt><dd data-hand-metric="thumb">—</dd></div>
+              <div><dt>Index MCP / PIP / DIP</dt><dd data-hand-metric="index">—</dd></div>
+              <div><dt>Middle MCP / PIP / DIP</dt><dd data-hand-metric="middle">—</dd></div>
+              <div><dt>Ring MCP / PIP / DIP</dt><dd data-hand-metric="ring">—</dd></div>
+              <div><dt>Little MCP / PIP / DIP</dt><dd data-hand-metric="pinky">—</dd></div>
+            </dl>
+          </section>
+
           <button id="toggle" class="button button-coral camera-button" disabled>
             Start camera guide
             <span aria-hidden="true">→</span>
@@ -483,14 +514,14 @@
             <p class="eyebrow">Exercise library</p>
             <h3 id="exerciseLibraryTitle">More movements, added safely</h3>
           </div>
-          <span class="exercise-library-status">Draft library</span>
+          <span class="exercise-library-status" id="exerciseLibraryStatus">Exercise library</span>
         </div>
 
         <div class="exercise-library-notice" role="note">
-          <strong>These exercises are not active in the camera guide yet.</strong>
-          <span>
-            Each needs clinician review and validated movement rules. Hand and finger
-            exercises also need a hand-tracking model.
+          <strong id="exerciseLibraryNoticeTitle">Prototype tracking is available for selected exercises.</strong>
+          <span id="exerciseLibraryNoticeDetail">
+            The remaining exercises still need clinician review, validated movement
+            rules or a hand-tracking model.
           </span>
         </div>
 

@@ -12,7 +12,8 @@ connected to progress trends.
 - On-device personal profile for goals, focus side, mobility, and coaching style
 - Guided half-squat calibration using natural standing and three comfortable depths
 - MediaPipe-powered pose tracking with live form cues and repetition counting
-- Searchable library of 23 additional draft exercises with tracking and safety labels
+- Searchable library of 23 additional exercises with tracking and safety labels
+- Primary-motion camera prototypes for ankle pumps, heel slides, and hip bridges
 - Patient progress and clinical escalation preview
 - Online physiotherapist booking prototype
 - Physiotherapist monitoring dashboard
@@ -35,9 +36,13 @@ Profile and calibration data are stored in browser `localStorage` for this
 prototype. Half-squat calibration personalizes comfortable knee and hip ranges;
 it does not loosen torso, knee-position, or maximum-depth safety limits.
 
-The additional exercise library is educational draft content. Its entries are
-kept outside the live movement-scoring registry until a clinician reviews them
-and their required pose or hand-tracking rules are implemented and tested.
+Most of the additional exercise library remains educational draft content.
+Ankle pumps, heel slides, and hip bridges have restricted prototype tracking
+for their primary joint movement only; their warnings list important form and
+safety factors the camera cannot assess. All other additions remain outside the
+live movement-scoring registry.
+Draft landmark, phase and measurement plans are documented in
+[`TRACKING_RULES.md`](TRACKING_RULES.md).
 
 ## Safety
 

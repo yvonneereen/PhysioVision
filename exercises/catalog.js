@@ -18,9 +18,13 @@ export const EXERCISE_TAGS = Object.freeze({
 
 const draftExercise = (record) => ({
   ...record,
-  reviewStatus: "pending_clinician_review",
-  liveTracking: false,
-  trackingRequirement: record.tags.includes(EXERCISE_TAGS.HAND_TRACKING_REQUIRED)
+  reviewStatus: record.liveTracking
+    ? "prototype_primary_motion_tracking"
+    : "pending_clinician_review",
+  liveTracking: Boolean(record.liveTracking),
+  trackingRequirement: record.liveTracking
+    ? "pose_primary_motion_prototype"
+    : record.tags.includes(EXERCISE_TAGS.HAND_TRACKING_REQUIRED)
     ? "hand_landmarks"
     : record.tags.includes(EXERCISE_TAGS.POSE_LIMITED)
       ? "pose_limited"
@@ -75,6 +79,7 @@ export const DRAFT_EXERCISES = [
   }),
   draftExercise({
     id: "ankle_pumps",
+    liveTracking: true,
     name: "Ankle Pumps",
     region: "Ankle & balance",
     category: "Mobility",
@@ -156,6 +161,7 @@ export const DRAFT_EXERCISES = [
   }),
   draftExercise({
     id: "hip_bridge",
+    liveTracking: true,
     name: "Hip Bridge",
     region: "Spine & core",
     category: "Strengthening",
@@ -165,6 +171,7 @@ export const DRAFT_EXERCISES = [
   }),
   draftExercise({
     id: "heel_slides",
+    liveTracking: true,
     name: "Heel Slides",
     region: "Spine & core",
     category: "Mobility",

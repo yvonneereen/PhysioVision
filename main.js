@@ -1,10 +1,12 @@
 import {
   PoseLandmarker,
+  HandLandmarker,
   FilesetResolver,
   DrawingUtils,
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 
 import { jointAngles, symmetry, VISIBILITY_THRESHOLD } from "./geometry.js";
+import { selectTrackedHand, summarizeHandResult } from "./hand-geometry.js";
 import { FeedbackEngine, EXERCISES } from "./feedback/engine.js";
 import { POSES } from "./poses.js";
 import {
@@ -83,9 +85,15 @@ const calibrationStatus     = document.getElementById("calibrationStatus");
 const calibrationResult     = document.getElementById("calibrationResult");
 const calibrationAction     = document.getElementById("calibrationAction");
 const calibrationCancel     = document.getElementById("calibrationCancel");
+const setupTip              = document.getElementById("setupTip");
+const handFrameGuide        = document.getElementById("handFrameGuide");
+const handTrackingToggle    = document.getElementById("handTrackingToggle");
+const handTrackingReadout   = document.getElementById("handTrackingReadout");
+const handModelStatus       = document.getElementById("handModelStatus");
 
 let profile = loadProfile();
 let poseLandmarker = null;
+let handLandmarker = null;
 let sessionStartedAt = null;
 
 // Accumulated per-session stats (reset on each camera start)
@@ -139,9 +147,23 @@ function clearHoldTimer(resetSeconds) {
 EXERCISES.forEach((ex) => {
   const opt = document.createElement("option");
   opt.value = ex.id;
-  opt.textContent = ex.name;
+  opt.textContent = ex.requiresClinicianPlan
+    ? `${ex.name} · clinician plan`
+    : ex.name;
   exSelect.appendChild(opt);
 });
+
+function refreshExerciseAccess() {
+  EXERCISES.forEach((exercise) => {
+    const option = [...exSelect.options].find((item) => item.value === exercise.id);
+    if (!option) return;
+    option.disabled = Boolean(
+      exercise.requiresClinicianPlan && profile.carePath !== "clinician"
+    );
+  });
+}
+
+refreshExerciseAccess();
 
 sideSelect.value = profile.focusSide;
 let engine = new FeedbackEngine(
@@ -197,6 +219,13 @@ sideSelect.addEventListener("change", () => {
 window.addEventListener("physiovision:profile-updated", (event) => {
   cancelCalibration();
   profile = event.detail;
+  refreshExerciseAccess();
+  if (exSelect.selectedOptions[0]?.disabled) {
+    exSelect.value = EXERCISES.find((exercise) => !exercise.requiresClinicianPlan)?.id
+      ?? EXERCISES[0].id;
+    exSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    return;
+  }
   sideSelect.value = profile.focusSide;
   engine.changeExercise(
     exSelect.value,
@@ -225,6 +254,37 @@ async function createLandmarker() {
     runningMode: "VIDEO",
     numPoses: 1,
   });
+
+  try {
+    const handOptions = {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+      },
+      runningMode: "VIDEO",
+      numHands: 2,
+      minHandDetectionConfidence: 0.6,
+      minHandPresenceConfidence: 0.6,
+      minTrackingConfidence: 0.6,
+    };
+    try {
+      handLandmarker = await HandLandmarker.createFromOptions(vision, {
+        ...handOptions,
+        baseOptions: { ...handOptions.baseOptions, delegate: "GPU" },
+      });
+    } catch (gpuError) {
+      console.info("GPU hand tracking unavailable; using CPU", gpuError);
+      handLandmarker = await HandLandmarker.createFromOptions(vision, handOptions);
+    }
+    handModelStatus.textContent = "Ready";
+    handModelStatus.classList.add("is-ready");
+    handTrackingToggle.disabled = false;
+  } catch (error) {
+    console.warn("Hand Landmarker could not be loaded", error);
+    handModelStatus.textContent = "Unavailable";
+    handModelStatus.classList.add("is-error");
+  }
+
   statusEl.textContent = "Movement guide ready";
   toggleBtn.disabled = false;
   renderPersonalization();
@@ -274,6 +334,96 @@ let running = false;
 let rafId;
 let lastVideoTime = -1;
 let lastFrameStamp = performance.now();
+let handPreviewMode = false;
+
+function handMetric(name) {
+  return handTrackingReadout?.querySelector(`[data-hand-metric="${name}"]`);
+}
+
+function formatFlexion(joints, names) {
+  if (!joints) return "—";
+  return names
+    .map((name) => {
+      const measurement = joints[name];
+      return measurement
+        && !measurement.lowConfidence
+        && Number.isFinite(measurement.value)
+        ? `${Math.round(measurement.value)}°`
+        : "—";
+    })
+    .join(" / ");
+}
+
+function resetHandReadout() {
+  handTrackingReadout?.querySelectorAll("[data-hand-metric]")
+    .forEach((element) => { element.textContent = "—"; });
+}
+
+function renderHandPreview(result) {
+  result.landmarks.forEach((landmarks) => {
+    drawingUtils.drawConnectors(landmarks, HandLandmarker.HAND_CONNECTIONS, {
+      color: "#dff2e6",
+      lineWidth: 3,
+    });
+    drawingUtils.drawLandmarks(landmarks, {
+      color: "#76d89b",
+      fillColor: "#173f40",
+      radius: 4,
+    });
+  });
+
+  const hands = summarizeHandResult(result, {
+    width: video.videoWidth,
+    height: video.videoHeight,
+  });
+  const hand = selectTrackedHand(hands, profile.focusSide);
+  if (!hand) {
+    resetHandReadout();
+    statusEl.textContent = "Show one complete hand to the camera";
+    setFeedbackBanner("position", "Place one open hand inside the close-up guide");
+    return;
+  }
+
+  const score = hand.handedness.score;
+  handMetric("handedness").textContent = score === null
+    ? hand.handedness.label
+    : `${hand.handedness.label} · ${Math.round(score * 100)}%`;
+  handMetric("coverage").textContent = Number.isFinite(hand.framing.pixelSpan)
+    ? `${Math.round(hand.framing.normalizedSpan * 100)}% · ${Math.round(hand.framing.pixelSpan)} px`
+    : `${Math.round(hand.framing.normalizedSpan * 100)}%`;
+
+  if (hand.framing.ready) {
+    const palmDirection = hand.palm?.value?.direction?.replaceAll("_", " ") ?? "—";
+    handMetric("palm").textContent = palmDirection;
+    handMetric("thumb").textContent = formatFlexion(
+      hand.fingerFlexion?.value?.thumb,
+      ["cmc", "mcp", "ip"]
+    );
+    for (const finger of ["index", "middle", "ring", "pinky"]) {
+      handMetric(finger).textContent = formatFlexion(
+        hand.fingerFlexion?.value?.[finger],
+        ["mcp", "pip", "dip"]
+      );
+    }
+    statusEl.textContent = "Hand landmarks are clear";
+    setFeedbackBanner("hand-ready");
+  } else {
+    handMetric("palm").textContent = "Waiting for clear framing";
+    ["thumb", "index", "middle", "ring", "pinky"].forEach((finger) => {
+      handMetric(finger).textContent = "—";
+    });
+    const needsCentre = hand.framing.reason === "move_to_centre";
+    statusEl.textContent = needsCentre
+      ? "Move your whole hand toward the centre"
+      : "Move your hand closer to the camera";
+    setFeedbackBanner(
+      "position",
+      needsCentre
+        ? "Keep the wrist and every fingertip inside the guide"
+        : "Move closer until your hand fills more of the guide"
+    );
+  }
+}
 
 function renderFrame() {
   if (!running) return;
@@ -281,53 +431,59 @@ function renderFrame() {
   if (video.currentTime !== lastVideoTime) {
     lastVideoTime = video.currentTime;
     const frameTimestamp = performance.now();
-    const result = poseLandmarker.detectForVideo(video, frameTimestamp);
 
     ctx.save();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    if (result.landmarks.length > 0) {
-      const landmarks = result.landmarks[0];
-
-      drawingUtils.drawLandmarks(landmarks, {
-        radius: 4,
-        color: (data) =>
-          (data?.from?.visibility ?? 1) < VISIBILITY_THRESHOLD
-            ? "#f3d77d"
-            : "#76d89b",
-      });
-      drawingUtils.drawConnectors(landmarks, PoseLandmarker.POSE_CONNECTIONS, {
-        color: "#dff2e6",
-        lineWidth: 3,
-      });
-
-      // worldLandmarks for angle math, landmarks for visibility gating
-      const raw = jointAngles(result.worldLandmarks[0], landmarks);
-      const angles = Object.fromEntries(
-        Object.entries(raw).map(([k, a]) => [k, smoother.smooth(k, a)])
-      );
-
-      updateDebugPanel(angles);
-      if (calibrationSession) {
-        updateCalibrationCapture(angles, frameTimestamp);
-        statusEl.textContent = "Personal calibration in progress";
-      } else {
-        updateFeedbackPanel(angles, frameTimestamp);
-        statusEl.textContent = "Tracking your movement";
-      }
+    if (handPreviewMode) {
+      const result = handLandmarker.detectForVideo(video, frameTimestamp);
+      renderHandPreview(result);
     } else {
-      updateCalibrationCapture(null, frameTimestamp);
-      const interruptedHold = engine.inHold;
-      if (holdInterval) {
-        clearHoldTimer(engine.exercise.prescription.holdSeconds);
+      const result = poseLandmarker.detectForVideo(video, frameTimestamp);
+
+      if (result.landmarks.length > 0) {
+        const landmarks = result.landmarks[0];
+
+        drawingUtils.drawLandmarks(landmarks, {
+          radius: 4,
+          color: (data) =>
+            (data?.from?.visibility ?? 1) < VISIBILITY_THRESHOLD
+              ? "#f3d77d"
+              : "#76d89b",
+        });
+        drawingUtils.drawConnectors(landmarks, PoseLandmarker.POSE_CONNECTIONS, {
+          color: "#dff2e6",
+          lineWidth: 3,
+        });
+
+        // worldLandmarks for angle math, landmarks for visibility gating
+        const raw = jointAngles(result.worldLandmarks[0], landmarks);
+        const angles = Object.fromEntries(
+          Object.entries(raw).map(([k, a]) => [k, smoother.smooth(k, a)])
+        );
+
+        updateDebugPanel(angles);
+        if (calibrationSession) {
+          updateCalibrationCapture(angles, frameTimestamp);
+          statusEl.textContent = "Personal calibration in progress";
+        } else {
+          updateFeedbackPanel(angles, frameTimestamp);
+          statusEl.textContent = "Tracking your movement";
+        }
+      } else {
+        updateCalibrationCapture(null, frameTimestamp);
+        const interruptedHold = engine.inHold;
+        if (holdInterval) {
+          clearHoldTimer(engine.exercise.prescription.holdSeconds);
+        }
+        statusEl.textContent = "Step back so your full body is visible";
+        setFeedbackBanner(
+          "position",
+          interruptedHold
+            ? "Hold reset — return to the stretch to restart"
+            : ""
+        );
       }
-      statusEl.textContent = "Step back so your full body is visible";
-      setFeedbackBanner(
-        "position",
-        interruptedHold
-          ? "Hold reset — return to the stretch to restart"
-          : ""
-      );
     }
 
     ctx.restore();
@@ -417,6 +573,13 @@ function updateFeedbackPanel(angles, timestampMs) {
       fb.inHold
         ? "Hold reset — keep the required joints visible to restart"
         : ""
+    );
+  } else if (!fb.positionRecognized && !personalizedCues.length) {
+    const nextIdx = fb.stages.indexOf(fb.phase) + 1;
+    const nextPhase = fb.stages[nextIdx] ?? fb.stages[0];
+    setFeedbackBanner(
+      "adjust",
+      `Move slowly toward the ${nextPhase.replaceAll("_", " ")} position`
     );
   } else {
     setFeedbackBanner(
@@ -735,11 +898,16 @@ function renderPoseStrip(exercise, activePhase) {
 
 function renderPrescription(ex) {
   const p = ex.prescription;
-  prescEl.textContent =
-    `${p.sets} sets × ${p.reps} reps` +
-    (p.holdSeconds ? ` · hold ${p.holdSeconds}s` : "") +
-    ` · ${p.daysPerWeek} days/week`;
-  if (repTargetEl) repTargetEl.textContent = p.reps;
+  if (p.mode === "clinician_plan") {
+    prescEl.textContent = "Follow your clinician-approved dose";
+    if (repTargetEl) repTargetEl.textContent = "—";
+  } else {
+    prescEl.textContent =
+      `${p.sets} sets × ${p.reps} reps` +
+      (p.holdSeconds ? ` · hold ${p.holdSeconds}s` : "") +
+      ` · ${p.daysPerWeek} days/week`;
+    if (repTargetEl) repTargetEl.textContent = p.reps;
+  }
 
   // Show inline hold timer only for stretch exercises
   if (ex.category === "stretch" && p.holdSeconds) {
@@ -779,7 +947,10 @@ function setFeedbackBanner(state, cue = "") {
   const title = feedbackEl.querySelector("strong");
   const detail = feedbackEl.querySelector("div > span");
   feedbackEl.classList.toggle("needs-adjustment", state === "adjust");
-  feedbackEl.classList.toggle("tracking-uncertain", state === "tracking");
+  feedbackEl.classList.toggle(
+    "tracking-uncertain",
+    state === "tracking" || state === "position"
+  );
 
   if (state === "adjust") {
     symbol.textContent = "!";
@@ -798,6 +969,10 @@ function setFeedbackBanner(state, cue = "") {
     symbol.textContent = "↔";
     title.textContent = "Let’s get you in frame";
     detail.textContent = cue || "Make sure your full body is visible";
+  } else if (state === "hand-ready") {
+    symbol.textContent = "✓";
+    title.textContent = "Hand tracking ready";
+    detail.textContent = "All 21 hand landmarks are visible at a usable size";
   } else {
     symbol.textContent = "●";
     title.textContent = "Get into position";
@@ -809,11 +984,21 @@ function setFeedbackBanner(state, cue = "") {
 
 async function activateCameraGuide() {
   if (running) return true;
+  if (engine.exercise.requiresClinicianPlan && profile.carePath !== "clinician") {
+    statusEl.textContent = "This exercise requires a clinician-approved care plan";
+    setFeedbackBanner(
+      "tracking",
+      "Choose an exercise available for your care path or update your clinician plan"
+    );
+    return false;
+  }
   try {
     toggleBtn.disabled = true;
+    handTrackingToggle.disabled = true;
     statusEl.textContent = "Starting camera…";
     await startCamera();
     running = true;
+    lastVideoTime = -1;
     sessionStartedAt = new Date().toISOString();
     Object.keys(sessionCueCounts).forEach(k => delete sessionCueCounts[k]);
     Object.keys(sessionAngleStats).forEach(k => delete sessionAngleStats[k]);
@@ -826,6 +1011,7 @@ async function activateCameraGuide() {
   } catch (err) {
     statusEl.textContent = `Camera error: ${err.message}`;
     toggleBtn.disabled = false;
+    handTrackingToggle.disabled = !handLandmarker;
     return false;
   }
 }
@@ -841,11 +1027,62 @@ function deactivateCameraGuide() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   cameraStage?.classList.remove("camera-active");
   toggleBtn.innerHTML = 'Start camera guide <span aria-hidden="true">→</span>';
+  handTrackingToggle.disabled = !handLandmarker;
   statusEl.textContent = "Stopped";
   setFeedbackBanner("ready");
 
   flushSession();
   showPainCheckin();
+}
+
+async function startHandPreview() {
+  if (!handLandmarker || running) return false;
+  handPreviewMode = true;
+  handTrackingToggle.disabled = true;
+  toggleBtn.disabled = true;
+  handTrackingReadout.classList.remove("hidden");
+  handFrameGuide.classList.remove("hidden");
+  setupTip.textContent = "Close-up mode · One full hand visible · Keep wrist and fingertips in frame";
+  statusEl.textContent = "Starting close-up hand camera…";
+  setFeedbackBanner("position", "Place one open hand inside the close-up guide");
+
+  try {
+    await startCamera();
+    running = true;
+    lastVideoTime = -1;
+    cameraStage?.classList.add("camera-active");
+    handTrackingToggle.textContent = "Stop hand check";
+    handTrackingToggle.disabled = false;
+    renderFrame();
+    return true;
+  } catch (error) {
+    handPreviewMode = false;
+    handFrameGuide.classList.add("hidden");
+    handTrackingReadout.classList.add("hidden");
+    setupTip.textContent = "Phone at chest height · 2–3 m away · Full body visible";
+    statusEl.textContent = `Camera error: ${error.message}`;
+    handTrackingToggle.disabled = false;
+    toggleBtn.disabled = false;
+    return false;
+  }
+}
+
+function stopHandPreview() {
+  running = false;
+  handPreviewMode = false;
+  cancelAnimationFrame(rafId);
+  stopCamera();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  cameraStage?.classList.remove("camera-active");
+  handFrameGuide.classList.add("hidden");
+  handTrackingReadout.classList.add("hidden");
+  resetHandReadout();
+  setupTip.textContent = "Phone at chest height · 2–3 m away · Full body visible";
+  handTrackingToggle.textContent = "Check hand tracking";
+  handTrackingToggle.disabled = false;
+  toggleBtn.disabled = false;
+  statusEl.textContent = "Movement guide ready";
+  setFeedbackBanner("ready");
 }
 
 function flushSession() {
@@ -872,8 +1109,8 @@ function flushSession() {
     ended_at:                endedAt,
     sets_completed:          1,
     reps_completed:          engine.repCount,
-    reps_target:             ex.prescription?.reps ?? 10,
-    sets_target:             ex.prescription?.sets ?? 3,
+    reps_target:             ex.prescription?.reps ?? engine.repCount,
+    sets_target:             ex.prescription?.sets ?? 1,
     affected_side:           profile.focusSide ?? "right",
     cues_triggered:          cuesTriggered,
     symmetry_warnings_count: sessionSymmetryWarnings,
@@ -916,6 +1153,11 @@ painSkipBtn.addEventListener("click", hidePainCheckin);
 toggleBtn.addEventListener("click", async () => {
   if (running) deactivateCameraGuide();
   else await activateCameraGuide();
+});
+
+handTrackingToggle.addEventListener("click", async () => {
+  if (handPreviewMode) stopHandPreview();
+  else await startHandPreview();
 });
 
 createLandmarker().catch((err) => {

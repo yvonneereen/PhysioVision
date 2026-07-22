@@ -255,6 +255,42 @@ const lyingLegsExtended = landscape(
   line(148, 68, 154, 76, true)
 );
 
+const ankleToesUp = landscape(
+  `<line x1="15" y1="78" x2="150" y2="78" stroke="${DIM}" stroke-width="2"/>` +
+  `<circle cx="28" cy="58" r="5" fill="${FG}22" stroke="${FG}" stroke-width="2"/>` +
+  line(28, 58, 112, 58) +                       // supported lower leg
+  line(112, 58, 104, 33) +                      // toes move toward shin
+  `<circle cx="112" cy="58" r="3" fill="${FG}"/>`
+);
+
+const ankleToesDown = landscape(
+  `<line x1="15" y1="78" x2="150" y2="78" stroke="${DIM}" stroke-width="2"/>` +
+  `<circle cx="28" cy="58" r="5" fill="${FG}22" stroke="${FG}" stroke-width="2"/>` +
+  line(28, 58, 112, 58) +                       // supported lower leg
+  line(112, 58, 150, 68) +                      // toes point away
+  `<circle cx="112" cy="58" r="3" fill="${FG}"/>`
+);
+
+const bridgeDown = landscape(
+  head(18, 66) +
+  line(29, 66, 86, 66) +                        // shoulders and pelvis down
+  line(52, 66, 50, 48) +
+  line(86, 66, 112, 42) +                       // thigh
+  line(112, 42, 132, 68) +                      // shin
+  line(132, 68, 148, 68) +                      // foot
+  `<line x1="8" y1="72" x2="154" y2="72" stroke="${DIM}" stroke-width="2"/>`
+);
+
+const bridgeUp = landscape(
+  head(18, 70) +
+  line(29, 70, 52, 66) +                        // upper back remains supported
+  line(52, 66, 88, 42) +                        // shoulder to raised pelvis
+  line(88, 42, 112, 42) +                       // pelvis to knee alignment
+  line(112, 42, 132, 68) +
+  line(132, 68, 148, 68) +
+  `<line x1="8" y1="72" x2="154" y2="72" stroke="${DIM}" stroke-width="2"/>`
+);
+
 // ── Exports ───────────────────────────────────────────────────────────────────
 
 export const POSES = {
@@ -274,4 +310,10 @@ export const POSES = {
   'side-lying-abducted':   sideLyingAbducted,
   'lying-knees-bent':      lyingKneesBent,
   'lying-legs-extended':   lyingLegsExtended,
+  'ankle-toes-up':         ankleToesUp,
+  'ankle-toes-down':       ankleToesDown,
+  'heel-slide-bent':       lyingKneesBent,
+  'heel-slide-extended':   lyingLegsExtended,
+  'bridge-down':           bridgeDown,
+  'bridge-up':             bridgeUp,
 };

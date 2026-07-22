@@ -1314,6 +1314,39 @@ textarea:focus-visible {
   letter-spacing: 0.05em;
 }
 
+.hand-frame-guide {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  padding-bottom: 34px;
+  color: rgba(255, 255, 255, 0.86);
+  pointer-events: none;
+}
+
+.hand-guide-outline {
+  display: grid;
+  place-items: center;
+  width: min(46vw, 310px);
+  aspect-ratio: 1;
+  border: 2px dashed rgba(185, 217, 200, 0.9);
+  border-radius: 34px;
+  background: rgba(8, 30, 31, 0.18);
+  font-size: clamp(72px, 11vw, 120px);
+  opacity: 0.68;
+}
+
+.hand-frame-guide > span {
+  padding: 8px 12px;
+  border-radius: 7px;
+  background: rgba(6, 23, 24, 0.78);
+  font-size: 12px;
+  font-weight: 650;
+}
+
 .calibration-overlay {
   position: absolute;
   inset: 0;
@@ -1820,6 +1853,94 @@ textarea:focus-visible {
   margin-top: 4px;
 }
 
+.hand-tracking-card {
+  margin: 4px 0 12px;
+  padding: 14px;
+  border: 1px solid rgba(25, 56, 58, 0.14);
+  border-radius: 10px;
+  background: #edf6f1;
+}
+
+.hand-tracking-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hand-tracking-heading div > span,
+.hand-model-status {
+  display: block;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.hand-tracking-heading strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+}
+
+.hand-model-status {
+  padding: 4px 6px;
+  border-radius: 5px;
+  background: rgba(25, 56, 58, 0.08);
+  white-space: nowrap;
+}
+
+.hand-model-status.is-ready {
+  color: #1f7043;
+  background: rgba(70, 158, 103, 0.12);
+}
+
+.hand-model-status.is-error {
+  color: #9b4d2b;
+  background: rgba(194, 91, 54, 0.12);
+}
+
+.hand-tracking-card > p {
+  margin: 9px 0 11px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.hand-tracking-button {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid rgba(25, 56, 58, 0.18);
+  color: var(--ink);
+  background: var(--white);
+  font-size: 11px;
+}
+
+.hand-tracking-readout {
+  margin: 12px 0 0;
+}
+
+.hand-tracking-readout > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  border-top: 1px solid rgba(25, 56, 58, 0.1);
+  font-size: 10px;
+}
+
+.hand-tracking-readout dt {
+  color: var(--muted);
+}
+
+.hand-tracking-readout dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
 /* ── Stretch hold timer ──────────────────────────────────────────────── */
 .hold-inline {
   display: flex;
@@ -2032,6 +2153,10 @@ textarea:focus-visible {
   background: var(--paper);
 }
 
+.exercise-library-card.is-live {
+  border: 2px solid var(--mint);
+}
+
 .exercise-card-metadata {
   margin-bottom: 10px;
   color: var(--coral-dark);
@@ -2054,6 +2179,11 @@ textarea:focus-visible {
   color: var(--muted);
   font-size: 12px;
   font-weight: 650;
+}
+
+.exercise-card-status.is-live {
+  color: var(--green);
+  font-weight: 800;
 }
 
 .exercise-card-tags {

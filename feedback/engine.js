@@ -81,6 +81,8 @@ export class FeedbackEngine {
       exercise: this.exercise,
       stages: this.stages,
       phase: this.currentPhase,
+      detectedPhase: detected,
+      positionRecognized: detected !== null,
       repCount: this.repCount,
       inHold: this.inHold,
       trackingReady: tracking.ready,

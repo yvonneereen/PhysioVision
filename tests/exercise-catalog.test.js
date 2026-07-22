@@ -23,8 +23,8 @@ for (const exercise of DRAFT_EXERCISES) {
   assert.ok(exercise.typicalUse.length > 0);
   assert.ok(exercise.tags.length > 0);
   if (exercise.liveTracking) {
-    assert.equal(exercise.reviewStatus, "prototype_primary_motion_tracking");
-    assert.equal(exercise.trackingRequirement, "pose_primary_motion_prototype");
+    assert.ok(exercise.reviewStatus.startsWith("prototype_"));
+    assert.ok(exercise.trackingRequirement.endsWith("_prototype"));
     assert.ok(
       EXERCISE_MAP[exercise.id],
       `${exercise.id} is labelled live and must exist in the executable registry`
@@ -39,7 +39,11 @@ for (const exercise of DRAFT_EXERCISES) {
   }
 
   if (exercise.tags.includes(EXERCISE_TAGS.HAND_TRACKING_REQUIRED)) {
-    assert.equal(exercise.trackingRequirement, "hand_landmarks");
+    assert.ok(
+      exercise.trackingRequirement === "hand_landmarks"
+      || exercise.trackingRequirement === "hand_sequence_prototype"
+      || exercise.trackingRequirement === "pose_and_hand_sequence_prototype"
+    );
   }
 
   const needsClinician = exercise.tags.some((tag) =>
@@ -66,7 +70,14 @@ assert.deepEqual(
   DRAFT_EXERCISES.filter((exercise) => exercise.liveTracking)
     .map((exercise) => exercise.id)
     .sort(),
-  ["ankle_pumps", "heel_slides", "hip_bridge"]
+  [
+    "ankle_pumps",
+    "heel_slides",
+    "hip_bridge",
+    "tendon_glides",
+    "wrist_extension_stretch",
+    "wrist_flexion_stretch",
+  ]
 );
 
 console.log("exercise catalog tests passed");

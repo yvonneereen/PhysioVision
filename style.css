@@ -1347,6 +1347,13 @@ textarea:focus-visible {
   font-weight: 650;
 }
 
+.hand-frame-guide.is-arm-mode .hand-guide-outline {
+  width: min(72vw, 560px);
+  aspect-ratio: 1.7;
+  border-radius: 28px;
+  font-size: clamp(54px, 8vw, 88px);
+}
+
 .calibration-overlay {
   position: absolute;
   inset: 0;

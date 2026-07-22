@@ -4,6 +4,7 @@ import { DRAFT_EXERCISES } from "../exercises/catalog.js";
 import {
   DRAFT_TRACKING_SPECS,
   DRAFT_TRACKING_SPEC_MAP,
+  PROTOTYPE_TRACKING_SPEC_STATUS,
   TRACKING_SPEC_STATUS,
 } from "../exercises/tracking-specs.js";
 
@@ -15,8 +16,12 @@ assert.equal(new Set(specIds).size, specIds.length, "tracking-plan IDs must be u
 assert.equal(Object.keys(DRAFT_TRACKING_SPEC_MAP).length, specIds.length);
 
 for (const trackingSpec of DRAFT_TRACKING_SPECS) {
-  assert.equal(trackingSpec.status, TRACKING_SPEC_STATUS);
-  assert.equal(trackingSpec.liveTracking, false);
+  assert.equal(
+    trackingSpec.status,
+    trackingSpec.liveTracking
+      ? PROTOTYPE_TRACKING_SPEC_STATUS
+      : TRACKING_SPEC_STATUS
+  );
   assert.ok(trackingSpec.readiness);
   assert.ok(trackingSpec.tracker);
   assert.ok(trackingSpec.camera);

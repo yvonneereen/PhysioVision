@@ -7,6 +7,12 @@ import {
 
 import { jointAngles, symmetry, VISIBILITY_THRESHOLD } from "./geometry.js";
 import { selectTrackedHand, summarizeHandResult } from "./hand-geometry.js";
+import {
+  TRACKING_MODES,
+  exerciseUsesHand,
+  measureCombinedWristFrame,
+  measureHandSequenceFrame,
+} from "./exercise-tracking.js";
 import { FeedbackEngine, EXERCISES } from "./feedback/engine.js";
 import { POSES } from "./poses.js";
 import {
@@ -50,6 +56,10 @@ const smoother = new AngleSmoother();
 const video       = document.getElementById("webcam");
 const canvas      = document.getElementById("overlay");
 const ctx         = canvas.getContext("2d");
+const synchronizedFrame = document.createElement("canvas");
+const synchronizedFrameContext = synchronizedFrame.getContext("2d", {
+  alpha: false,
+});
 const statusEl    = document.getElementById("status");
 const toggleBtn   = document.getElementById("toggle");
 const fpsEl       = document.getElementById("fps");
@@ -90,6 +100,7 @@ const handFrameGuide        = document.getElementById("handFrameGuide");
 const handTrackingToggle    = document.getElementById("handTrackingToggle");
 const handTrackingReadout   = document.getElementById("handTrackingReadout");
 const handModelStatus       = document.getElementById("handModelStatus");
+const handGuideText         = handFrameGuide?.querySelector(":scope > span");
 
 let profile = loadProfile();
 let poseLandmarker = null;
@@ -186,6 +197,7 @@ exSelect.addEventListener("change", () => {
     getCalibration(exSelect.value)
   );
   smoother.state = {};
+  combinedPoseHistory = [];
   clearHoldTimer(engine.exercise.prescription.holdSeconds);
   holdTimerSection.classList.add("hidden");
   progressSection.classList.remove("hidden");
@@ -210,6 +222,7 @@ sideSelect.addEventListener("change", () => {
     getCalibration(exSelect.value)
   );
   smoother.state = {};
+  combinedPoseHistory = [];
   repCountEl.textContent = "0";
   progressEl.style.width = "0%";
   setFeedbackBanner("ready");
@@ -327,6 +340,24 @@ function stopCamera() {
   video.srcObject = null;
 }
 
+function captureSynchronizedFrame() {
+  if (
+    synchronizedFrame.width !== video.videoWidth
+    || synchronizedFrame.height !== video.videoHeight
+  ) {
+    synchronizedFrame.width = video.videoWidth;
+    synchronizedFrame.height = video.videoHeight;
+  }
+  synchronizedFrameContext.drawImage(
+    video,
+    0,
+    0,
+    synchronizedFrame.width,
+    synchronizedFrame.height
+  );
+  return synchronizedFrame;
+}
+
 // ── Render loop ───────────────────────────────────────────────────────────────
 
 const drawingUtils = new DrawingUtils(ctx);
@@ -335,6 +366,7 @@ let rafId;
 let lastVideoTime = -1;
 let lastFrameStamp = performance.now();
 let handPreviewMode = false;
+let combinedPoseHistory = [];
 
 function handMetric(name) {
   return handTrackingReadout?.querySelector(`[data-hand-metric="${name}"]`);
@@ -359,8 +391,8 @@ function resetHandReadout() {
     .forEach((element) => { element.textContent = "—"; });
 }
 
-function renderHandPreview(result) {
-  result.landmarks.forEach((landmarks) => {
+function drawHandResult(result) {
+  (result?.landmarks ?? []).forEach((landmarks) => {
     drawingUtils.drawConnectors(landmarks, HandLandmarker.HAND_CONNECTIONS, {
       color: "#dff2e6",
       lineWidth: 3,
@@ -371,6 +403,38 @@ function renderHandPreview(result) {
       radius: 4,
     });
   });
+}
+
+function drawPoseResult(result) {
+  const landmarks = result?.landmarks?.[0];
+  if (!landmarks) return;
+  drawingUtils.drawLandmarks(landmarks, {
+    radius: 4,
+    color: (data) =>
+      (data?.from?.visibility ?? 1) < VISIBILITY_THRESHOLD
+        ? "#f3d77d"
+        : "#76d89b",
+  });
+  drawingUtils.drawConnectors(landmarks, PoseLandmarker.POSE_CONNECTIONS, {
+    color: "#dff2e6",
+    lineWidth: 3,
+  });
+}
+
+function rememberCombinedPose(result, timestampMs) {
+  const landmarks = result?.landmarks?.[0];
+  if (!landmarks) {
+    combinedPoseHistory = [];
+    return;
+  }
+  combinedPoseHistory.push({ timestampMs, landmarks });
+  combinedPoseHistory = combinedPoseHistory.filter(
+    (frame) => timestampMs - frame.timestampMs <= 800
+  );
+}
+
+function renderHandPreview(result) {
+  drawHandResult(result);
 
   const hands = summarizeHandResult(result, {
     width: video.videoWidth,
@@ -439,50 +503,75 @@ function renderFrame() {
       const result = handLandmarker.detectForVideo(video, frameTimestamp);
       renderHandPreview(result);
     } else {
-      const result = poseLandmarker.detectForVideo(video, frameTimestamp);
-
-      if (result.landmarks.length > 0) {
-        const landmarks = result.landmarks[0];
-
-        drawingUtils.drawLandmarks(landmarks, {
-          radius: 4,
-          color: (data) =>
-            (data?.from?.visibility ?? 1) < VISIBILITY_THRESHOLD
-              ? "#f3d77d"
-              : "#76d89b",
+      const trackingMode = engine.exercise.trackingMode ?? TRACKING_MODES.POSE;
+      if (trackingMode === TRACKING_MODES.HAND) {
+        const handResult = handLandmarker.detectForVideo(video, frameTimestamp);
+        drawHandResult(handResult);
+        const measurements = measureHandSequenceFrame({
+          handResult,
+          side: sideSelect.value,
+          frame: { width: video.videoWidth, height: video.videoHeight },
         });
-        drawingUtils.drawConnectors(landmarks, PoseLandmarker.POSE_CONNECTIONS, {
-          color: "#dff2e6",
-          lineWidth: 3,
+        const feedback = updateFeedbackPanel(measurements, frameTimestamp);
+        statusEl.textContent = feedback.trackingReady
+          ? "Tracking the hand-shape sequence"
+          : "Keep one complete hand close and fully visible";
+      } else if (trackingMode === TRACKING_MODES.POSE_AND_HAND) {
+        // Freeze one image so both models receive identical pixels and the same
+        // timestamp. Do not combine their world landmarks: cross-model wrist
+        // geometry uses normalized image coordinates.
+        const frame = captureSynchronizedFrame();
+        const poseResult = poseLandmarker.detectForVideo(frame, frameTimestamp);
+        const handResult = handLandmarker.detectForVideo(frame, frameTimestamp);
+        drawPoseResult(poseResult);
+        drawHandResult(handResult);
+        rememberCombinedPose(poseResult, frameTimestamp);
+        const measurements = measureCombinedWristFrame({
+          poseResult,
+          handResult,
+          side: sideSelect.value,
+          frame: { width: video.videoWidth, height: video.videoHeight },
+          poseHistory: combinedPoseHistory,
         });
-
-        // worldLandmarks for angle math, landmarks for visibility gating
-        const raw = jointAngles(result.worldLandmarks[0], landmarks);
-        const angles = Object.fromEntries(
-          Object.entries(raw).map(([k, a]) => [k, smoother.smooth(k, a)])
-        );
-
-        updateDebugPanel(angles);
-        if (calibrationSession) {
-          updateCalibrationCapture(angles, frameTimestamp);
-          statusEl.textContent = "Personal calibration in progress";
-        } else {
-          updateFeedbackPanel(angles, frameTimestamp);
-          statusEl.textContent = "Tracking your movement";
-        }
+        updateDebugPanel(measurements);
+        const feedback = updateFeedbackPanel(measurements, frameTimestamp);
+        statusEl.textContent = feedback.trackingReady
+          ? "Tracking your elbow, wrist and hand together"
+          : "Keep the working elbow and complete hand visible";
       } else {
-        updateCalibrationCapture(null, frameTimestamp);
-        const interruptedHold = engine.inHold;
-        if (holdInterval) {
-          clearHoldTimer(engine.exercise.prescription.holdSeconds);
+        const result = poseLandmarker.detectForVideo(video, frameTimestamp);
+        if (result.landmarks.length > 0) {
+          const landmarks = result.landmarks[0];
+          drawPoseResult(result);
+
+          // worldLandmarks for angle math, landmarks for visibility gating
+          const raw = jointAngles(result.worldLandmarks[0], landmarks);
+          const angles = Object.fromEntries(
+            Object.entries(raw).map(([k, a]) => [k, smoother.smooth(k, a)])
+          );
+
+          updateDebugPanel(angles);
+          if (calibrationSession) {
+            updateCalibrationCapture(angles, frameTimestamp);
+            statusEl.textContent = "Personal calibration in progress";
+          } else {
+            updateFeedbackPanel(angles, frameTimestamp);
+            statusEl.textContent = "Tracking your movement";
+          }
+        } else {
+          updateCalibrationCapture(null, frameTimestamp);
+          const interruptedHold = engine.inHold;
+          if (holdInterval) {
+            clearHoldTimer(engine.exercise.prescription.holdSeconds);
+          }
+          statusEl.textContent = "Step back so your full body is visible";
+          setFeedbackBanner(
+            "position",
+            interruptedHold
+              ? "Hold reset — return to the stretch to restart"
+              : ""
+          );
         }
-        statusEl.textContent = "Step back so your full body is visible";
-        setFeedbackBanner(
-          "position",
-          interruptedHold
-            ? "Hold reset — return to the stretch to restart"
-            : ""
-        );
       }
     }
 
@@ -500,6 +589,9 @@ function renderFrame() {
 
 function updateFeedbackPanel(angles, timestampMs) {
   const fb = engine.update(angles, timestampMs);
+  const holdSeconds = fb.exercise.trackingHoldSeconds
+    ?? fb.exercise.prescription.holdSeconds
+    ?? 3;
 
   // Accumulate session stats for backend POST
   fb.cues.forEach(cue => { sessionCueCounts[cue] = (sessionCueCounts[cue] ?? 0) + 1; });
@@ -518,7 +610,7 @@ function updateFeedbackPanel(angles, timestampMs) {
 
   // Highlight active pose card without re-rendering the whole strip
   poseStripEl.querySelectorAll(".pose-card").forEach((card, i) => {
-    card.classList.toggle("active", fb.stages[i] === fb.phase);
+    card.classList.toggle("active", i === fb.stageIndex);
   });
 
   // Phase flow chips
@@ -538,16 +630,16 @@ function updateFeedbackPanel(angles, timestampMs) {
     // Switch to hold timer view
     progressSection.classList.add("hidden");
     holdTimerSection.classList.remove("hidden");
-    if (fb.trackingReady) {
-      startHoldTimer(fb.exercise.prescription.holdSeconds ?? 30);
+    if (fb.trackingReady && fb.holdPositionMaintained) {
+      startHoldTimer(holdSeconds);
     } else if (holdInterval) {
       // Fail safely: an uncertain pose cannot earn hold time. Reset so the
       // complete prescribed duration must be tracked after visibility returns.
-      clearHoldTimer(fb.exercise.prescription.holdSeconds);
+      clearHoldTimer(holdSeconds);
     }
   } else {
     // Cancel timer if user broke position — reset inline display to full hold seconds
-    if (holdInterval) clearHoldTimer(fb.exercise.prescription.holdSeconds);
+    if (holdInterval) clearHoldTimer(holdSeconds);
     progressSection.classList.remove("hidden");
     holdTimerSection.classList.add("hidden");
 
@@ -567,12 +659,22 @@ function updateFeedbackPanel(angles, timestampMs) {
   cueListEl.innerHTML = personalizedCues
     .map((c) => `<li>${escapeHtml(c)}</li>`)
     .join("");
-  if (!fb.trackingReady) {
+  if (fb.inHold && !fb.holdPositionMaintained) {
+    setFeedbackBanner(
+      fb.trackingReady ? "adjust" : "tracking",
+      "Hold reset — return to the target position to restart"
+    );
+  } else if (!fb.trackingReady) {
     setFeedbackBanner(
       "tracking",
       fb.inHold
         ? "Hold reset — keep the required joints visible to restart"
         : ""
+    );
+  } else if (!fb.sequenceOnTrack && fb.positionRecognized) {
+    setFeedbackBanner(
+      "adjust",
+      `Follow the order — move to ${fb.expectedNextPhase.replaceAll("_", " ")} next`
     );
   } else if (!fb.positionRecognized && !personalizedCues.length) {
     const nextIdx = fb.stages.indexOf(fb.phase) + 1;
@@ -595,6 +697,8 @@ function updateFeedbackPanel(angles, timestampMs) {
   } else {
     symWarnEl.classList.add("hidden");
   }
+
+  return fb;
 }
 
 function updateDebugPanel(angles) {
@@ -984,6 +1088,14 @@ function setFeedbackBanner(state, cue = "") {
 
 async function activateCameraGuide() {
   if (running) return true;
+  if (exerciseUsesHand(engine.exercise) && !handLandmarker) {
+    statusEl.textContent = "The hand-tracking model is unavailable";
+    setFeedbackBanner(
+      "tracking",
+      "Reload with an internet connection or choose a Pose-only exercise"
+    );
+    return false;
+  }
   if (engine.exercise.requiresClinicianPlan && profile.carePath !== "clinician") {
     statusEl.textContent = "This exercise requires a clinician-approved care plan";
     setFeedbackBanner(
@@ -999,11 +1111,23 @@ async function activateCameraGuide() {
     await startCamera();
     running = true;
     lastVideoTime = -1;
+    combinedPoseHistory = [];
     sessionStartedAt = new Date().toISOString();
     Object.keys(sessionCueCounts).forEach(k => delete sessionCueCounts[k]);
     Object.keys(sessionAngleStats).forEach(k => delete sessionAngleStats[k]);
     sessionSymmetryWarnings = 0;
     cameraStage?.classList.add("camera-active");
+    if (exerciseUsesHand(engine.exercise)) {
+      const combined = engine.exercise.trackingMode === TRACKING_MODES.POSE_AND_HAND;
+      handFrameGuide.classList.remove("hidden");
+      handFrameGuide.classList.toggle("is-arm-mode", combined);
+      handGuideText.textContent = combined
+        ? "Keep the working elbow, wrist and complete hand visible"
+        : "Keep one complete hand inside this area";
+      setupTip.textContent = combined
+        ? "Combined mode · Upright phone · Working elbow and complete hand visible"
+        : "Hand mode · One complete hand close to the camera";
+    }
     toggleBtn.innerHTML = 'Stop camera guide <span aria-hidden="true">■</span>';
     toggleBtn.disabled = false;
     renderFrame();
@@ -1024,8 +1148,12 @@ function deactivateCameraGuide() {
     clearHoldTimer(engine.exercise.prescription.holdSeconds);
   }
   stopCamera();
+  combinedPoseHistory = [];
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   cameraStage?.classList.remove("camera-active");
+  handFrameGuide.classList.add("hidden");
+  handFrameGuide.classList.remove("is-arm-mode");
+  setupTip.textContent = "Phone at chest height · 2–3 m away · Full body visible";
   toggleBtn.innerHTML = 'Start camera guide <span aria-hidden="true">→</span>';
   handTrackingToggle.disabled = !handLandmarker;
   statusEl.textContent = "Stopped";
@@ -1042,6 +1170,8 @@ async function startHandPreview() {
   toggleBtn.disabled = true;
   handTrackingReadout.classList.remove("hidden");
   handFrameGuide.classList.remove("hidden");
+  handFrameGuide.classList.remove("is-arm-mode");
+  handGuideText.textContent = "Keep one complete hand inside this area";
   setupTip.textContent = "Close-up mode · One full hand visible · Keep wrist and fingertips in frame";
   statusEl.textContent = "Starting close-up hand camera…";
   setFeedbackBanner("position", "Place one open hand inside the close-up guide");
@@ -1075,6 +1205,7 @@ function stopHandPreview() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   cameraStage?.classList.remove("camera-active");
   handFrameGuide.classList.add("hidden");
+  handFrameGuide.classList.remove("is-arm-mode");
   handTrackingReadout.classList.add("hidden");
   resetHandReadout();
   setupTip.textContent = "Phone at chest height · 2–3 m away · Full body visible";

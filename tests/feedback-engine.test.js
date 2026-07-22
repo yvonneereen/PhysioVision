@@ -8,6 +8,21 @@ const visible = (value) => ({
   weakPoints: [],
 });
 
+const handShapeFrame = (label, score = 0.9) => ({
+  handShape: visible(label),
+  handShapeScore: visible(score),
+  handFrameReady: visible(1),
+});
+
+const wristFrame = (wristBend) => ({
+  elbow: visible(170),
+  wristBend: visible(wristBend),
+  palmDown: visible(0.8),
+  forearmHorizontal: visible(0.9),
+  forearmVelocity: visible(0.05),
+  wristMatch: visible(0.02),
+});
+
 const hidden = {
   value: Number.NaN,
   lowConfidence: true,
@@ -196,6 +211,72 @@ const halfSquatBottom = (overrides = {}) =>
   const completed = engine.update(down, 1100);
 
   assert.equal(completed.repCount, 1);
+}
+
+{
+  const engine = new FeedbackEngine("tendon_glides", "right");
+  const sequence = [
+    "open_hand",
+    "hook_fist",
+    "open_hand",
+    "full_fist",
+    "open_hand",
+    "tabletop",
+    "open_hand",
+    "straight_fist",
+    "open_hand",
+  ];
+  let timestamp = 0;
+  engine.update(handShapeFrame(sequence[0]), timestamp);
+  timestamp += 350;
+  engine.update(handShapeFrame(sequence[0]), timestamp);
+  for (const shape of sequence.slice(1)) {
+    timestamp += 50;
+    engine.update(handShapeFrame(shape), timestamp);
+    timestamp += 350;
+    engine.update(handShapeFrame(shape), timestamp);
+  }
+  assert.equal(engine.repCount, 1);
+  assert.equal(engine.currentPhase, "open_hand");
+}
+
+{
+  const engine = new FeedbackEngine("tendon_glides", "right");
+  engine.update(handShapeFrame("open_hand"), 0);
+  engine.update(handShapeFrame("open_hand"), 350);
+  engine.update(handShapeFrame("full_fist"), 400);
+  const outOfOrder = engine.update(handShapeFrame("full_fist"), 800);
+
+  assert.equal(outOfOrder.repCount, 0);
+  assert.equal(outOfOrder.phase, "open_hand");
+  assert.equal(outOfOrder.sequenceOnTrack, false);
+  assert.equal(outOfOrder.expectedNextPhase, "hook_fist");
+}
+
+{
+  const engine = new FeedbackEngine("wrist_extension_stretch", "right");
+  engine.update(wristFrame(0), 0);
+  engine.update(wristFrame(0), 350);
+  engine.update(wristFrame(-35), 400);
+  const holding = engine.update(wristFrame(-35), 750);
+  assert.equal(holding.inHold, true);
+  assert.equal(holding.holdPositionMaintained, true);
+
+  const betweenPhases = engine.update(wristFrame(-13.5), 800);
+  assert.equal(betweenPhases.inHold, true);
+  assert.equal(betweenPhases.holdPositionMaintained, false);
+
+  engine.completeHold();
+  assert.equal(engine.repCount, 1);
+  assert.equal(engine.startConfirmed, false);
+
+  engine.update(wristFrame(-35), 850);
+  const cannotRepeatWithoutNeutral = engine.update(wristFrame(-35), 1250);
+  assert.equal(cannotRepeatWithoutNeutral.inHold, false);
+
+  engine.update(wristFrame(0), 1300);
+  const returned = engine.update(wristFrame(0), 1650);
+  assert.equal(returned.startConfirmed, true);
 }
 
 console.log("feedback engine tracking tests passed");

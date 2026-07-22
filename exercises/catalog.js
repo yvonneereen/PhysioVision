@@ -18,22 +18,25 @@ export const EXERCISE_TAGS = Object.freeze({
 
 const draftExercise = (record) => ({
   ...record,
-  reviewStatus: record.liveTracking
+  reviewStatus: record.reviewStatus ?? (record.liveTracking
     ? "prototype_primary_motion_tracking"
-    : "pending_clinician_review",
+    : "pending_clinician_review"),
   liveTracking: Boolean(record.liveTracking),
-  trackingRequirement: record.liveTracking
+  trackingRequirement: record.trackingRequirement ?? (record.liveTracking
     ? "pose_primary_motion_prototype"
     : record.tags.includes(EXERCISE_TAGS.HAND_TRACKING_REQUIRED)
     ? "hand_landmarks"
     : record.tags.includes(EXERCISE_TAGS.POSE_LIMITED)
       ? "pose_limited"
-      : "pose_rules_not_validated",
+      : "pose_rules_not_validated"),
 });
 
 export const DRAFT_EXERCISES = [
   draftExercise({
     id: "wrist_extension_stretch",
+    liveTracking: true,
+    reviewStatus: "prototype_sequence_tracking",
+    trackingRequirement: "pose_and_hand_sequence_prototype",
     name: "Wrist Extension Stretch",
     region: "Hand & wrist",
     category: "Stretch",
@@ -43,6 +46,9 @@ export const DRAFT_EXERCISES = [
   }),
   draftExercise({
     id: "wrist_flexion_stretch",
+    liveTracking: true,
+    reviewStatus: "prototype_sequence_tracking",
+    trackingRequirement: "pose_and_hand_sequence_prototype",
     name: "Wrist Flexion Stretch",
     region: "Hand & wrist",
     category: "Stretch",
@@ -52,6 +58,9 @@ export const DRAFT_EXERCISES = [
   }),
   draftExercise({
     id: "tendon_glides",
+    liveTracking: true,
+    reviewStatus: "prototype_sequence_tracking",
+    trackingRequirement: "hand_sequence_prototype",
     name: "Tendon Glides",
     region: "Hand & wrist",
     category: "Mobility",

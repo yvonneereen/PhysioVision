@@ -2,6 +2,8 @@ import { DRAFT_EXERCISES, requiresClinicianPlan } from "./exercises/catalog.js";
 
 const TRACKING_LABELS = {
   pose_primary_motion_prototype: "Prototype camera tracking active",
+  pose_and_hand_sequence_prototype: "Pose + hand sequence prototype active",
+  hand_sequence_prototype: "Hand-shape sequence prototype active",
   hand_landmarks: "Hand tracking required",
   pose_limited: "Camera tracking limited",
   pose_rules_not_validated: "Live rules pending",
@@ -98,7 +100,7 @@ function initialiseExerciseLibrary() {
   }
   if (noticeDetail) {
     noticeDetail.textContent =
-      `${pendingCount} remain in the draft library. Live prototypes check only their primary movement and still require clinician-approved use and real-video validation.`;
+      `${pendingCount} remain in the draft library. Live prototypes check defined primary motions or hand-shape sequences and still require clinician-approved use and real-video validation.`;
   }
 
   [...new Set(DRAFT_EXERCISES.map((exercise) => exercise.region))]

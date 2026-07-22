@@ -129,8 +129,10 @@ of the following exist:
 - acceptable per-cue false-positive and false-negative results;
 - a documented list of conditions the camera cannot assess.
 
-The current ankle-pump, heel-slide and hip-bridge options are narrower
-`prototype_primary_motion_only` implementations. They count a stable sequence
-of visible joint angles and explicitly warn that they do not provide complete
-form assessment. They require a clinician-approved dose and must not be
-described as validated tracking.
+The ankle-pump, heel-slide and hip-bridge options are narrower
+`prototype_primary_motion_only` implementations. Wrist extension and flexion
+now use synchronized Pose + Hand frames, while tendon glides use a complete
+ordered hand-shape sequence. These three hand/wrist options remain engineering
+prototypes: the wrist thresholds and rule-based hand shapes have unit tests but
+not clinician-labelled real-video validation. All six prototypes require a
+clinician-approved plan and must not be described as validated tracking.

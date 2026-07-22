@@ -9,6 +9,8 @@
  */
 
 export const TRACKING_SPEC_STATUS = "engineering_draft_requires_validation";
+export const PROTOTYPE_TRACKING_SPEC_STATUS =
+  "engineering_prototype_requires_real_video_validation";
 
 const DEFAULT_QUALITY_GATES = Object.freeze({
   minimumLandmarkVisibility: 0.65,
@@ -46,7 +48,9 @@ const rule = (metric, type, landmarks, acceptance, cue) => ({
 
 const spec = (exerciseId, definition) => ({
   exerciseId,
-  status: TRACKING_SPEC_STATUS,
+  status: definition.liveTracking
+    ? PROTOTYPE_TRACKING_SPEC_STATUS
+    : TRACKING_SPEC_STATUS,
   liveTracking: false,
   qualityGates: DEFAULT_QUALITY_GATES,
   ...definition,
@@ -63,8 +67,9 @@ const ALL_HAND_LANDMARKS = [
 
 export const DRAFT_TRACKING_SPECS = [
   spec("wrist_extension_stretch", {
-    readiness: "requires_pose_and_hand_tracker",
-    tracker: "holistic_pose_and_hands",
+    liveTracking: true,
+    readiness: "implemented_prototype_requires_real_video_validation",
+    tracker: "synchronised_pose_and_hand_landmarker",
     camera: "Close side-oblique view of both forearms and hands",
     requiredLandmarks: {
       pose: ["working_shoulder", "working_elbow", "working_wrist"],
@@ -81,8 +86,9 @@ export const DRAFT_TRACKING_SPECS = [
   }),
 
   spec("wrist_flexion_stretch", {
-    readiness: "requires_pose_and_hand_tracker",
-    tracker: "holistic_pose_and_hands",
+    liveTracking: true,
+    readiness: "implemented_prototype_requires_real_video_validation",
+    tracker: "synchronised_pose_and_hand_landmarker",
     camera: "Close side-oblique view of both forearms and hands",
     requiredLandmarks: {
       pose: ["working_shoulder", "working_elbow", "working_wrist"],
@@ -99,13 +105,14 @@ export const DRAFT_TRACKING_SPECS = [
   }),
 
   spec("tendon_glides", {
-    readiness: "requires_trained_hand_shape_classifier",
-    tracker: "hands",
+    liveTracking: true,
+    readiness: "rule_based_prototype_requires_real_video_validation",
+    tracker: "hand_landmarker_and_temporal_shape_rules",
     camera: "Close frontal-oblique view with the forearm supported and entire hand visible",
     requiredLandmarks: { pose: [], hand: ALL_HAND_LANDMARKS },
     phases: ["straight", "hook_fist", "straight", "full_fist", "straight", "tabletop", "straight", "straight_fist", "straight"],
     rules: [
-      rule("hand_shape", "temporal_hand_shape_classifier", ALL_HAND_LANDMARKS, clinicianTarget("Classifier trained for the five required shapes and returns to straight between shapes"), "Follow the displayed hand shape slowly"),
+      rule("hand_shape", "temporal_hand_shape_rules", ALL_HAND_LANDMARKS, clinicianTarget("Classifier validated for the five required shapes and returns to straight between shapes"), "Follow the displayed hand shape slowly"),
       rule("wrist_neutral", "hand_axis_angle", ["wrist", "middle_mcp", "forearm_axis"], seedRange(-15, 15), "Keep your wrist straight"),
     ],
     cannotVerify: ["tendon loading", "pain", "force"],

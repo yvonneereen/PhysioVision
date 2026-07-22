@@ -396,6 +396,149 @@ export const EXERCISES = [
     trackingNotes: "Supine. Side camera gives cleanest sagittal-plane read.",
   },
 
+  // ── Hand / wrist sequence prototypes ────────────────────────────────────
+
+  {
+    id: "wrist_extension_stretch",
+    name: "Wrist Extension Stretch",
+    category: "stretch",
+    trackingMode: "pose_and_hand",
+    trackingMaturity: "engineering_prototype_requires_validation",
+    requiresClinicianPlan: true,
+    requiresReturnAfterHold: true,
+    trackingHoldSeconds: 3,
+    prescription: {
+      mode: "clinician_plan",
+      sets: null,
+      reps: null,
+      holdSeconds: null,
+      daysPerWeek: "as prescribed",
+    },
+    camera: "close_side_oblique",
+    phaseConfirmationMs: 350,
+    maxCues: 1,
+    trackingWarning:
+      "Engineering prototype: use an upright phone and a close side-oblique view containing the working shoulder, elbow and complete hand. The 3-second timer confirms a trackable position; it is not your prescribed stretch duration. Stop if pain, numbness or tingling increases. The thresholds still require clinician-labelled video validation.",
+    phases: [
+      {
+        name: "neutral",
+        elbow: [150, 180],
+        wristBend: [-12, 12],
+        palmDown: [0.35, 1],
+        forearmHorizontal: [0.45, 1],
+        forearmVelocity: [0, 0.3],
+        wristMatch: [0, 0.14],
+      },
+      {
+        name: "wrist_extended",
+        elbow: [150, 180],
+        wristBend: [-70, -15],
+        palmDown: [0.35, 1],
+        forearmHorizontal: [0.45, 1],
+        forearmVelocity: [0, 0.3],
+        wristMatch: [0, 0.14],
+      },
+    ],
+    repRule: "neutral → wrist_extended → hold",
+    stageImages: [],
+    cues: {
+      "elbow<150": "Straighten your working elbow gently",
+      "palmDown<0.35": "Turn the working palm downward",
+      "forearmHorizontal<0.45": "Hold your working forearm more horizontally",
+      "forearmVelocity>0.3": "Keep your forearm still and move only at the wrist",
+      "wristMatch>0.14": "Keep the complete working hand near the tracked wrist",
+    },
+    trackingNotes:
+      "Pose and Hand Landmarker run on the same frame. Cross-model measurements use normalized image coordinates; their independent world coordinate systems are not mixed.",
+  },
+
+  {
+    id: "wrist_flexion_stretch",
+    name: "Wrist Flexion Stretch",
+    category: "stretch",
+    trackingMode: "pose_and_hand",
+    trackingMaturity: "engineering_prototype_requires_validation",
+    requiresClinicianPlan: true,
+    requiresReturnAfterHold: true,
+    trackingHoldSeconds: 3,
+    prescription: {
+      mode: "clinician_plan",
+      sets: null,
+      reps: null,
+      holdSeconds: null,
+      daysPerWeek: "as prescribed",
+    },
+    camera: "close_side_oblique",
+    phaseConfirmationMs: 350,
+    maxCues: 1,
+    trackingWarning:
+      "Engineering prototype: use an upright phone and a close side-oblique view containing the working shoulder, elbow and complete hand. The 3-second timer confirms a trackable position; it is not your prescribed stretch duration. Stop if pain increases and do not force the wrist. The thresholds still require clinician-labelled video validation.",
+    phases: [
+      {
+        name: "neutral",
+        elbow: [150, 180],
+        wristBend: [-12, 12],
+        palmDown: [0.35, 1],
+        forearmHorizontal: [0.45, 1],
+        forearmVelocity: [0, 0.3],
+        wristMatch: [0, 0.14],
+      },
+      {
+        name: "wrist_flexed",
+        elbow: [150, 180],
+        wristBend: [15, 70],
+        palmDown: [0.35, 1],
+        forearmHorizontal: [0.45, 1],
+        forearmVelocity: [0, 0.3],
+        wristMatch: [0, 0.14],
+      },
+    ],
+    repRule: "neutral → wrist_flexed → hold",
+    stageImages: [],
+    cues: {
+      "elbow<150": "Straighten your working elbow gently",
+      "palmDown<0.35": "Turn the working palm downward",
+      "forearmHorizontal<0.45": "Hold your working forearm more horizontally",
+      "forearmVelocity>0.3": "Keep your forearm still and move only at the wrist",
+      "wristMatch>0.14": "Keep the complete working hand near the tracked wrist",
+    },
+    trackingNotes:
+      "Pose and Hand Landmarker run on the same frame. Cross-model measurements use normalized image coordinates; their independent world coordinate systems are not mixed.",
+  },
+
+  {
+    id: "tendon_glides",
+    name: "Tendon Glides",
+    category: "mobility",
+    trackingMode: "hand",
+    trackingMaturity: "engineering_prototype_requires_validation",
+    requiresClinicianPlan: true,
+    prescription: {
+      mode: "clinician_plan",
+      sets: null,
+      reps: null,
+      holdSeconds: 0,
+      daysPerWeek: "as prescribed",
+    },
+    camera: "hand_close_up",
+    phaseConfirmationMs: 350,
+    trackingWarning:
+      "Engineering prototype: support your forearm and keep one complete hand close to the camera. The guide checks the ordered hand-shape sequence only; it cannot assess tendon loading, force, pain or whether the wrist is clinically neutral. The rule-based shapes still require clinician-labelled video validation.",
+    phases: [
+      { name: "open_hand", handShape: { equals: "open_hand" }, handShapeScore: [0.7, 1], handFrameReady: [1, 1] },
+      { name: "hook_fist", handShape: { equals: "hook_fist" }, handShapeScore: [0.7, 1], handFrameReady: [1, 1] },
+      { name: "full_fist", handShape: { equals: "full_fist" }, handShapeScore: [0.7, 1], handFrameReady: [1, 1] },
+      { name: "tabletop", handShape: { equals: "tabletop" }, handShapeScore: [0.7, 1], handFrameReady: [1, 1] },
+      { name: "straight_fist", handShape: { equals: "straight_fist" }, handShapeScore: [0.7, 1], handFrameReady: [1, 1] },
+    ],
+    repRule:
+      "open_hand → hook_fist → open_hand → full_fist → open_hand → tabletop → open_hand → straight_fist → open_hand",
+    stageImages: [],
+    cues: {},
+    trackingNotes:
+      "Each shape must remain stable before the sequence advances. Unknown, out-of-order or low-confidence shapes cannot count a repetition.",
+  },
+
   // ── Newly promoted primary-motion prototypes ─────────────────────────────
 
   {

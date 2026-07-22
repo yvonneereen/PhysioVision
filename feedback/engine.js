@@ -77,14 +77,23 @@ export class FeedbackEngine {
       this._resetPhaseCandidate();
     }
 
+    const expectedNextPhase = this.stages[this.stageIdx + 1] ?? this.stages[0];
     return {
       exercise: this.exercise,
       stages: this.stages,
+      stageIndex: this.stageIdx,
       phase: this.currentPhase,
       detectedPhase: detected,
       positionRecognized: detected !== null,
+      expectedNextPhase,
+      sequenceOnTrack:
+        detected === null
+          ? false
+          : detected === this.currentPhase || detected === expectedNextPhase,
       repCount: this.repCount,
       inHold: this.inHold,
+      holdPositionMaintained:
+        this.inHold && tracking.ready && detected === this.currentPhase,
       trackingReady: tracking.ready,
       missingMeasurements: tracking.missingMeasurements,
       startConfirmed: this.startConfirmed,
@@ -100,6 +109,12 @@ export class FeedbackEngine {
     this.inHold = false;
     this.stageIdx = 0;
     this.currentPhase = this.stages[0];
+    if (this.exercise.requiresReturnAfterHold) {
+      // A second hold cannot be earned by remaining in the target position.
+      // The stable starting phase must be observed again first.
+      this.startConfirmed = false;
+      this._resetPhaseCandidate();
+    }
   }
 
   // ── Private ──────────────────────────────────────────────────────────────
@@ -112,11 +127,11 @@ export class FeedbackEngine {
   }
 
   _phaseMatches(phase, angles) {
-    for (const [key, range] of Object.entries(phase)) {
+    for (const [key, condition] of Object.entries(phase)) {
       if (key === "name") continue;
-      const a = this._resolve(key, angles);
-      if (!a || a.lowConfidence) return false;
-      if (a.value < range[0] || a.value > range[1]) return false;
+      const measurement = this._resolve(key, angles);
+      if (!measurement || measurement.lowConfidence) return false;
+      if (!_conditionMatches(measurement.value, condition)) return false;
     }
     return true;
   }
@@ -141,7 +156,7 @@ export class FeedbackEngine {
       if (
         !measurement ||
         measurement.lowConfidence ||
-        !Number.isFinite(measurement.value)
+        !_hasUsableValue(measurement.value)
       ) {
         missingMeasurements.add(this._resolvedKeyName(key, angles));
       }
@@ -219,12 +234,12 @@ export class FeedbackEngine {
     const nextPhase = this.exercise.phases.find((p) => p.name === nextName);
     if (!nextPhase) return 0;
     let total = 0, score = 0;
-    for (const [key, range] of Object.entries(nextPhase)) {
+    for (const [key, condition] of Object.entries(nextPhase)) {
       if (key === "name") continue;
       total++;
       const a = this._resolve(key, angles);
       if (!a || a.lowConfidence) continue;
-      score += _angleCloseness(a.value, range);
+      score += _conditionCloseness(a.value, condition);
     }
     return total === 0 ? 0 : score / total;
   }
@@ -283,4 +298,31 @@ function _angleCloseness(value, [min, max]) {
   const halfWidth = (max - min) / 2;
   const outside = Math.abs(value - mid) - halfWidth;
   return Math.max(0, 1 - outside / 70); // 70° as normalising travel distance
+}
+
+function _hasUsableValue(value) {
+  if (value === null || value === undefined) return false;
+  return typeof value !== "number" || Number.isFinite(value);
+}
+
+function _conditionMatches(value, condition) {
+  if (Array.isArray(condition)) {
+    return Number.isFinite(value)
+      && value >= condition[0]
+      && value <= condition[1];
+  }
+  if (condition && Object.hasOwn(condition, "equals")) {
+    return value === condition.equals;
+  }
+  if (condition && Array.isArray(condition.oneOf)) {
+    return condition.oneOf.includes(value);
+  }
+  return false;
+}
+
+function _conditionCloseness(value, condition) {
+  if (Array.isArray(condition)) {
+    return Number.isFinite(value) ? _angleCloseness(value, condition) : 0;
+  }
+  return _conditionMatches(value, condition) ? 1 : 0;
 }

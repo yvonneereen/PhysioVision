@@ -141,6 +141,17 @@ function renderExercises(exercises) {
 
 async function loadClinicianWorkspace() {
   if (currentRole !== "clinician") return;
+  if (
+    !clinicianWorkspace ||
+    !prescriptionStatus ||
+    !patientSelect ||
+    !exerciseSelect ||
+    !patientRows
+  ) {
+    // The clinician overview can be supplied by therapist.js without the
+    // optional invitation-and-prescription workspace being present.
+    return;
+  }
   prescriptionStatus.textContent = "Loading linked patients and exercises…";
   try {
     const [patients, exercises, prescriptions] = await Promise.all([

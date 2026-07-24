@@ -138,6 +138,8 @@ export async function getPatientSessions(patientId) {
 
 export async function getPatientPainCheckins(patientId) {
   return request("GET", `/pain-checkins/?patient=${patientId}`);
+}
+
 export async function getPrescriptions() {
   return request("GET", "/prescriptions/");
 }

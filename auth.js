@@ -50,6 +50,20 @@ function clearError(el) {
   el.style.display = "none";
 }
 
+function routeAfterAuthentication(user) {
+  window.setTimeout(() => {
+    if (user?.role === "clinician") {
+      document
+        .querySelector("[data-open='therapist-view']")
+        ?.click();
+      return;
+    }
+    document
+      .getElementById("practice")
+      ?.scrollIntoView({ behavior: "smooth" });
+  }, 0);
+}
+
 function selectLoginTab() {
   loginForm.style.display = "";
   registerForm.style.display = "none";
@@ -91,10 +105,10 @@ loginForm.addEventListener("submit", async (e) => {
   const data = new FormData(loginForm);
   try {
     await login({ email: data.get("email"), password: data.get("password") });
-    await seedSignedInData();
+    const user = await seedSignedInData();
     hideModal();
     updateAuthButtons(true);
-    alert("Signed in successfully!");
+    routeAfterAuthentication(user);
   } catch (err) {
     showError(loginError, err.data?.non_field_errors?.[0] ?? err.message ?? "Login failed.");
   }
@@ -113,10 +127,10 @@ registerForm.addEventListener("submit", async (e) => {
       lastName:  data.get("lastName"),
       role:      data.get("role"),
     });
-    await seedSignedInData();
+    const user = await seedSignedInData();
     hideModal();
     updateAuthButtons(true);
-    alert("Account created successfully!");
+    routeAfterAuthentication(user);
   } catch (err) {
     const detail = err.data?.email?.[0] ?? err.data?.non_field_errors?.[0] ?? err.message ?? "Registration failed.";
     showError(registerError, detail);
@@ -243,9 +257,9 @@ async function seedSignedInData() {
   return me;
 }
 
-// On load: show modal if not logged in, otherwise sync profile + calibrations
+// Signed-out visitors can view the read-only landing-page demonstration.
+// Authentication opens only when they choose a sign-in or protected action.
 if (!isLoggedIn()) {
-  showModal();
   updateAuthButtons(false);
 } else {
   updateAuthButtons(true);

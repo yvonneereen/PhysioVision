@@ -8,6 +8,7 @@ import {
   evaluateWellnessScreening,
   WELLNESS_SCREENING_KEYS,
 } from "./wellness-screening.js";
+import { isLoggedIn } from "./api.js";
 
 (() => {
   const body = document.body;
@@ -29,6 +30,11 @@ import {
   let planStep = 1;
   let activeWellnessPlan = null;
   let toastTimer;
+  let authenticatedRole = null;
+
+  window.addEventListener("physiovision:auth-role", (event) => {
+    authenticatedRole = event.detail?.role ?? null;
+  });
 
   const setHeaderState = () => {
     header?.classList.toggle("is-scrolled", window.scrollY > 80);
@@ -95,7 +101,20 @@ import {
   }
 
   document.querySelectorAll("[data-open]").forEach((button) => {
-    button.addEventListener("click", () => openModal(button.dataset.open));
+    button.addEventListener("click", () => {
+      let modalId = button.dataset.open;
+      const patientOnly =
+        modalId === "plan-modal" || modalId === "profile-modal";
+
+      if (patientOnly && !isLoggedIn()) {
+        document.getElementById("authTabLogin")?.click();
+        modalId = "auth-modal";
+      } else if (patientOnly && authenticatedRole === "clinician") {
+        modalId = "therapist-view";
+      }
+
+      openModal(modalId);
+    });
   });
 
   document.querySelectorAll("[data-close-modal]").forEach((control) => {

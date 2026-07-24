@@ -1155,6 +1155,244 @@ textarea:focus-visible {
   font-size: 13px;
 }
 
+.public-practice-preview {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.82fr) minmax(420px, 1.18fr);
+  min-height: 620px;
+  margin-top: 54px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.17);
+  border-radius: 24px;
+  background: var(--ink-deep);
+  box-shadow: 0 40px 80px rgba(4, 19, 20, 0.35);
+}
+
+.public-preview-copy {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  flex-direction: column;
+  padding: clamp(38px, 6vw, 82px);
+}
+
+.public-preview-copy h2,
+.practice-role-gate h2 {
+  margin-bottom: 26px;
+  font-size: clamp(44px, 5vw, 76px);
+  font-weight: 520;
+}
+
+.public-preview-copy > p,
+.practice-role-gate p:not(.eyebrow) {
+  max-width: 630px;
+  color: rgba(255, 255, 255, 0.67);
+  font-size: 15px;
+}
+
+.public-preview-copy .button {
+  margin-top: 28px;
+}
+
+.public-preview-copy > small {
+  display: block;
+  max-width: 390px;
+  margin-top: 16px;
+  color: rgba(255, 255, 255, 0.43);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.public-preview-steps {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  max-width: 410px;
+  margin-top: 14px;
+}
+
+.public-preview-steps span {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.76);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 12px;
+}
+
+.public-preview-steps b {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  flex: 0 0 25px;
+  border-radius: 50%;
+  color: var(--ink);
+  background: var(--mint);
+  font-size: 10px;
+}
+
+.public-preview-motion {
+  display: flex;
+  min-width: 0;
+  padding: clamp(22px, 4vw, 48px);
+  background:
+    radial-gradient(circle at 50% 42%, rgba(185, 217, 200, 0.12), transparent 35%),
+    linear-gradient(145deg, #183638, #0a2022);
+  flex-direction: column;
+}
+
+.preview-motion-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 10px;
+}
+
+.preview-motion-heading span,
+.preview-motion-heading strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-motion-heading strong {
+  color: rgba(255, 255, 255, 0.82);
+  font-weight: 650;
+}
+
+.preview-motion-heading i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--coral);
+  box-shadow: 0 0 0 5px rgba(239, 91, 61, 0.13);
+}
+
+.public-preview-motion svg {
+  width: 100%;
+  max-height: 440px;
+  flex: 1;
+  margin: auto;
+}
+
+.preview-floor,
+.preview-support line {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.19);
+  stroke-linecap: round;
+  stroke-width: 4;
+}
+
+.preview-support line {
+  stroke-width: 6;
+}
+
+.preview-person {
+  fill: rgba(185, 217, 200, 0.12);
+  stroke: var(--mint);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 10;
+}
+
+.preview-person-far {
+  opacity: 0.32;
+}
+
+.preview-person circle {
+  stroke-width: 7;
+}
+
+.preview-person .preview-foot {
+  stroke-width: 9;
+}
+
+.preview-joints {
+  fill: var(--coral);
+  stroke: var(--ink-deep);
+  stroke-width: 3;
+}
+
+.preview-motion-note {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.preview-motion-note > span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 50%;
+  color: var(--ink);
+  background: var(--mint);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.preview-motion-note p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.preview-motion-note strong {
+  display: block;
+  color: var(--white);
+  font-size: 11px;
+}
+
+.practice-role-gate {
+  display: grid;
+  grid-template-columns: auto minmax(0, 720px);
+  justify-content: center;
+  gap: 28px;
+  min-height: 480px;
+  margin-top: 54px;
+  padding: clamp(42px, 7vw, 92px);
+  border: 1px solid rgba(255, 255, 255, 0.17);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(185, 217, 200, 0.13), transparent 30%),
+    var(--ink-deep);
+}
+
+.practice-role-gate h2 {
+  max-width: 720px;
+}
+
+.practice-role-gate .button {
+  margin-top: 18px;
+}
+
+.practice-role-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  color: var(--ink);
+  background: var(--mint);
+  font-size: 23px;
+  font-weight: 800;
+}
+
+.patient-practice-workspace {
+  margin-top: 0;
+}
+
 .practice-app {
   display: grid;
   grid-template-columns: minmax(0, 1.56fr) minmax(360px, 0.7fr);
@@ -3705,7 +3943,7 @@ details.metrics summary {
 
 .patient-row {
   display: grid;
-  grid-template-columns: 1.6fr 1fr .85fr .65fr .8fr;
+  grid-template-columns: 1.6fr 1fr .85fr .65fr .65fr .8fr;
   gap: 10px;
   align-items: center;
   min-height: 67px;
@@ -3962,6 +4200,14 @@ details.metrics summary {
     padding: 85px 22px;
   }
 
+  .public-practice-preview {
+    grid-template-columns: 1fr;
+  }
+
+  .public-preview-motion {
+    min-height: 560px;
+  }
+
   .practice-heading {
     display: block;
     padding: 48px 0 40px;
@@ -4111,6 +4357,36 @@ details.metrics summary {
 
   .practice-section {
     padding: 70px 12px;
+  }
+
+  .public-practice-preview,
+  .practice-role-gate {
+    margin-top: 34px;
+    border-radius: 18px;
+  }
+
+  .public-preview-copy {
+    padding: 42px 22px;
+  }
+
+  .public-preview-copy h2,
+  .practice-role-gate h2 {
+    font-size: clamp(42px, 13vw, 62px);
+  }
+
+  .public-preview-motion {
+    min-height: 480px;
+    padding: 20px 12px;
+  }
+
+  .preview-motion-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .practice-role-gate {
+    grid-template-columns: 1fr;
+    padding: 42px 22px;
   }
 
   .practice-heading {
@@ -4351,6 +4627,10 @@ details.metrics summary {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .public-preview-motion svg animate {
+    display: none;
   }
 }
 

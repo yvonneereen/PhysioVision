@@ -304,6 +304,167 @@
         <span>02</span>
         <span>Live exercise guide</span>
       </div>
+
+      <div id="publicPracticePreview" class="public-practice-preview">
+        <div class="public-preview-copy">
+          <p class="eyebrow eyebrow-light">Preview · Half squat</p>
+          <h2>See the movement.<br /><em>Sign in to be guided.</em></h2>
+          <p>
+            This animation demonstrates how PhysioVision presents a movement.
+            The signed-in patient guide adds camera tracking, personal
+            calibration, pain check-ins and exercise access matched to the
+            patient’s pathway.
+          </p>
+          <div class="public-preview-steps" aria-label="Half-squat demonstration phases">
+            <span><b>1</b> Stand comfortably</span>
+            <span><b>2</b> Lower with control</span>
+            <span><b>3</b> Return to standing</span>
+          </div>
+          <button
+            class="button button-coral"
+            type="button"
+            data-open="auth-modal"
+            data-auth-mode="login"
+          >
+            Sign in to start <span aria-hidden="true">→</span>
+          </button>
+          <small>Preview only—no camera, tracking or medical assessment is active.</small>
+        </div>
+
+        <div class="public-preview-motion">
+          <div class="preview-motion-heading">
+            <span><i></i> Animated demonstration</span>
+            <strong>Standing → half squat → standing</strong>
+          </div>
+          <svg
+            viewBox="0 0 420 360"
+            role="img"
+            aria-labelledby="halfSquatPreviewTitle halfSquatPreviewDescription"
+          >
+            <title id="halfSquatPreviewTitle">Animated half-squat preview</title>
+            <desc id="halfSquatPreviewDescription">
+              A simplified stick figure repeatedly lowers into a shallow squat
+              and returns to standing. This is an interface preview, not
+              individualized exercise instruction.
+            </desc>
+            <defs>
+              <radialGradient id="previewGlow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="#b9d9c8" stop-opacity=".25" />
+                <stop offset="100%" stop-color="#b9d9c8" stop-opacity="0" />
+              </radialGradient>
+            </defs>
+            <ellipse cx="210" cy="190" rx="155" ry="145" fill="url(#previewGlow)" />
+            <line class="preview-floor" x1="56" y1="320" x2="364" y2="320" />
+            <g class="preview-support">
+              <line x1="334" y1="110" x2="334" y2="320" />
+              <line x1="298" y1="110" x2="368" y2="110" />
+            </g>
+
+            <g class="preview-person preview-person-far">
+              <line x1="202" y1="188" x2="194" y2="252">
+                <animate attributeName="x1" values="202;202;201;201;202" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                <animate attributeName="y1" values="188;188;230;230;188" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                <animate attributeName="x2" values="194;194;245;245;194" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                <animate attributeName="y2" values="252;252;263;263;252" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+              </line>
+              <line x1="194" y1="252" x2="190" y2="318">
+                <animate attributeName="x1" values="194;194;245;245;194" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                <animate attributeName="y1" values="252;252;263;263;252" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                <animate attributeName="x2" values="190;190;190;190;190" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                <animate attributeName="y2" values="318;318;318;318;318" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+              </line>
+            </g>
+
+            <g class="preview-person">
+              <circle cx="210" cy="61" r="21">
+                <animate attributeName="cx" values="210;210;230;230;210" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                <animate attributeName="cy" values="61;61;111;111;61" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+              </circle>
+              <line x1="210" y1="84" x2="202" y2="188">
+                <animate attributeName="x1" values="210;210;224;224;210" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                <animate attributeName="y1" values="84;84;134;134;84" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                <animate attributeName="x2" values="202;202;201;201;202" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                <animate attributeName="y2" values="188;188;230;230;188" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+              </line>
+              <line x1="209" y1="108" x2="276" y2="157">
+                <animate attributeName="x1" values="209;209;219;219;209" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                <animate attributeName="y1" values="108;108;157;157;108" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                <animate attributeName="x2" values="276;276;294;294;276" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                <animate attributeName="y2" values="157;157;178;178;157" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+              </line>
+              <line x1="209" y1="108" x2="162" y2="163">
+                <animate attributeName="x1" values="209;209;219;219;209" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                <animate attributeName="y1" values="108;108;157;157;108" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                <animate attributeName="x2" values="162;162;288;288;162" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                <animate attributeName="y2" values="163;163;188;188;163" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+              </line>
+              <line x1="202" y1="188" x2="218" y2="253">
+                <animate attributeName="x1" values="202;202;201;201;202" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                <animate attributeName="y1" values="188;188;230;230;188" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                <animate attributeName="x2" values="218;218;266;266;218" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                <animate attributeName="y2" values="253;253;260;260;253" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+              </line>
+              <line x1="218" y1="253" x2="220" y2="318">
+                <animate attributeName="x1" values="218;218;266;266;218" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                <animate attributeName="y1" values="253;253;260;260;253" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                <animate attributeName="x2" values="220;220;220;220;220" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                <animate attributeName="y2" values="318;318;318;318;318" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+              </line>
+              <line class="preview-foot" x1="220" y1="318" x2="252" y2="318" />
+              <g class="preview-joints">
+                <circle cx="202" cy="188" r="5">
+                  <animate attributeName="cx" values="202;202;201;201;202" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                  <animate attributeName="cy" values="188;188;230;230;188" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                </circle>
+                <circle cx="218" cy="253" r="5">
+                  <animate attributeName="cx" values="218;218;266;266;218" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                  <animate attributeName="cy" values="253;253;260;260;253" keyTimes="0;.2;.5;.7;1" dur="4.8s" repeatCount="indefinite" />
+                </circle>
+              </g>
+            </g>
+          </svg>
+          <div class="preview-motion-note">
+            <span aria-hidden="true">i</span>
+            <p><strong>What changes after sign-in</strong>The camera compares the patient’s measured phases with the selected exercise rules.</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="patientPracticeGate" class="practice-role-gate hidden" role="status">
+        <span class="practice-role-icon" aria-hidden="true">✦</span>
+        <div>
+          <p class="eyebrow eyebrow-light">Patient access</p>
+          <h2 id="patientPracticeGateTitle">Checking your exercise pathway…</h2>
+          <p id="patientPracticeGateMessage">
+            Your live guide will open when your pathway is ready.
+          </p>
+          <button
+            id="patientPracticeGateAction"
+            class="button button-coral hidden"
+            type="button"
+            data-open="plan-modal"
+          >
+            Continue <span aria-hidden="true">→</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="clinicianPracticeGate" class="practice-role-gate hidden">
+        <span class="practice-role-icon" aria-hidden="true">＋</span>
+        <div>
+          <p class="eyebrow eyebrow-light">Physiotherapist account</p>
+          <h2>Patient exercises are managed from your dashboard.</h2>
+          <p>
+            Review linked patients, pain reports and measured sessions without
+            opening the patient camera guide.
+          </p>
+          <button class="button button-coral" type="button" data-open="therapist-view">
+            Open clinician dashboard <span aria-hidden="true">→</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="patientPracticeWorkspace" class="patient-practice-workspace hidden">
       <div class="practice-heading">
         <div>
           <p class="eyebrow eyebrow-light">Today’s session · about 12 minutes</p>
@@ -597,6 +758,7 @@
 
         <p class="exercise-library-count" id="exerciseLibraryCount" aria-live="polite"></p>
         <div class="exercise-library-grid" id="exerciseLibraryGrid"></div>
+      </div>
       </div>
     </section>
 
@@ -1113,7 +1275,7 @@
       <div class="therapist-content">
         <div class="therapist-heading">
           <div>
-            <p class="eyebrow">Monday, 20 July</p>
+            <p class="eyebrow" id="dashboard-date">Monday, 20 July</p>
             <h2 id="therapist-title">Patient overview</h2>
           </div>
           <button class="button button-dark button-small" type="button" data-close-modal>
@@ -1121,9 +1283,9 @@
           </button>
         </div>
         <div class="clinician-stats">
-          <div><span>Active patients</span><strong>24</strong><em>3 new this month</em></div>
-          <div><span>Need review</span><strong>4</strong><em class="attention">2 high priority</em></div>
-          <div><span>Adherence</span><strong>82%</strong><em>↑ 6% this month</em></div>
+          <div><span>Active patients</span><strong id="stat-active-patients">—</strong><em id="stat-active-sub">Loading…</em></div>
+          <div><span>Need review</span><strong id="stat-need-review">—</strong><em id="stat-review-sub" class="attention">Loading…</em></div>
+          <div><span>Adherence</span><strong id="stat-adherence">—</strong><em id="stat-adherence-sub">Loading…</em></div>
         </div>
         <div class="patient-table-wrap">
           <div class="table-heading">
@@ -1131,22 +1293,10 @@
             <button type="button">View all patients →</button>
           </div>
           <div class="patient-row patient-row-head">
-            <span>Patient</span><span>Programme</span><span>Last session</span><span>Trend</span><span>Status</span>
+            <span>Patient</span><span>Programme</span><span>Last session</span><span>Trend</span><span>Pain</span><span>Status</span>
           </div>
-          <div class="patient-row">
-            <span class="patient-name"><i class="avatar avatar-lee">SL</i><span><strong>Sarah Lee</strong><small>68 · Knee strength</small></span></span>
-            <span>Week 3 of 6</span><span>Today</span><span class="mini-trend trend-falling">⌁</span>
-            <span><button class="status-pill status-pill-review" type="button">Review now</button></span>
-          </div>
-          <div class="patient-row">
-            <span class="patient-name"><i class="avatar avatar-chan">PC</i><span><strong>Peter Chan</strong><small>74 · Balance</small></span></span>
-            <span>Week 2 of 8</span><span>Yesterday</span><span class="mini-trend trend-flat">—</span>
-            <span><button class="status-pill status-pill-watch" type="button">Monitor</button></span>
-          </div>
-          <div class="patient-row">
-            <span class="patient-name"><i class="avatar avatar-wong">AW</i><span><strong>Anna Wong</strong><small>71 · Hip mobility</small></span></span>
-            <span>Week 5 of 6</span><span>2 days ago</span><span class="mini-trend trend-rising">↗</span>
-            <span><button class="status-pill status-pill-good" type="button">On track</button></span>
+          <div id="patient-table-body">
+            <p class="empty-state">Open the dashboard to load your linked patients.</p>
           </div>
         </div>
       </div>

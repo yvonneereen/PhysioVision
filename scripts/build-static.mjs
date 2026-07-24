@@ -23,6 +23,8 @@ const frontendEntries = [
   "movement-measurements.js",
   "personalization.js",
   "poses.js",
+  "practice-access.js",
+  "therapist.js",
   "ui.js",
   "voice-guidance.js",
   "wellness-screening.js",

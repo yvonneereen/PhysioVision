@@ -1,10 +1,3 @@
-import {
-  PoseLandmarker,
-  HandLandmarker,
-  FilesetResolver,
-  DrawingUtils,
-} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
-
 import { symmetry, VISIBILITY_THRESHOLD } from "./geometry.js";
 import { selectTrackedHand, summarizeHandResult } from "./hand-geometry.js";
 import {
@@ -33,6 +26,15 @@ import {
   voiceGuidance,
 } from "./voice-guidance.js";
 import { isWellnessEligible } from "./wellness-screening.js";
+import {
+  PRACTICE_VIEWS,
+  resolvePracticeAccess,
+} from "./practice-access.js";
+
+let PoseLandmarker;
+let HandLandmarker;
+let FilesetResolver;
+let DrawingUtils;
 
 // ── EMA smoother ─────────────────────────────────────────────────────────────
 
@@ -117,12 +119,31 @@ const handTrackingReadout   = document.getElementById("handTrackingReadout");
 const handModelStatus       = document.getElementById("handModelStatus");
 const handGuideText         = handFrameGuide?.querySelector(":scope > span");
 const soundToggle           = document.getElementById("soundToggle");
+const publicPracticePreview = document.getElementById("publicPracticePreview");
+const patientPracticeGate   = document.getElementById("patientPracticeGate");
+const patientPracticeGateTitle =
+  document.getElementById("patientPracticeGateTitle");
+const patientPracticeGateMessage =
+  document.getElementById("patientPracticeGateMessage");
+const patientPracticeGateAction =
+  document.getElementById("patientPracticeGateAction");
+const patientPracticeWorkspace =
+  document.getElementById("patientPracticeWorkspace");
+const clinicianPracticeGate =
+  document.getElementById("clinicianPracticeGate");
 
 let profile = loadProfile();
 let poseLandmarker = null;
 let handLandmarker = null;
 let sessionStartedAt = null;
 let activePrescriptions = loadActivePrescriptions();
+let authenticatedRole = null;
+let authenticatedPatientProfile = null;
+let prescriptionsLoaded = false;
+let practiceDecision = resolvePracticeAccess({
+  loggedIn: isLoggedIn(),
+});
+let movementModelsPromise = null;
 const exerciseContent = new Map(
   DRAFT_EXERCISES.map((exercise) => [exercise.id, exercise])
 );
@@ -147,6 +168,122 @@ function loadActivePrescriptions() {
   } catch (_) {
     return new Map();
   }
+}
+
+const PRACTICE_GATE_COPY = Object.freeze({
+  checking_account: {
+    title: "Checking your account…",
+    message: "We’re confirming your role and exercise pathway.",
+  },
+  checking_patient_profile: {
+    title: "Checking your patient profile…",
+    message: "Your live guide will open when your profile is available.",
+  },
+  loading_prescriptions: {
+    title: "Loading your prescribed movements…",
+    message: "Only exercises in your current clinician plan will be available.",
+  },
+  screening_required: {
+    title: "Complete the wellness safety screen first.",
+    message:
+      "Confirm that you are seeking general wellness exercise and do not have clinician restrictions or concerning symptoms.",
+    actionLabel: "Complete safety screening",
+  },
+  professional_review: {
+    title: "Professional review is recommended.",
+    message:
+      "Your screening did not unlock self-guided wellness exercise. Review your answers or connect with a qualified professional.",
+    actionLabel: "Review screening",
+  },
+  awaiting_prescription: {
+    title: "Your clinician-guided programme is not ready yet.",
+    message:
+      "You are linked for rehabilitation, but the live guide will remain locked until an active exercise prescription is assigned.",
+    actionLabel: "View clinician connection",
+  },
+});
+
+function ensureMovementModels() {
+  if (poseLandmarker) return Promise.resolve();
+  if (movementModelsPromise) return movementModelsPromise;
+
+  statusEl.textContent = "Preparing movement guide…";
+  movementModelsPromise = createLandmarker().catch((error) => {
+    movementModelsPromise = null;
+    statusEl.textContent = "Movement model unavailable — check your connection";
+    console.error("Movement model initialization failed", error);
+  });
+  return movementModelsPromise;
+}
+
+function syncPracticeAccess() {
+  practiceDecision = resolvePracticeAccess({
+    loggedIn: isLoggedIn(),
+    role: authenticatedRole,
+    patientProfile: authenticatedPatientProfile,
+    activePrescriptionCount: activePrescriptions.size,
+    prescriptionsLoaded,
+  });
+
+  const showPublic = practiceDecision.view === PRACTICE_VIEWS.PUBLIC;
+  const showPatient =
+    practiceDecision.view === PRACTICE_VIEWS.PATIENT_WORKSPACE;
+  const showClinician = practiceDecision.view === PRACTICE_VIEWS.CLINICIAN;
+  const showPatientGate =
+    practiceDecision.view === PRACTICE_VIEWS.PATIENT_GATE ||
+    practiceDecision.view === PRACTICE_VIEWS.LOADING;
+
+  publicPracticePreview?.classList.toggle("hidden", !showPublic);
+  patientPracticeWorkspace?.classList.toggle("hidden", !showPatient);
+  clinicianPracticeGate?.classList.toggle("hidden", !showClinician);
+  patientPracticeGate?.classList.toggle("hidden", !showPatientGate);
+
+  exSelect.disabled = !showPatient;
+  sideSelect.disabled = !showPatient;
+  if (!showPatient) {
+    toggleBtn.disabled = true;
+    openCalibrationBtn.disabled = true;
+    handTrackingToggle.disabled = true;
+  }
+
+  if (showPatientGate) {
+    const copy =
+      PRACTICE_GATE_COPY[practiceDecision.reason] ??
+      PRACTICE_GATE_COPY.checking_account;
+    patientPracticeGateTitle.textContent = copy.title;
+    patientPracticeGateMessage.textContent = copy.message;
+    patientPracticeGateAction.classList.toggle(
+      "hidden",
+      !copy.actionLabel || !practiceDecision.action
+    );
+    if (copy.actionLabel && practiceDecision.action) {
+      patientPracticeGateAction.innerHTML =
+        `${copy.actionLabel} <span aria-hidden="true">→</span>`;
+      patientPracticeGateAction.dataset.open = practiceDecision.action;
+    }
+  }
+
+  if (showPatient) {
+    refreshExerciseAccess();
+    ensureMovementModels();
+  } else if (running) {
+    deactivateCameraGuide();
+    hidePainCheckin();
+  }
+}
+
+function hasLivePracticeAccess() {
+  if (
+    !isLoggedIn() ||
+    authenticatedRole !== "patient" ||
+    practiceDecision.view !== PRACTICE_VIEWS.PATIENT_WORKSPACE
+  ) {
+    statusEl.textContent = !isLoggedIn()
+      ? "Sign in with a patient account to use the camera guide"
+      : "The camera guide is not available for this account or pathway";
+    return false;
+  }
+  return true;
 }
 
 function activeDose(exercise = engine?.exercise) {
@@ -365,7 +502,11 @@ sideSelect.addEventListener("change", () => {
 window.addEventListener("physiovision:profile-updated", (event) => {
   cancelCalibration();
   profile = event.detail;
+  if (authenticatedRole === "patient") {
+    authenticatedPatientProfile = event.detail;
+  }
   refreshExerciseAccess();
+  syncPracticeAccess();
   if (exSelect.selectedOptions[0]?.disabled) {
     const accessible = firstAccessibleExercise();
     if (accessible) {
@@ -395,7 +536,9 @@ window.addEventListener("physiovision:prescriptions-updated", (event) => {
     JSON.stringify(prescriptions)
   );
   activePrescriptions = loadActivePrescriptions();
+  prescriptionsLoaded = true;
   refreshExerciseAccess();
+  syncPracticeAccess();
 
   const selectedOption = exSelect.selectedOptions[0];
   const accessible = firstAccessibleExercise();
@@ -407,9 +550,29 @@ window.addEventListener("physiovision:prescriptions-updated", (event) => {
   }
 });
 
+window.addEventListener("physiovision:auth-role", (event) => {
+  authenticatedRole = event.detail?.role ?? null;
+  authenticatedPatientProfile =
+    authenticatedRole === "patient"
+      ? event.detail?.user?.profile ?? null
+      : null;
+  prescriptionsLoaded = authenticatedRole !== "patient";
+  syncPracticeAccess();
+});
+
 // ── MediaPipe setup ───────────────────────────────────────────────────────────
 
 async function createLandmarker() {
+  const visionTasks = await import(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14"
+  );
+  ({
+    PoseLandmarker,
+    HandLandmarker,
+    FilesetResolver,
+    DrawingUtils,
+  } = visionTasks);
+
   const vision = await FilesetResolver.forVisionTasks(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
   );
@@ -1348,6 +1511,13 @@ function setFeedbackBanner(state, cue = "") {
 // ── Controls ──────────────────────────────────────────────────────────────────
 
 function hasPathwayAccess() {
+  if (!hasLivePracticeAccess()) {
+    setFeedbackBanner(
+      "tracking",
+      "Sign in with an eligible patient pathway before starting"
+    );
+    return false;
+  }
   if (profile.carePath === "needs_review") {
     statusEl.textContent = "Professional review is recommended before self-guided exercise";
     setFeedbackBanner(
@@ -1483,6 +1653,7 @@ function deactivateCameraGuide() {
 }
 
 async function startHandPreview() {
+  if (!hasLivePracticeAccess()) return false;
   if (!handLandmarker || running) return false;
   handPreviewMode = true;
   handTrackingToggle.disabled = true;
@@ -1748,6 +1919,4 @@ handTrackingToggle.addEventListener("click", async () => {
   else await startHandPreview();
 });
 
-createLandmarker().catch((err) => {
-  statusEl.textContent = "Movement model unavailable — check your connection";
-});
+syncPracticeAccess();

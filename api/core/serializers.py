@@ -2,6 +2,7 @@ import re
 from datetime import timedelta
 
 from django.contrib.auth import authenticate
+from django.contrib.auth.password_validation import validate_password
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.authtoken.models import Token
@@ -32,7 +33,10 @@ class UserSerializer(serializers.ModelSerializer):
 
 class RegisterSerializer(serializers.Serializer):
     email      = serializers.EmailField()
-    password   = serializers.CharField(write_only=True, min_length=6)
+    password   = serializers.CharField(
+        write_only=True,
+        validators=[validate_password],
+    )
     first_name = serializers.CharField(max_length=150)
     last_name  = serializers.CharField(max_length=150)
     role       = serializers.ChoiceField(choices=[UserRole.PATIENT, UserRole.CLINICIAN])
@@ -49,9 +53,10 @@ class RegisterSerializer(serializers.Serializer):
     specialty      = serializers.CharField(max_length=100, required=False, allow_blank=True)
 
     def validate_email(self, value):
-        if User.objects.filter(email=value).exists():
+        normalized_email = value.strip().lower()
+        if User.objects.filter(email__iexact=normalized_email).exists():
             raise serializers.ValidationError("A user with this email already exists.")
-        return value
+        return normalized_email
 
     def create(self, validated_data):
         role     = validated_data['role']
@@ -81,6 +86,9 @@ class RegisterSerializer(serializers.Serializer):
 class LoginSerializer(serializers.Serializer):
     email    = serializers.EmailField()
     password = serializers.CharField(write_only=True)
+
+    def validate_email(self, value):
+        return value.strip().lower()
 
     def validate(self, data):
         user = authenticate(username=data['email'], password=data['password'])

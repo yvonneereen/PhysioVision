@@ -12,6 +12,94 @@ from .models import (
 )
 
 
+class ProductionReadinessTests(APITestCase):
+    def test_health_check_confirms_database_access(self):
+        response = self.client.get('/api/health/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {'status': 'ok', 'database': 'reachable'},
+        )
+
+    def test_patient_can_register_and_sign_in_again(self):
+        registration = {
+            'email': 'online-patient@example.com',
+            'password': 'safe-test-password',
+            'first_name': 'Online',
+            'last_name': 'Patient',
+            'role': UserRole.PATIENT,
+        }
+
+        created = self.client.post(
+            '/api/auth/register/',
+            registration,
+            format='json',
+        )
+
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(created.data['role'], UserRole.PATIENT)
+        self.assertTrue(created.data['token'])
+        self.assertTrue(
+            PatientProfile.objects.filter(
+                user__email=registration['email'],
+            ).exists()
+        )
+
+        signed_in = self.client.post(
+            '/api/auth/login/',
+            {
+                'email': registration['email'],
+                'password': registration['password'],
+            },
+            format='json',
+        )
+
+        self.assertEqual(signed_in.status_code, 200)
+        self.assertEqual(signed_in.data['role'], UserRole.PATIENT)
+        self.assertTrue(signed_in.data['token'])
+
+    def test_registration_normalizes_email_and_rejects_case_duplicates(self):
+        registration = {
+            'email': 'MixedCase@Example.com',
+            'password': 'safe-test-password',
+            'first_name': 'Mixed',
+            'last_name': 'Case',
+            'role': UserRole.PATIENT,
+        }
+
+        created = self.client.post(
+            '/api/auth/register/',
+            registration,
+            format='json',
+        )
+        duplicate = self.client.post(
+            '/api/auth/register/',
+            {
+                **registration,
+                'email': 'mixedcase@example.com',
+            },
+            format='json',
+        )
+
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertEqual(
+            User.objects.get(email='mixedcase@example.com').email,
+            'mixedcase@example.com',
+        )
+
+        signed_in = self.client.post(
+            '/api/auth/login/',
+            {
+                'email': 'MIXEDCASE@example.com',
+                'password': registration['password'],
+            },
+            format='json',
+        )
+        self.assertEqual(signed_in.status_code, 200)
+
+
 class AgentChatViewTests(APITestCase):
     endpoint = '/api/auth/agent/chat/'
 

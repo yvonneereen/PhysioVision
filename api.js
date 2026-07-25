@@ -39,7 +39,25 @@ async function request(method, path, body) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw Object.assign(new Error(err.detail || "Request failed"), { status: res.status, data: err });
+    const fieldError = Object.entries(err).find(
+      ([key, value]) => key !== "detail" && Array.isArray(value) && value.length
+    );
+    const fieldMessage = fieldError
+      ? `${fieldError[0].replaceAll("_", " ")}: ${fieldError[1][0]}`
+      : "";
+    const productionApiMissing = (
+      res.status === 404
+      && !runtimeWindow.PHYSIOVISION_API_BASE
+      && !["localhost", "127.0.0.1"].includes(runtimeHostname)
+    );
+    const message = productionApiMissing
+      ? "The online account service has not been connected yet."
+      : err.detail || fieldMessage || `Request failed (${res.status}).`;
+
+    throw Object.assign(new Error(message), {
+      status: res.status,
+      data: err,
+    });
   }
 
   return res.status === 204 ? null : res.json();

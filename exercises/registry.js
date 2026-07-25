@@ -46,6 +46,7 @@ export const EXERCISES = [
     repRule: "neutral → stretch → hold",
     phaseConfirmationMs: 0,
     startConfirmed: true,
+    matchThreshold: 0.7,
     stageImages: ["standing", "calf-stretch"],
     cues: {
       "ankle>115": "Lean forward more to feel the stretch in the calf",

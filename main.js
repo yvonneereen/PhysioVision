@@ -182,7 +182,7 @@ voiceGuidance.attachToggle(soundToggle);
 function loadActivePrescriptions() {
   try {
     const stored = JSON.parse(
-      window.localStorage.getItem("physiovision.prescriptions.v1") ?? "[]"
+      window.sessionStorage.getItem("physiovision.prescriptions.v1") ?? "[]"
     );
     const today = new Date().toISOString().slice(0, 10);
     return new Map(
@@ -562,7 +562,7 @@ window.addEventListener("physiovision:profile-updated", (event) => {
 
 window.addEventListener("physiovision:prescriptions-updated", (event) => {
   const prescriptions = Array.isArray(event.detail) ? event.detail : [];
-  window.localStorage.setItem(
+  window.sessionStorage.setItem(
     "physiovision.prescriptions.v1",
     JSON.stringify(prescriptions)
   );

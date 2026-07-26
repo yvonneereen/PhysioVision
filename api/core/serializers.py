@@ -1,11 +1,9 @@
 import re
 from datetime import timedelta
 
-from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.utils import timezone
 from rest_framework import serializers
-from rest_framework.authtoken.models import Token
 
 from .models import (
     CareInvitation,
@@ -73,6 +71,8 @@ class RegisterSerializer(serializers.Serializer):
             first_name=validated_data['first_name'],
             last_name=validated_data['last_name'],
             role=role,
+            is_active=False,
+            email_verified_at=None,
         )
 
         if role == UserRole.PATIENT:
@@ -91,13 +91,32 @@ class LoginSerializer(serializers.Serializer):
         return value.strip().lower()
 
     def validate(self, data):
-        user = authenticate(username=data['email'], password=data['password'])
-        if not user:
+        user = User.objects.filter(email__iexact=data['email']).first()
+        if not user or not user.check_password(data['password']):
             raise serializers.ValidationError("Invalid email or password.")
+        if not user.email_verified_at:
+            data['user'] = user
+            data['requires_email_verification'] = True
+            return data
         if not user.is_active:
             raise serializers.ValidationError("This account is disabled.")
         data['user'] = user
         return data
+
+
+class VerifyEmailSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    code = serializers.RegexField(r"^\d{6}$")
+
+    def validate_email(self, value):
+        return value.strip().lower()
+
+
+class ResendEmailVerificationSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        return value.strip().lower()
 
 
 class PatientProfileSerializer(serializers.ModelSerializer):

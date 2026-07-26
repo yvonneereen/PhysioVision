@@ -1376,7 +1376,7 @@
       <p class="eyebrow">PhysioVision</p>
       <h2 id="auth-title">Sign in or create account</h2>
 
-      <div class="auth-tabs" style="display:flex;gap:0.75rem;margin-bottom:1.25rem;">
+      <div class="auth-tabs" id="authTabs" style="display:flex;gap:0.75rem;margin-bottom:1.25rem;">
         <button class="button button-coral" id="authTabLogin" type="button">Sign in</button>
         <button class="button button-light" id="authTabRegister" type="button">Create account</button>
       </div>
@@ -1414,7 +1414,7 @@
           </label>
           <label style="grid-column:1/-1">
             <span>Password</span>
-            <input type="password" name="password" required minlength="6" placeholder="At least 6 characters" autocomplete="new-password" />
+            <input type="password" name="password" required minlength="8" placeholder="At least 8 characters" autocomplete="new-password" />
           </label>
           <label style="grid-column:1/-1">
             <span>I am a</span>
@@ -1427,11 +1427,39 @@
         <p id="registerError" style="color:#e05;margin:.5rem 0;display:none;"></p>
         <button class="button button-coral full-button" type="submit">Create account →</button>
       </form>
+
+      <!-- Email verification form -->
+      <form id="verificationForm" style="display:none;">
+        <p style="margin:0 0 1rem;">
+          <span id="verificationStatus">We sent a 6-digit code to</span>
+          <strong id="verificationEmail"></strong>
+        </p>
+        <div class="field-grid">
+          <label style="grid-column:1/-1">
+            <span>Verification code</span>
+            <input
+              type="text"
+              name="code"
+              required
+              inputmode="numeric"
+              pattern="[0-9]{6}"
+              minlength="6"
+              maxlength="6"
+              placeholder="123456"
+              autocomplete="one-time-code"
+            />
+          </label>
+        </div>
+        <p id="verificationError" style="color:#e05;margin:.5rem 0;display:none;"></p>
+        <button class="button button-coral full-button" type="submit">Verify and sign in →</button>
+        <button class="button button-light full-button" id="resendVerification" type="button" style="margin-top:.75rem;">Resend code</button>
+        <button class="text-link" type="button" id="verificationBackToLogin" onclick="document.getElementById('authTabLogin').click()" style="margin-top:.75rem;">Back to sign in</button>
+      </form>
     </section>
   </div>
 
   <script src="runtime-config.js"></script>
-  <script type="module" src="auth.js?v=13"></script>
+  <script type="module" src="auth.js?v=14"></script>
   <script type="module" src="ui.js?v=13"></script>
   <script type="module" src="therapist.js?v=13"></script>
   <script type="module" src="exercise-library.js?v=13"></script>

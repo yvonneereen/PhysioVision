@@ -1,3 +1,4 @@
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.viewsets import ModelViewSet
 
 from api.core.models import UserRole
@@ -28,7 +29,19 @@ class SessionViewSet(ModelViewSet):
         )
 
     def perform_create(self, serializer):
+        if self.request.user.role != UserRole.PATIENT:
+            raise PermissionDenied('Only a patient can create a session.')
         serializer.save(patient=self.request.user.patient_profile)
+
+    def perform_update(self, serializer):
+        if self.request.user.role != UserRole.PATIENT:
+            raise PermissionDenied('Only the patient can change a session.')
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if self.request.user.role != UserRole.PATIENT:
+            raise PermissionDenied('Only the patient can remove a session.')
+        instance.delete()
 
 
 class PainCheckinViewSet(ModelViewSet):
@@ -48,4 +61,16 @@ class PainCheckinViewSet(ModelViewSet):
         return PainCheckin.objects.filter(patient=user.patient_profile).order_by('-checked_at')
 
     def perform_create(self, serializer):
+        if self.request.user.role != UserRole.PATIENT:
+            raise PermissionDenied('Only a patient can create a pain check-in.')
         serializer.save(patient=self.request.user.patient_profile)
+
+    def perform_update(self, serializer):
+        if self.request.user.role != UserRole.PATIENT:
+            raise PermissionDenied('Only the patient can change a pain check-in.')
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if self.request.user.role != UserRole.PATIENT:
+            raise PermissionDenied('Only the patient can remove a pain check-in.')
+        instance.delete()

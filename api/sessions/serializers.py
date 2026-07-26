@@ -28,6 +28,10 @@ class SessionSerializer(serializers.ModelSerializer):
             'exercise',
             getattr(self.instance, 'exercise', None),
         )
+        calibration = attrs.get(
+            'calibration',
+            getattr(self.instance, 'calibration', None),
+        )
         request = self.context.get('request')
         patient = getattr(getattr(request, 'user', None), 'patient_profile', None)
         if prescription:
@@ -39,6 +43,12 @@ class SessionSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({
                     'prescription': 'The prescription does not match the exercise.'
                 })
+        if calibration and (
+            not patient or calibration.patient_id != patient.id
+        ):
+            raise serializers.ValidationError({
+                'calibration': 'This calibration does not belong to the patient.'
+            })
         return attrs
 
 
@@ -51,3 +61,18 @@ class PainCheckinSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate(self, attrs):
+        session = attrs.get(
+            'session',
+            getattr(self.instance, 'session', None),
+        )
+        request = self.context.get('request')
+        patient = getattr(getattr(request, 'user', None), 'patient_profile', None)
+        if session and (
+            not patient or session.patient_id != patient.id
+        ):
+            raise serializers.ValidationError({
+                'session': 'This session does not belong to the patient.'
+            })
+        return attrs

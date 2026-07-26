@@ -59,13 +59,19 @@ AUTH_USER_MODEL = 'core.User'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.TokenAuthentication',
+        'api.core.authentication.ExpiringTokenAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
+    'DEFAULT_THROTTLE_RATES': {
+        'auth_register': '5/hour',
+        'auth_login': '10/minute',
+        'email_verification': '10/hour',
+        'email_verification_resend': '5/hour',
+    },
 }
 
 MIDDLEWARE = [
@@ -174,6 +180,38 @@ CSRF_TRUSTED_ORIGINS = env.list(
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
+
+# Email verification and API session security
+EMAIL_BACKEND = env(
+    'EMAIL_BACKEND',
+    default=(
+        'django.core.mail.backends.console.EmailBackend'
+        if DEBUG
+        else 'django.core.mail.backends.smtp.EmailBackend'
+    ),
+)
+EMAIL_HOST = env('EMAIL_HOST', default='')
+EMAIL_PORT = env.int('EMAIL_PORT', default=587)
+EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
+EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=True)
+DEFAULT_FROM_EMAIL = env(
+    'DEFAULT_FROM_EMAIL',
+    default='PhysioVision <no-reply@physiovision.app>',
+)
+EMAIL_VERIFICATION_CODE_TTL_MINUTES = env.int(
+    'EMAIL_VERIFICATION_CODE_TTL_MINUTES',
+    default=10,
+)
+EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS = env.int(
+    'EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS',
+    default=60,
+)
+EMAIL_VERIFICATION_MAX_ATTEMPTS = env.int(
+    'EMAIL_VERIFICATION_MAX_ATTEMPTS',
+    default=5,
+)
+AUTH_TOKEN_TTL_HOURS = env.int('AUTH_TOKEN_TTL_HOURS', default=12)
 
 # Slack workbuddy AI
 SLACK_BOT_TOKEN     = env('SLACK_BOT_TOKEN', default='')

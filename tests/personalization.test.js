@@ -233,7 +233,7 @@ function categoricalFrames(handShape, count = 12) {
 {
   const values = new Map();
   globalThis.window = {
-    localStorage: {
+    sessionStorage: {
       getItem: (key) => values.get(key) ?? null,
       setItem: (key, value) => values.set(key, value),
     },

@@ -1,5 +1,5 @@
 // Central API client — all backend calls go through here.
-// Token is kept in localStorage so it survives page refreshes.
+// The token is limited to this browser tab/session and is not persisted on disk.
 
 const runtimeWindow = typeof window === "undefined" ? {} : window;
 const runtimeHostname = runtimeWindow.location?.hostname ?? "localhost";
@@ -11,16 +11,20 @@ const BASE = runtimeWindow.PHYSIOVISION_API_BASE ?? (
 const TOKEN_KEY = "physiovision.token";
 
 function getToken() {
-  return localStorage.getItem(TOKEN_KEY);
+  return runtimeWindow.sessionStorage?.getItem(TOKEN_KEY) ?? null;
 }
 
 function setToken(token) {
-  localStorage.setItem(TOKEN_KEY, token);
+  runtimeWindow.sessionStorage?.setItem(TOKEN_KEY, token);
 }
 
 function clearToken() {
-  localStorage.removeItem(TOKEN_KEY);
+  runtimeWindow.sessionStorage?.removeItem(TOKEN_KEY);
+  // Remove tokens created by older versions of the site.
+  runtimeWindow.localStorage?.removeItem(TOKEN_KEY);
 }
+
+runtimeWindow.localStorage?.removeItem(TOKEN_KEY);
 
 export function isLoggedIn() {
   return Boolean(getToken());
@@ -66,21 +70,29 @@ async function request(method, path, body) {
 // ── Auth ──────────────────────────────────────────────────────
 
 export async function register({ email, password, firstName, lastName, role = "patient", ...profileFields }) {
-  const data = await request("POST", "/auth/register/", {
+  return request("POST", "/auth/register/", {
     email, password,
     first_name: firstName,
     last_name: lastName,
     role,
     ...profileFields,
   });
-  setToken(data.token);
-  return data;
 }
 
 export async function login({ email, password }) {
   const data = await request("POST", "/auth/login/", { email, password });
   setToken(data.token);
   return data;
+}
+
+export async function verifyEmail({ email, code }) {
+  const data = await request("POST", "/auth/verify-email/", { email, code });
+  setToken(data.token);
+  return data;
+}
+
+export async function resendEmailVerification(email) {
+  return request("POST", "/auth/resend-verification/", { email });
 }
 
 export async function logout() {

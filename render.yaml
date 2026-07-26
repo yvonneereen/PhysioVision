@@ -20,6 +20,20 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: EMAIL_USE_TLS
+        value: "True"
+      - key: DEFAULT_FROM_EMAIL
+        sync: false
+      - key: AUTH_TOKEN_TTL_HOURS
+        value: "12"
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_MODEL

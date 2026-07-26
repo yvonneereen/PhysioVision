@@ -1,5 +1,11 @@
 from django.test import SimpleTestCase
+from django.utils import timezone
+from rest_framework.test import APITestCase
 
+from api.catalogue.models import Calibration, Exercise
+from api.core.models import PatientProfile, User, UserRole
+
+from .models import Session
 from .serializers import PainCheckinSerializer
 
 
@@ -26,3 +32,109 @@ class PainCheckinSerializerTests(SimpleTestCase):
         self.assertIn("pain_level", serializer.errors)
         self.assertIn("timing", serializer.errors)
         self.assertIn("recovery_status", serializer.errors)
+
+
+class PatientDataIsolationTests(APITestCase):
+    def setUp(self):
+        self.user_a = User.objects.create_user(
+            username='patient-a@example.com',
+            email='patient-a@example.com',
+            password='test-password',
+            role=UserRole.PATIENT,
+        )
+        self.patient_a = PatientProfile.objects.create(user=self.user_a)
+        self.user_b = User.objects.create_user(
+            username='patient-b@example.com',
+            email='patient-b@example.com',
+            password='test-password',
+            role=UserRole.PATIENT,
+        )
+        self.patient_b = PatientProfile.objects.create(user=self.user_b)
+        self.exercise = Exercise.objects.create(
+            id='privacy-test',
+            name='Privacy Test',
+            category='mobility',
+            camera_direction='front',
+            rep_rule='start → finish → start',
+            tracked_angles_config={},
+            phases_config=[],
+            cues_config={},
+        )
+        self.session_b = Session.objects.create(
+            patient=self.patient_b,
+            exercise=self.exercise,
+            started_at=timezone.now(),
+            reps_completed=3,
+            reps_target=5,
+            sets_completed=1,
+            sets_target=2,
+            affected_side='right',
+        )
+        self.calibration_b = Calibration.objects.create(
+            patient=self.patient_b,
+            exercise=self.exercise,
+            affected_side='right',
+            captured_at=timezone.now(),
+            start_measurements={},
+            target_measurements={},
+            phase_ranges={},
+        )
+
+    def test_patient_session_list_excludes_other_users(self):
+        Session.objects.create(
+            patient=self.patient_a,
+            exercise=self.exercise,
+            started_at=timezone.now(),
+            reps_completed=2,
+            reps_target=5,
+            sets_completed=1,
+            sets_target=2,
+            affected_side='right',
+        )
+        self.client.force_authenticate(self.user_a)
+
+        response = self.client.get('/api/sessions/')
+
+        self.assertEqual(response.status_code, 200)
+        ids = {str(item['id']) for item in response.data['results']}
+        self.assertEqual(len(ids), 1)
+        self.assertNotIn(str(self.session_b.id), ids)
+
+    def test_patient_cannot_attach_another_users_calibration(self):
+        self.client.force_authenticate(self.user_a)
+
+        response = self.client.post(
+            '/api/sessions/',
+            {
+                'exercise': self.exercise.id,
+                'calibration': str(self.calibration_b.id),
+                'started_at': timezone.now().isoformat(),
+                'sets_completed': 1,
+                'reps_completed': 2,
+                'reps_target': 5,
+                'sets_target': 2,
+                'affected_side': 'right',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('calibration', response.data)
+
+    def test_patient_cannot_attach_checkin_to_another_users_session(self):
+        self.client.force_authenticate(self.user_a)
+
+        response = self.client.post(
+            '/api/pain-checkins/',
+            {
+                'session': str(self.session_b.id),
+                'pain_level': 3,
+                'timing': 'after',
+                'recovery_status': 'same',
+                'checked_at': timezone.now().isoformat(),
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('session', response.data)

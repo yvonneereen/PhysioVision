@@ -46,14 +46,16 @@ After creating the backend, set this non-secret Cloudflare Pages build variable:
 PHYSIOVISION_API_BASE=https://your-api.onrender.com/api
 ```
 
-The Render Blueprint prompts for `DATABASE_URL`, `CORS_ALLOWED_ORIGINS`,
-`CSRF_TRUSTED_ORIGINS`, `FRONTEND_URL`, and `GEMINI_API_KEY`. Use the exact
-Cloudflare production origin, without a trailing slash, for the three frontend
-URL variables. Never put `DATABASE_URL`, `SECRET_KEY`, or `GEMINI_API_KEY` in
-frontend code.
+The Render Blueprint also prompts for SMTP settings (`EMAIL_HOST`,
+`EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, and `DEFAULT_FROM_EMAIL`). These are
+required to deliver the 6-digit account-verification code. Use the exact
+Cloudflare production origin, without a trailing slash, for the frontend URL
+variables. Never put database, email, Django, or Gemini secrets in frontend
+code.
 
-Profile and calibration data are stored in browser `localStorage` for this
-prototype. Every exercise has a calibration contract. Numeric movement
+Account data is stored per authenticated user in the Django database. The
+frontend keeps only a short-lived, per-tab cache and clears it at sign-out or
+when the session expires. Every exercise has a calibration contract. Numeric movement
 endpoints can be narrowed around the user's comfortable samples without
 loosening the exercise's outer limits; form, visibility, categorical hand
 shapes and safety gates remain fixed. Hand-shape-only exercises record a

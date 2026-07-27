@@ -1,9 +1,11 @@
+import base64
 import re
 from unittest.mock import patch
 
 from django.core import mail
 from django.core.cache import cache
 from django.test import override_settings
+from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from .models import (
@@ -34,6 +36,39 @@ class ProductionReadinessTests(APITestCase):
             response.json(),
             {'status': 'ok', 'database': 'reachable'},
         )
+
+    @override_settings(
+        EMAIL_PROVIDER='gmail_api',
+        GMAIL_CLIENT_ID='client-id',
+        GMAIL_CLIENT_SECRET='client-secret',
+        GMAIL_REFRESH_TOKEN='refresh-token',
+        GMAIL_SENDER_EMAIL='sender@gmail.com',
+        GMAIL_SENDER_NAME='PhysioVision',
+    )
+    @patch('googleapiclient.discovery.build')
+    def test_gmail_api_provider_builds_and_sends_message(self, build):
+        from .email_delivery import deliver_email
+
+        send = (
+            build.return_value.users.return_value
+            .messages.return_value.send
+        )
+        send.return_value.execute.return_value = {'id': 'gmail-message-id'}
+
+        deliver_email(
+            subject='Test subject',
+            message='Test message',
+            recipient='recipient@example.com',
+        )
+
+        build.assert_called_once()
+        send.assert_called_once()
+        kwargs = send.call_args.kwargs
+        self.assertEqual(kwargs['userId'], 'me')
+        decoded = base64.urlsafe_b64decode(kwargs['body']['raw']).decode()
+        self.assertIn('From: PhysioVision <sender@gmail.com>', decoded)
+        self.assertIn('To: recipient@example.com', decoded)
+        self.assertIn('Test message', decoded)
 
     def test_patient_must_verify_email_before_signing_in(self):
         registration = {
@@ -144,17 +179,8 @@ class ProductionReadinessTests(APITestCase):
             registration,
             format='json',
         )
-        duplicate = self.client.post(
-            '/api/auth/register/',
-            {
-                **registration,
-                'email': 'mixedcase@example.com',
-            },
-            format='json',
-        )
 
         self.assertEqual(created.status_code, 201)
-        self.assertEqual(duplicate.status_code, 400)
         self.assertEqual(
             User.objects.get(email='mixedcase@example.com').email,
             'mixedcase@example.com',
@@ -170,11 +196,84 @@ class ProductionReadinessTests(APITestCase):
         )
         self.assertEqual(verified.status_code, 200)
 
+        duplicate = self.client.post(
+            '/api/auth/register/',
+            {
+                **registration,
+                'email': 'mixedcase@example.com',
+            },
+            format='json',
+        )
+        self.assertEqual(duplicate.status_code, 400)
+
         signed_in = self.client.post(
             '/api/auth/login/',
             {
                 'email': 'MIXEDCASE@example.com',
                 'password': registration['password'],
+            },
+            format='json',
+        )
+        self.assertEqual(signed_in.status_code, 200)
+
+    def test_unverified_registration_can_restart_with_a_new_password(self):
+        registration = {
+            'email': 'restart@example.com',
+            'password': 'first-safe-password',
+            'first_name': 'First',
+            'last_name': 'Attempt',
+            'role': UserRole.PATIENT,
+        }
+        created = self.client.post(
+            '/api/auth/register/',
+            registration,
+            format='json',
+        )
+        first_code = self.verification_code()
+
+        restarted = self.client.post(
+            '/api/auth/register/',
+            {
+                **registration,
+                'email': 'RESTART@example.com',
+                'password': 'replacement-safe-password',
+                'first_name': 'Restarted',
+            },
+            format='json',
+        )
+        second_code = self.verification_code()
+
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(restarted.status_code, 200)
+        self.assertTrue(restarted.data['verification_required'])
+        self.assertEqual(User.objects.filter(
+            email='restart@example.com',
+        ).count(), 1)
+
+        user = User.objects.get(email='restart@example.com')
+        self.assertEqual(user.first_name, 'Restarted')
+        self.assertFalse(user.check_password('first-safe-password'))
+        self.assertTrue(user.check_password('replacement-safe-password'))
+
+        old_code = self.client.post(
+            '/api/auth/verify-email/',
+            {'email': registration['email'], 'code': first_code},
+            format='json',
+        )
+        self.assertEqual(old_code.status_code, 400)
+
+        verified = self.client.post(
+            '/api/auth/verify-email/',
+            {'email': registration['email'], 'code': second_code},
+            format='json',
+        )
+        self.assertEqual(verified.status_code, 200)
+
+        signed_in = self.client.post(
+            '/api/auth/login/',
+            {
+                'email': registration['email'],
+                'password': 'replacement-safe-password',
             },
             format='json',
         )
@@ -217,6 +316,95 @@ class ProductionReadinessTests(APITestCase):
             format='json',
         )
         self.assertEqual(new_code.status_code, 200)
+
+    def test_forgot_password_code_changes_password_and_revokes_old_login(self):
+        user = User.objects.create_user(
+            username='reset@example.com',
+            email='reset@example.com',
+            password='old-safe-password',
+            first_name='Reset',
+            last_name='Person',
+            is_active=True,
+            email_verified_at=timezone.now(),
+        )
+
+        signed_in = self.client.post(
+            '/api/auth/login/',
+            {
+                'email': user.email,
+                'password': 'old-safe-password',
+            },
+            format='json',
+        )
+        self.assertEqual(signed_in.status_code, 200)
+        old_token = signed_in.data['token']
+
+        requested = self.client.post(
+            '/api/auth/forgot-password/',
+            {'email': user.email},
+            format='json',
+        )
+        self.assertEqual(requested.status_code, 200)
+        reset_code = self.verification_code()
+
+        verified = self.client.post(
+            '/api/auth/verify-reset-code/',
+            {'email': user.email, 'code': reset_code},
+            format='json',
+        )
+        self.assertEqual(verified.status_code, 200)
+        reset_token = verified.data['reset_token']
+
+        changed = self.client.post(
+            '/api/auth/reset-password/',
+            {
+                'email': user.email,
+                'reset_token': reset_token,
+                'new_password': 'new-safe-password-2026',
+            },
+            format='json',
+        )
+        self.assertEqual(changed.status_code, 200)
+
+        reused = self.client.post(
+            '/api/auth/reset-password/',
+            {
+                'email': user.email,
+                'reset_token': reset_token,
+                'new_password': 'another-safe-password-2026',
+            },
+            format='json',
+        )
+        self.assertEqual(reused.status_code, 400)
+
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {old_token}')
+        revoked = self.client.get('/api/auth/me/')
+        self.assertEqual(revoked.status_code, 401)
+        self.client.credentials()
+
+        old_password = self.client.post(
+            '/api/auth/login/',
+            {'email': user.email, 'password': 'old-safe-password'},
+            format='json',
+        )
+        self.assertEqual(old_password.status_code, 400)
+
+        new_password = self.client.post(
+            '/api/auth/login/',
+            {'email': user.email, 'password': 'new-safe-password-2026'},
+            format='json',
+        )
+        self.assertEqual(new_password.status_code, 200)
+
+    def test_forgot_password_does_not_reveal_unknown_email(self):
+        response = self.client.post(
+            '/api/auth/forgot-password/',
+            {'email': 'not-registered@example.com'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('If an active account exists', response.data['detail'])
 
 
 class AgentChatViewTests(APITestCase):

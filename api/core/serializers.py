@@ -51,10 +51,7 @@ class RegisterSerializer(serializers.Serializer):
     specialty      = serializers.CharField(max_length=100, required=False, allow_blank=True)
 
     def validate_email(self, value):
-        normalized_email = value.strip().lower()
-        if User.objects.filter(email__iexact=normalized_email).exists():
-            raise serializers.ValidationError("A user with this email already exists.")
-        return normalized_email
+        return value.strip().lower()
 
     def create(self, validated_data):
         role     = validated_data['role']
@@ -114,6 +111,30 @@ class VerifyEmailSerializer(serializers.Serializer):
 
 class ResendEmailVerificationSerializer(serializers.Serializer):
     email = serializers.EmailField()
+
+    def validate_email(self, value):
+        return value.strip().lower()
+
+
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        return value.strip().lower()
+
+
+class VerifyPasswordResetCodeSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    code = serializers.RegexField(r"^\d{6}$")
+
+    def validate_email(self, value):
+        return value.strip().lower()
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    reset_token = serializers.CharField(min_length=32, max_length=256)
+    new_password = serializers.CharField(write_only=True, min_length=8)
 
     def validate_email(self, value):
         return value.strip().lower()

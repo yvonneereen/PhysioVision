@@ -1,5 +1,7 @@
 # Environment & secrets
 .env
+credentials.json
+token.json
 
 # Database
 db.sqlite3

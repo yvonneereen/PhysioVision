@@ -95,6 +95,37 @@ export async function resendEmailVerification(email) {
   return request("POST", "/auth/resend-verification/", { email });
 }
 
+export async function requestPasswordReset(email) {
+  return request(
+    "POST",
+    "/auth/forgot-password/",
+    { email },
+    { skipAuth: true }
+  );
+}
+
+export async function verifyPasswordResetCode({ email, code }) {
+  return request(
+    "POST",
+    "/auth/verify-reset-code/",
+    { email, code },
+    { skipAuth: true }
+  );
+}
+
+export async function resetPassword({ email, resetToken, newPassword }) {
+  return request(
+    "POST",
+    "/auth/reset-password/",
+    {
+      email,
+      reset_token: resetToken,
+      new_password: newPassword,
+    },
+    { skipAuth: true }
+  );
+}
+
 export async function logout() {
   await request("POST", "/auth/logout/").catch(() => {});
   clearToken();

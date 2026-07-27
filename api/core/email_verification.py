@@ -4,10 +4,10 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
-from django.core.mail import send_mail
 from django.db import transaction
 from django.utils import timezone
 
+from .email_delivery import EmailDeliveryError, deliver_email
 from .models import EmailVerification, User
 
 
@@ -48,7 +48,7 @@ def issue_email_verification(user, *, enforce_cooldown=False):
     )
 
     try:
-        delivered = send_mail(
+        deliver_email(
             subject="Your PhysioVision verification code",
             message=(
                 f"Your PhysioVision verification code is {code}.\n\n"
@@ -56,15 +56,10 @@ def issue_email_verification(user, *, enforce_cooldown=False):
                 "minutes. If you did not create this account, you can ignore "
                 "this email."
             ),
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
-            fail_silently=False,
+            recipient=user.email,
         )
-    except Exception as exc:
+    except EmailDeliveryError as exc:
         raise VerificationDeliveryError from exc
-
-    if delivered != 1:
-        raise VerificationDeliveryError
 
     verification.sent_at = timezone.now()
     verification.save(update_fields=["sent_at", "updated_at"])

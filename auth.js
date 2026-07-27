@@ -6,23 +6,35 @@ import {
   login,
   logout,
   register,
+  requestPasswordReset,
+  resetPassword,
   resendEmailVerification,
   verifyEmail,
-} from "./api.js";
+  verifyPasswordResetCode,
+} from "./api.js?v=15";
 
 const shell        = document.getElementById("auth-modal");
 const loginForm    = document.getElementById("loginForm");
 const registerForm = document.getElementById("registerForm");
 const verificationForm = document.getElementById("verificationForm");
+const passwordResetRequestForm = document.getElementById("passwordResetRequestForm");
+const passwordResetVerifyForm = document.getElementById("passwordResetVerifyForm");
+const passwordResetConfirmForm = document.getElementById("passwordResetConfirmForm");
 const authTabs      = document.getElementById("authTabs");
 const tabLogin     = document.getElementById("authTabLogin");
 const tabRegister  = document.getElementById("authTabRegister");
 const loginError   = document.getElementById("loginError");
+const loginStatus  = document.getElementById("loginStatus");
 const registerError = document.getElementById("registerError");
 const verificationError = document.getElementById("verificationError");
 const verificationStatus = document.getElementById("verificationStatus");
 const verificationEmail = document.getElementById("verificationEmail");
 const resendVerification = document.getElementById("resendVerification");
+const forgotPasswordButton = document.getElementById("forgotPasswordButton");
+const passwordResetRequestError = document.getElementById("passwordResetRequestError");
+const passwordResetVerifyError = document.getElementById("passwordResetVerifyError");
+const passwordResetConfirmError = document.getElementById("passwordResetConfirmError");
+const passwordResetEmail = document.getElementById("passwordResetEmail");
 
 const headerSignIn  = document.getElementById("headerSignIn");
 const headerSignOut = document.getElementById("headerSignOut");
@@ -35,6 +47,23 @@ const USER_CACHE_KEYS = [
 ];
 
 let pendingVerificationEmail = "";
+let pendingPasswordResetEmail = "";
+let pendingPasswordResetToken = "";
+
+const authForms = [
+  loginForm,
+  registerForm,
+  verificationForm,
+  passwordResetRequestForm,
+  passwordResetVerifyForm,
+  passwordResetConfirmForm,
+];
+
+function hideAuthForms() {
+  authForms.forEach((form) => {
+    form.style.display = "none";
+  });
+}
 
 function clearUserCachedData() {
   USER_CACHE_KEYS.forEach((key) => {
@@ -87,19 +116,18 @@ function routeAfterAuthentication(user) {
 }
 
 function selectLoginTab() {
+  hideAuthForms();
   loginForm.style.display = "";
-  registerForm.style.display = "none";
-  verificationForm.style.display = "none";
   authTabs.style.display = "flex";
   tabLogin.className = "button button-coral";
   tabRegister.className = "button button-light";
   clearError(loginError);
+  clearError(loginStatus);
 }
 
 function selectRegisterTab(role = "patient") {
-  loginForm.style.display = "none";
+  hideAuthForms();
   registerForm.style.display = "";
-  verificationForm.style.display = "none";
   authTabs.style.display = "flex";
   tabLogin.className = "button button-light";
   tabRegister.className = "button button-coral";
@@ -109,8 +137,7 @@ function selectRegisterTab(role = "patient") {
 
 function selectVerification(email, message = "We sent a 6-digit code to") {
   pendingVerificationEmail = String(email ?? "").trim().toLowerCase();
-  loginForm.style.display = "none";
-  registerForm.style.display = "none";
+  hideAuthForms();
   verificationForm.style.display = "";
   authTabs.style.display = "none";
   verificationEmail.textContent = pendingVerificationEmail;
@@ -118,6 +145,37 @@ function selectVerification(email, message = "We sent a 6-digit code to") {
   verificationForm.reset();
   clearError(verificationError);
   verificationForm.elements.code.focus();
+}
+
+function selectPasswordResetRequest(email = "") {
+  hideAuthForms();
+  authTabs.style.display = "none";
+  passwordResetRequestForm.reset();
+  passwordResetRequestForm.style.display = "";
+  passwordResetRequestForm.elements.email.value = String(email).trim();
+  clearError(passwordResetRequestError);
+  passwordResetRequestForm.elements.email.focus();
+}
+
+function selectPasswordResetVerify(email) {
+  pendingPasswordResetEmail = String(email ?? "").trim().toLowerCase();
+  hideAuthForms();
+  authTabs.style.display = "none";
+  passwordResetVerifyForm.reset();
+  passwordResetVerifyForm.style.display = "";
+  passwordResetEmail.textContent = pendingPasswordResetEmail;
+  clearError(passwordResetVerifyError);
+  passwordResetVerifyForm.elements.code.focus();
+}
+
+function selectPasswordResetConfirm(resetToken) {
+  pendingPasswordResetToken = resetToken;
+  hideAuthForms();
+  authTabs.style.display = "none";
+  passwordResetConfirmForm.reset();
+  passwordResetConfirmForm.style.display = "";
+  clearError(passwordResetConfirmError);
+  passwordResetConfirmForm.elements.newPassword.focus();
 }
 
 // Account buttons can open the normal sign-in form or a role-specific
@@ -141,6 +199,7 @@ tabRegister.addEventListener("click", () => selectRegisterTab());
 loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   clearError(loginError);
+  clearError(loginStatus);
   const data = new FormData(loginForm);
   try {
     await login({ email: data.get("email"), password: data.get("password") });
@@ -154,6 +213,81 @@ loginForm.addEventListener("submit", async (e) => {
       return;
     }
     showError(loginError, err.data?.non_field_errors?.[0] ?? err.message ?? "Login failed.");
+  }
+});
+
+forgotPasswordButton.addEventListener("click", () => {
+  selectPasswordResetRequest(loginForm.elements.email.value);
+});
+
+document.querySelectorAll("[data-password-reset-back]").forEach((button) => {
+  button.addEventListener("click", selectLoginTab);
+});
+
+passwordResetRequestForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  clearError(passwordResetRequestError);
+  const data = new FormData(passwordResetRequestForm);
+  const email = String(data.get("email") ?? "").trim().toLowerCase();
+  try {
+    await requestPasswordReset(email);
+    selectPasswordResetVerify(email);
+  } catch (err) {
+    showError(
+      passwordResetRequestError,
+      err.data?.detail ?? err.message ?? "Could not request a reset code."
+    );
+  }
+});
+
+passwordResetVerifyForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  clearError(passwordResetVerifyError);
+  const data = new FormData(passwordResetVerifyForm);
+  try {
+    const result = await verifyPasswordResetCode({
+      email: pendingPasswordResetEmail,
+      code: String(data.get("code") ?? "").trim(),
+    });
+    selectPasswordResetConfirm(result.reset_token);
+  } catch (err) {
+    showError(
+      passwordResetVerifyError,
+      err.data?.detail ?? err.message ?? "The reset code is invalid."
+    );
+  }
+});
+
+passwordResetConfirmForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  clearError(passwordResetConfirmError);
+  const data = new FormData(passwordResetConfirmForm);
+  const newPassword = String(data.get("newPassword") ?? "");
+  const confirmPassword = String(data.get("confirmPassword") ?? "");
+  if (newPassword !== confirmPassword) {
+    showError(passwordResetConfirmError, "The two passwords do not match.");
+    return;
+  }
+
+  try {
+    const result = await resetPassword({
+      email: pendingPasswordResetEmail,
+      resetToken: pendingPasswordResetToken,
+      newPassword,
+    });
+    loginForm.reset();
+    loginForm.elements.email.value = pendingPasswordResetEmail;
+    pendingPasswordResetToken = "";
+    selectLoginTab();
+    loginStatus.textContent = result.detail;
+    loginStatus.style.display = "block";
+    loginForm.elements.password.focus();
+  } catch (err) {
+    const detail = err.data?.new_password?.[0]
+      ?? err.data?.detail
+      ?? err.message
+      ?? "Could not change the password.";
+    showError(passwordResetConfirmError, detail);
   }
 });
 

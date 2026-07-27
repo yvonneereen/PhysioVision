@@ -65,9 +65,38 @@ await api.verifyEmail({
 });
 assert.equal(sessionStorage.getItem("physiovision.token"), "verified-token");
 
+responses.push({
+  status: 200,
+  body: { detail: "If the account exists, a code was sent." },
+});
+await api.requestPasswordReset("person@example.com");
+
+responses.push({
+  status: 200,
+  body: { reset_token: "one-time-reset-token" },
+});
+const resetVerification = await api.verifyPasswordResetCode({
+  email: "person@example.com",
+  code: "654321",
+});
+assert.equal(resetVerification.reset_token, "one-time-reset-token");
+
+responses.push({
+  status: 200,
+  body: { detail: "Your password has been changed." },
+});
+await api.resetPassword({
+  email: "person@example.com",
+  resetToken: "one-time-reset-token",
+  newPassword: "new-safe-password",
+});
+
 responses.push({ status: 204, body: null });
 await api.logout();
 assert.equal(sessionStorage.getItem("physiovision.token"), null);
 assert.match(requests[0].url, /\/api\/auth\/register\/$/);
+assert.match(requests[3].url, /\/api\/auth\/forgot-password\/$/);
+assert.match(requests[4].url, /\/api\/auth\/verify-reset-code\/$/);
+assert.match(requests[5].url, /\/api\/auth\/reset-password\/$/);
 
 console.log("API authentication storage tests passed");

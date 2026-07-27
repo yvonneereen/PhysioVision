@@ -10,14 +10,22 @@ from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
-from .models import PatientProfile, UserRole
 from .ai import generate_agent_reply
+from .email_verification import (
+    VerificationCooldown,
+    VerificationDeliveryError,
+    issue_email_verification,
+    verify_email_code,
+)
 from .models import (
     CareInvitation,
     CarePath,
+    PatientProfile,
+    User,
     UserRole,
     WellnessScreeningStatus,
 )
@@ -29,10 +37,17 @@ from .serializers import (
     PatientListSerializer,
     PatientProfileSerializer,
     RegisterSerializer,
+    ResendEmailVerificationSerializer,
+    VerifyEmailSerializer,
     WellnessScreeningSerializer,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _rotate_token(user):
+    Token.objects.filter(user=user).delete()
+    return Token.objects.create(user=user)
 
 
 class IsClinician(BasePermission):
@@ -55,24 +70,156 @@ class PatientViewSet(ReadOnlyModelViewSet):
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth_register'
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user  = serializer.save()
-        token, _ = Token.objects.get_or_create(user=user)
-        return Response({'token': token.key, 'role': user.role}, status=status.HTTP_201_CREATED)
+        with transaction.atomic():
+            user = serializer.save()
+
+        try:
+            issue_email_verification(user)
+        except VerificationDeliveryError:
+            logger.exception("Could not deliver account verification email")
+            return Response(
+                {
+                    'detail': (
+                        'Your account was created, but the verification email '
+                        'could not be sent. Please try resending the code.'
+                    ),
+                    'code': 'email_delivery_failed',
+                    'verification_required': True,
+                    'email': user.email,
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        return Response(
+            {
+                'detail': 'Check your email for the 6-digit verification code.',
+                'verification_required': True,
+                'email': user.email,
+                'role': user.role,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'auth_login'
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user  = serializer.validated_data['user']
-        token, _ = Token.objects.get_or_create(user=user)
+        if serializer.validated_data.get('requires_email_verification'):
+            return Response(
+                {
+                    'detail': 'Verify your email before signing in.',
+                    'code': 'email_not_verified',
+                    'verification_required': True,
+                    'email': user.email,
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        token = _rotate_token(user)
         return Response({'token': token.key, 'role': user.role})
+
+
+class VerifyEmailView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'email_verification'
+
+    def post(self, request):
+        serializer = VerifyEmailSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = User.objects.filter(
+            email__iexact=serializer.validated_data['email']
+        ).first()
+
+        if not user:
+            return Response(
+                {'detail': 'Invalid or expired verification code.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        verified, reason = verify_email_code(
+            user,
+            serializer.validated_data['code'],
+        )
+        if not verified:
+            messages = {
+                'expired': 'This code has expired. Request a new one.',
+                'attempts_exhausted': (
+                    'Too many incorrect attempts. Request a new code.'
+                ),
+            }
+            return Response(
+                {
+                    'detail': messages.get(
+                        reason,
+                        'Invalid or expired verification code.',
+                    ),
+                    'code': f'verification_{reason}',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        token = _rotate_token(user)
+        return Response({
+            'token': token.key,
+            'role': user.role,
+            'email_verified': True,
+        })
+
+
+class ResendEmailVerificationView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'email_verification_resend'
+
+    def post(self, request):
+        serializer = ResendEmailVerificationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = User.objects.filter(
+            email__iexact=serializer.validated_data['email']
+        ).first()
+
+        # Keep the response generic for unknown or already-verified addresses.
+        if not user or user.email_verified_at:
+            return Response({
+                'detail': (
+                    'If this address has an unverified account, a new code '
+                    'has been sent.'
+                ),
+            })
+
+        try:
+            issue_email_verification(user, enforce_cooldown=True)
+        except VerificationCooldown as exc:
+            return Response(
+                {
+                    'detail': (
+                        f'Please wait {exc.retry_after} seconds before '
+                        'requesting another code.'
+                    ),
+                    'retry_after': exc.retry_after,
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+        except VerificationDeliveryError:
+            logger.exception("Could not resend account verification email")
+            return Response(
+                {'detail': 'The verification email could not be sent. Try again.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        return Response({'detail': 'A new verification code has been sent.'})
 
 
 class LogoutView(APIView):

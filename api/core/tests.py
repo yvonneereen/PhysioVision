@@ -1,5 +1,9 @@
+import re
 from unittest.mock import patch
 
+from django.core import mail
+from django.core.cache import cache
+from django.test import override_settings
 from rest_framework.test import APITestCase
 
 from .models import (
@@ -10,6 +14,209 @@ from .models import (
     UserRole,
     WellnessScreeningStatus,
 )
+
+
+@override_settings(
+    EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+)
+class ProductionReadinessTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+
+    def verification_code(self):
+        return re.search(r'\b\d{6}\b', mail.outbox[-1].body).group(0)
+
+    def test_health_check_confirms_database_access(self):
+        response = self.client.get('/api/health/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {'status': 'ok', 'database': 'reachable'},
+        )
+
+    def test_patient_must_verify_email_before_signing_in(self):
+        registration = {
+            'email': 'online-patient@example.com',
+            'password': 'safe-test-password',
+            'first_name': 'Online',
+            'last_name': 'Patient',
+            'role': UserRole.PATIENT,
+        }
+
+        created = self.client.post(
+            '/api/auth/register/',
+            registration,
+            format='json',
+        )
+
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(created.data['role'], UserRole.PATIENT)
+        self.assertTrue(created.data['verification_required'])
+        self.assertNotIn('token', created.data)
+        self.assertTrue(
+            PatientProfile.objects.filter(
+                user__email=registration['email'],
+            ).exists()
+        )
+        user = User.objects.get(email=registration['email'])
+        self.assertFalse(user.is_active)
+        self.assertIsNone(user.email_verified_at)
+
+        blocked_sign_in = self.client.post(
+            '/api/auth/login/',
+            {
+                'email': registration['email'],
+                'password': registration['password'],
+            },
+            format='json',
+        )
+        self.assertEqual(blocked_sign_in.status_code, 403)
+        self.assertEqual(blocked_sign_in.data['code'], 'email_not_verified')
+
+        valid_code = self.verification_code()
+        wrong_code = (
+            valid_code[:-1]
+            + str((int(valid_code[-1]) + 1) % 10)
+        )
+        rejected_code = self.client.post(
+            '/api/auth/verify-email/',
+            {'email': registration['email'], 'code': wrong_code},
+            format='json',
+        )
+        self.assertEqual(rejected_code.status_code, 400)
+
+        verified = self.client.post(
+            '/api/auth/verify-email/',
+            {
+                'email': registration['email'],
+                'code': valid_code,
+            },
+            format='json',
+        )
+        self.assertEqual(verified.status_code, 200)
+        self.assertTrue(verified.data['token'])
+        verified_token = verified.data['token']
+        user.refresh_from_db()
+        self.assertTrue(user.is_active)
+        self.assertIsNotNone(user.email_verified_at)
+
+        signed_in = self.client.post(
+            '/api/auth/login/',
+            {
+                'email': registration['email'],
+                'password': registration['password'],
+            },
+            format='json',
+        )
+        self.assertEqual(signed_in.status_code, 200)
+        self.assertEqual(signed_in.data['role'], UserRole.PATIENT)
+        self.assertTrue(signed_in.data['token'])
+        self.assertNotEqual(signed_in.data['token'], verified_token)
+
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f'Token {verified_token}'
+        )
+        rotated_out = self.client.get('/api/auth/me/')
+        self.assertEqual(rotated_out.status_code, 401)
+
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Token {signed_in.data['token']}"
+        )
+        current_account = self.client.get('/api/auth/me/')
+        self.assertEqual(current_account.status_code, 200)
+        self.assertEqual(
+            current_account.data['email'],
+            registration['email'],
+        )
+
+    def test_registration_normalizes_email_and_rejects_case_duplicates(self):
+        registration = {
+            'email': 'MixedCase@Example.com',
+            'password': 'safe-test-password',
+            'first_name': 'Mixed',
+            'last_name': 'Case',
+            'role': UserRole.PATIENT,
+        }
+
+        created = self.client.post(
+            '/api/auth/register/',
+            registration,
+            format='json',
+        )
+        duplicate = self.client.post(
+            '/api/auth/register/',
+            {
+                **registration,
+                'email': 'mixedcase@example.com',
+            },
+            format='json',
+        )
+
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertEqual(
+            User.objects.get(email='mixedcase@example.com').email,
+            'mixedcase@example.com',
+        )
+
+        verified = self.client.post(
+            '/api/auth/verify-email/',
+            {
+                'email': 'MIXEDCASE@example.com',
+                'code': self.verification_code(),
+            },
+            format='json',
+        )
+        self.assertEqual(verified.status_code, 200)
+
+        signed_in = self.client.post(
+            '/api/auth/login/',
+            {
+                'email': 'MIXEDCASE@example.com',
+                'password': registration['password'],
+            },
+            format='json',
+        )
+        self.assertEqual(signed_in.status_code, 200)
+
+    @override_settings(EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS=0)
+    @patch(
+        'api.core.email_verification.secrets.randbelow',
+        side_effect=[111111, 222222],
+    )
+    def test_resend_replaces_the_old_code(self, _randbelow):
+        registration = {
+            'email': 'resend@example.com',
+            'password': 'safe-test-password',
+            'first_name': 'Re',
+            'last_name': 'Send',
+            'role': UserRole.PATIENT,
+        }
+        self.client.post('/api/auth/register/', registration, format='json')
+        first_code = self.verification_code()
+
+        resent = self.client.post(
+            '/api/auth/resend-verification/',
+            {'email': registration['email']},
+            format='json',
+        )
+        self.assertEqual(resent.status_code, 200)
+        second_code = self.verification_code()
+
+        old_code = self.client.post(
+            '/api/auth/verify-email/',
+            {'email': registration['email'], 'code': first_code},
+            format='json',
+        )
+        self.assertEqual(old_code.status_code, 400)
+
+        new_code = self.client.post(
+            '/api/auth/verify-email/',
+            {'email': registration['email'], 'code': second_code},
+            format='json',
+        )
+        self.assertEqual(new_code.status_code, 200)
 
 
 class AgentChatViewTests(APITestCase):

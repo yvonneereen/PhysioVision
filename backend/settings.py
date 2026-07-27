@@ -24,6 +24,14 @@ environ.Env.read_env(BASE_DIR / '.env')
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
 ALLOWED_HOSTS = env('ALLOWED_HOSTS')
+
+# Render exposes the deployed service hostname automatically. Keeping this
+# separate from CORS is important: ALLOWED_HOSTS identifies the API server,
+# while CORS_ALLOWED_ORIGINS identifies browser frontends allowed to call it.
+RENDER_EXTERNAL_HOSTNAME = env('RENDER_EXTERNAL_HOSTNAME', default='')
+if RENDER_EXTERNAL_HOSTNAME and RENDER_EXTERNAL_HOSTNAME not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
+
 GEMINI_API_KEY = env('GEMINI_API_KEY', default='')
 GEMINI_MODEL = env('GEMINI_MODEL', default='gemini-3.6-flash')
 
@@ -51,18 +59,25 @@ AUTH_USER_MODEL = 'core.User'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.TokenAuthentication',
+        'api.core.authentication.ExpiringTokenAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
+    'DEFAULT_THROTTLE_RATES': {
+        'auth_register': '5/hour',
+        'auth_login': '10/minute',
+        'email_verification': '10/hour',
+        'email_verification_resend': '5/hour',
+    },
 }
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -97,6 +112,8 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 DATABASES = {
     'default': env.db(default=f'sqlite:///{BASE_DIR / "db.sqlite3"}')
 }
+DATABASES['default']['CONN_MAX_AGE'] = env.int('DB_CONN_MAX_AGE', default=60)
+DATABASES['default']['CONN_HEALTH_CHECKS'] = True
 
 
 # Password validation
@@ -133,18 +150,73 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
-# CORS — allow all origins for hackathon dev; tighten before real production
-CORS_ALLOW_ALL_ORIGINS = True
+# Local development defaults to accepting browser origins. A production
+# deployment with DEBUG=False defaults to the explicit origin allow-list.
+CORS_ALLOW_ALL_ORIGINS = env.bool(
+    'CORS_ALLOW_ALL_ORIGINS',
+    default=DEBUG,
+)
+CORS_ALLOWED_ORIGINS = env.list(
+    'CORS_ALLOWED_ORIGINS',
+    default=[],
+)
+CSRF_TRUSTED_ORIGINS = env.list(
+    'CSRF_TRUSTED_ORIGINS',
+    default=[],
+)
+
+# Render terminates HTTPS at its proxy and forwards the original scheme.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+
+# Email verification and API session security
+EMAIL_BACKEND = env(
+    'EMAIL_BACKEND',
+    default=(
+        'django.core.mail.backends.console.EmailBackend'
+        if DEBUG
+        else 'django.core.mail.backends.smtp.EmailBackend'
+    ),
+)
+EMAIL_HOST = env('EMAIL_HOST', default='')
+EMAIL_PORT = env.int('EMAIL_PORT', default=587)
+EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
+EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=True)
+DEFAULT_FROM_EMAIL = env(
+    'DEFAULT_FROM_EMAIL',
+    default='PhysioVision <no-reply@physiovision.app>',
+)
+EMAIL_VERIFICATION_CODE_TTL_MINUTES = env.int(
+    'EMAIL_VERIFICATION_CODE_TTL_MINUTES',
+    default=10,
+)
+EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS = env.int(
+    'EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS',
+    default=60,
+)
+EMAIL_VERIFICATION_MAX_ATTEMPTS = env.int(
+    'EMAIL_VERIFICATION_MAX_ATTEMPTS',
+    default=5,
+)
+AUTH_TOKEN_TTL_HOURS = env.int('AUTH_TOKEN_TTL_HOURS', default=12)
 
 # Slack workbuddy AI
 SLACK_BOT_TOKEN     = env('SLACK_BOT_TOKEN', default='')
 SLACK_SIGNING_SECRET = env('SLACK_SIGNING_SECRET', default='')
 SLACK_CHANNEL_ID    = env('SLACK_CHANNEL_ID', default='#physiovision-alerts')
 
-# Gemini API
-GEMINI_API_KEY = env('GEMINI_API_KEY', default='')
-
 # Frontend base URL (used in Slack deep links)
-FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:3000')
+FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:4173')

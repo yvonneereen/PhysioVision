@@ -191,6 +191,16 @@ const halfSquatBottom = (overrides = {}) =>
 }
 
 {
+  const engine = new FeedbackEngine("heel-cord-stretch", "right");
+  const neutral = engine.update({ rightAnkle: visible(135) });
+  const stretch = engine.update({ rightAnkle: visible(125) });
+
+  assert.equal(neutral.detectedPhase, "neutral");
+  assert.equal(stretch.detectedPhase, "stretch");
+  assert.equal(stretch.inHold, true);
+}
+
+{
   const engine = new FeedbackEngine("ankle_pumps", "right");
   const toesUp = { rightAnkle: visible(75), rightKnee: visible(165) };
   const toesDown = { rightAnkle: visible(120), rightKnee: visible(165) };

@@ -75,7 +75,11 @@ api/
   consultations/  → Consultation, Escalation
 ```
 
-**Auth**: DRF Token auth (`Authorization: Token <token>`). Single `User` model with `role` field (patient / clinician / admin). Each role has a companion profile (1:1).
+**Auth**: Verified email/password accounts with rotating, 12-hour DRF tokens
+(`Authorization: Token <token>`). Registration sends a 6-digit code; unverified
+accounts remain inactive. The frontend keeps the token and private caches in
+`sessionStorage`. Single `User` model with `role` field (patient / clinician /
+admin). Each role has a companion profile (1:1).
 
 **Key design decisions**:
 - Exercise slug PKs match JS registry IDs (`"half-squats"`) — zero translation layer
@@ -89,6 +93,8 @@ api/
 | Method | URL | Description |
 |---|---|---|
 | POST | `/api/auth/register/` | Create account + profile |
+| POST | `/api/auth/verify-email/` | Verify email + get token |
+| POST | `/api/auth/resend-verification/` | Send a replacement code |
 | POST | `/api/auth/login/` | Get token |
 | POST | `/api/auth/logout/` | Delete token |
 | GET/PATCH | `/api/auth/me/` | Current user + profile |

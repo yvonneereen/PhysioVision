@@ -1,3 +1,5 @@
+from django.utils import timezone
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.viewsets import ModelViewSet
 
 from api.core.models import UserRole
@@ -40,3 +42,13 @@ class EscalationViewSet(ModelViewSet):
                 clinician=user.clinician_profile
             ).order_by('-created_at')
         return Escalation.objects.none()
+
+    def perform_update(self, serializer):
+        if self.request.user.role != UserRole.CLINICIAN:
+            raise PermissionDenied(
+                'Only the assigned clinician can review an escalation.'
+            )
+        serializer.save(
+            reviewed_by=self.request.user.clinician_profile,
+            reviewed_at=timezone.now(),
+        )

@@ -131,7 +131,10 @@ export class FeedbackEngine {
   }
 
   _phaseMatches(phase, angles) {
-    const threshold = this.exercise.matchThreshold ?? 0.7;
+    // Phase ranges stay strict unless an individual exercise explicitly opts
+    // into tolerant matching. A global tolerance makes transition positions
+    // look like completed phases and can count false repetitions.
+    const threshold = this.exercise.matchThreshold ?? 1;
     for (const [key, condition] of Object.entries(phase)) {
       if (key === "name") continue;
       const measurement = this._resolve(key, angles);

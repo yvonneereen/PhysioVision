@@ -43,7 +43,7 @@ const DEFAULT_PROFILE = Object.freeze({
 
 function readJson(key, fallback) {
   try {
-    const value = window.localStorage.getItem(key);
+    const value = window.sessionStorage.getItem(key);
     return value ? JSON.parse(value) : fallback;
   } catch (_) {
     return fallback;
@@ -51,7 +51,7 @@ function readJson(key, fallback) {
 }
 
 function writeJson(key, value) {
-  window.localStorage.setItem(key, JSON.stringify(value));
+  window.sessionStorage.setItem(key, JSON.stringify(value));
 }
 
 export function loadProfile() {
@@ -60,7 +60,7 @@ export function loadProfile() {
 
 export function hasSavedProfile() {
   try {
-    return window.localStorage.getItem(PROFILE_KEY) !== null;
+    return window.sessionStorage.getItem(PROFILE_KEY) !== null;
   } catch (_) {
     return false;
   }
@@ -80,7 +80,7 @@ export function saveProfile(profile) {
     new CustomEvent("physiovision:profile-updated", { detail: next })
   );
 
-  // Sync to backend — fire and forget, localStorage is the source of truth locally
+  // Sync to the authenticated backend; session storage is only a tab cache.
   if (isLoggedIn()) {
     patchMe({
       goal:            GOAL_API_VALUES[next.goal] ?? next.goal,

@@ -33,8 +33,29 @@ Then open `http://localhost:4173`.
 The pose model and web fonts load from external CDNs, so an internet connection
 is required for the full exercise-guidance experience.
 
-Profile and calibration data are stored in browser `localStorage` for this
-prototype. Every exercise has a calibration contract. Numeric movement
+## Deploy online accounts
+
+The production architecture uses Cloudflare Pages for the static frontend, a
+Render web service for Django, and a persistent PostgreSQL database. The
+repository includes `render.yaml`, `build.sh`, a database-aware health check at
+`/api/health/`, and build-time frontend API configuration.
+
+After creating the backend, set this non-secret Cloudflare Pages build variable:
+
+```text
+PHYSIOVISION_API_BASE=https://your-api.onrender.com/api
+```
+
+The Render Blueprint also prompts for SMTP settings (`EMAIL_HOST`,
+`EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, and `DEFAULT_FROM_EMAIL`). These are
+required to deliver the 6-digit account-verification code. Use the exact
+Cloudflare production origin, without a trailing slash, for the frontend URL
+variables. Never put database, email, Django, or Gemini secrets in frontend
+code.
+
+Account data is stored per authenticated user in the Django database. The
+frontend keeps only a short-lived, per-tab cache and clears it at sign-out or
+when the session expires. Every exercise has a calibration contract. Numeric movement
 endpoints can be narrowed around the user's comfortable samples without
 loosening the exercise's outer limits; form, visibility, categorical hand
 shapes and safety gates remain fixed. Hand-shape-only exercises record a

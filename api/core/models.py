@@ -31,6 +31,7 @@ class User(AbstractUser, TimestampedModel):
         db_index=True,
     )
     email         = models.EmailField(_("email address"), unique=True)
+    email_verified_at = models.DateTimeField(null=True, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
     phone         = models.CharField(max_length=30, blank=True)
 
@@ -57,6 +58,28 @@ class User(AbstractUser, TimestampedModel):
     @property
     def is_clinician(self) -> bool:
         return self.role == UserRole.CLINICIAN
+
+
+class EmailVerification(TimestampedModel):
+    """Short-lived, single-use email challenge; the plaintext code is never stored."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="email_verification",
+    )
+    code_hash = models.CharField(max_length=128)
+    expires_at = models.DateTimeField()
+    sent_at = models.DateTimeField(null=True, blank=True)
+    attempts_remaining = models.PositiveSmallIntegerField(default=5)
+    consumed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "core_emailverification"
+
+    def __str__(self) -> str:
+        return f"Email verification for {self.user.email}"
 
 
 # ── Patient Profile ───────────────────────────────────────────

@@ -1,10 +1,9 @@
 import re
 from datetime import timedelta
 
-from django.contrib.auth import authenticate
+from django.contrib.auth.password_validation import validate_password
 from django.utils import timezone
 from rest_framework import serializers
-from rest_framework.authtoken.models import Token
 
 from .models import (
     CareInvitation,
@@ -32,7 +31,10 @@ class UserSerializer(serializers.ModelSerializer):
 
 class RegisterSerializer(serializers.Serializer):
     email      = serializers.EmailField()
-    password   = serializers.CharField(write_only=True, min_length=6)
+    password   = serializers.CharField(
+        write_only=True,
+        validators=[validate_password],
+    )
     first_name = serializers.CharField(max_length=150)
     last_name  = serializers.CharField(max_length=150)
     role       = serializers.ChoiceField(choices=[UserRole.PATIENT, UserRole.CLINICIAN])
@@ -49,9 +51,10 @@ class RegisterSerializer(serializers.Serializer):
     specialty      = serializers.CharField(max_length=100, required=False, allow_blank=True)
 
     def validate_email(self, value):
-        if User.objects.filter(email=value).exists():
+        normalized_email = value.strip().lower()
+        if User.objects.filter(email__iexact=normalized_email).exists():
             raise serializers.ValidationError("A user with this email already exists.")
-        return value
+        return normalized_email
 
     def create(self, validated_data):
         role     = validated_data['role']
@@ -68,6 +71,8 @@ class RegisterSerializer(serializers.Serializer):
             first_name=validated_data['first_name'],
             last_name=validated_data['last_name'],
             role=role,
+            is_active=False,
+            email_verified_at=None,
         )
 
         if role == UserRole.PATIENT:
@@ -82,14 +87,36 @@ class LoginSerializer(serializers.Serializer):
     email    = serializers.EmailField()
     password = serializers.CharField(write_only=True)
 
+    def validate_email(self, value):
+        return value.strip().lower()
+
     def validate(self, data):
-        user = authenticate(username=data['email'], password=data['password'])
-        if not user:
+        user = User.objects.filter(email__iexact=data['email']).first()
+        if not user or not user.check_password(data['password']):
             raise serializers.ValidationError("Invalid email or password.")
+        if not user.email_verified_at:
+            data['user'] = user
+            data['requires_email_verification'] = True
+            return data
         if not user.is_active:
             raise serializers.ValidationError("This account is disabled.")
         data['user'] = user
         return data
+
+
+class VerifyEmailSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    code = serializers.RegexField(r"^\d{6}$")
+
+    def validate_email(self, value):
+        return value.strip().lower()
+
+
+class ResendEmailVerificationSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        return value.strip().lower()
 
 
 class PatientProfileSerializer(serializers.ModelSerializer):

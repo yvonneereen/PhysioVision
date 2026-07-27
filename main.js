@@ -7,7 +7,7 @@ import {
   measureHandExerciseFrame,
   measurePoseExerciseFrame,
 } from "./exercise-tracking.js";
-import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=30";
+import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=40";
 import { POSES } from "./poses.js";
 import {
   createCalibration,
@@ -118,6 +118,20 @@ const EXERCISE_IMAGES = {
   "hip-abduction":             "img/exercises/hip-abduction.jpg",
   "leg-presses":               "img/exercises/leg-presses.jpg",
   "hip-adduction":             "img/exercises/hip-adduction.jpg",
+  "wrist_extension_stretch":   "img/exercises/wrist_extension_stretch.jpg",
+  "wrist_flexion_stretch":     "img/exercises/wrist_flexion_stretch.jpg",
+  "ankle_pumps":               "img/exercises/ankle_pumps.jpg",
+  "heel_slides":               "img/exercises/heel_slides.jpg",
+  "hip_bridge":                "img/exercises/hip_bridge.jpg",
+  "forearm_supination_pronation_strengthening": "img/exercises/forearm_supination_pronation_strengthening.jpg",
+  "supported_single_leg_balance": "img/exercises/supported_single_leg_balance.jpg",
+  "clamshell":                 "img/exercises/clamshell.jpg",
+  "supported_forward_step_up": "img/exercises/supported_forward_step_up.jpg",
+  "hip_flexor_stretch":        "img/exercises/hip_flexor_stretch.jpg",
+  "single_knee_to_chest_stretch": "img/exercises/single_knee_to_chest_stretch.jpg",
+  "pendulum":                  "img/exercises/pendulum.jpg",
+  "crossover_arm_stretch":     "img/exercises/crossover_arm_stretch.jpg",
+  "shoulder_forward_elevation_assisted": "img/exercises/shoulder_forward_elevation_assisted.jpg",
 };
 
 function renderExerciseImage(exercise) {
@@ -443,9 +457,12 @@ function clearHoldTimer(resetSeconds) {
 EXERCISES.forEach((ex) => {
   const opt = document.createElement("option");
   opt.value = ex.id;
-  opt.textContent = ex.requiresClinicianPlan
-    ? `${ex.name} · clinician plan`
-    : ex.name;
+  opt.textContent = ex.comingSoon
+    ? `${ex.name} · coming soon`
+    : ex.requiresClinicianPlan
+      ? `${ex.name} · clinician plan`
+      : ex.name;
+  if (ex.comingSoon) opt.disabled = true;
   exSelect.appendChild(opt);
 });
 
@@ -458,7 +475,7 @@ function refreshExerciseAccess() {
     } else if (profile.carePath === "needs_review") {
       option.disabled = true;
     } else {
-      option.disabled = Boolean(exercise.requiresClinicianPlan);
+      option.disabled = Boolean(exercise.comingSoon || exercise.requiresClinicianPlan);
     }
   });
 }
@@ -974,6 +991,27 @@ const angleDebugEl = document.getElementById("angleDebug");
 function updateFeedbackPanel(angles, timestampMs) {
   const fb = engine.update(angles, timestampMs);
 
+  // ── Debug logging (remove before release) ────────────────────────────────
+  if (window._pvDebug) {
+    const relevantKeys = ["kneeSeparation", "ankleSeparation", "workingFootClearance",
+      "ankle", "knee", "hip", "torsoLean", "standingKnee"];
+    const vals = {};
+    for (const k of relevantKeys) {
+      const m = angles[k] ?? angles[`${engine.side}${k[0].toUpperCase()}${k.slice(1)}`];
+      if (m) vals[k] = m.lowConfidence ? "low-conf" : +m.value.toFixed(3);
+    }
+    console.log("[PV]", engine.exercise.id,
+      "| phase:", fb.phase,
+      "| detected:", fb.detectedPhase,
+      "| startConfirmed:", fb.startConfirmed,
+      "| stageIdx:", fb.stageIndex,
+      "| progress:", fb.progress.toFixed(2),
+      "| reps:", fb.repCount,
+      "| measurements:", vals
+    );
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   // Live angle debug overlay
   if (angleDebugEl) {
     const tracked = Object.entries(engine.exercise.trackedAngles ?? {});
@@ -1477,8 +1515,9 @@ function renderPrescription(ex) {
 
 function renderTrackingWarning(ex) {
   const clinicianNote = activeDose(ex).notes;
-  if (ex.trackingWarning || clinicianNote) {
+  if (ex.safetyNote || ex.trackingWarning || clinicianNote) {
     trackWarnEl.textContent = [
+      ex.safetyNote ? `⚠ Safety: ${ex.safetyNote}` : "",
       clinicianNote ? `Clinician instruction: ${clinicianNote}` : "",
       ex.trackingWarning ?? "",
     ].filter(Boolean).join(" ");

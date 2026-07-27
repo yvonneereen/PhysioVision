@@ -17,6 +17,7 @@ import {
   landmarkQuality,
   limbStillness,
   measurementResult,
+  movementVelocity,
 } from "./movement-measurements.js";
 
 export const TRACKING_MODES = Object.freeze({
@@ -666,6 +667,43 @@ export function measurePoseExerciseFrame({
       both.wrists,
       both.hips,
       both.shoulders
+    ));
+  }
+
+  // ── Per-landmark velocity and overall body speed ──────────────────────────
+  // Uses the two most recent history frames. Values are in body-normalised
+  // units per second (same scale as landmarkDisplacement).
+  if (poseHistory.length >= 2) {
+    const prev = poseHistory.at(-2);
+    const curr = poseHistory.at(-1);
+    const elapsedMs = curr.timestampMs - prev.timestampMs;
+    const hipDist = distance(curr.landmarks[LM.leftHip], curr.landmarks[LM.rightHip]);
+    const scale = hipDist > 0 ? hipDist : 1;
+    const velocityOpts = { referenceA: curr.landmarks[LM.leftHip], referenceB: curr.landmarks[LM.rightHip] };
+
+    const LANDMARK_KEYS = {
+      ankle:    working.ankle,
+      knee:     working.knee,
+      hip:      working.hip,
+      shoulder: working.shoulder,
+      wrist:    working.wrist,
+      foot:     working.foot,
+    };
+
+    let speedSum = 0;
+    let speedCount = 0;
+    for (const [name, idx] of Object.entries(LANDMARK_KEYS)) {
+      const vel = movementVelocity(prev.landmarks[idx], curr.landmarks[idx], elapsedMs, velocityOpts);
+      add(`${name}Speed`, vel);
+      if (!vel.lowConfidence && Number.isFinite(vel.value)) {
+        speedSum += vel.value;
+        speedCount++;
+      }
+    }
+
+    add("overallSpeed", measurementResult(
+      speedCount > 0 ? speedSum / speedCount : NaN,
+      { unavailable: speedCount === 0 }
     ));
   }
 

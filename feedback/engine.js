@@ -1,4 +1,4 @@
-import { EXERCISES, EXERCISE_MAP } from "../exercises/registry.js?v=30";
+import { EXERCISES, EXERCISE_MAP } from "../exercises/registry.js?v=51";
 import { applyCalibration } from "../personalization.js";
 
 export { EXERCISES };
@@ -224,7 +224,7 @@ export class FeedbackEngine {
 
     if (this.stageIdx < this.stages.length - 1) return;
 
-    if (this.exercise.category === "stretch") {
+    if (this.exercise.category === "stretch" || this.exercise.category === "balance") {
       // Don't count yet — wait for the UI hold timer to complete.
       this.inHold = true;
     } else {
@@ -241,15 +241,20 @@ export class FeedbackEngine {
     const nextName = this.stages[this.stageIdx + 1];
     const nextPhase = this.exercise.phases.find((p) => p.name === nextName);
     if (!nextPhase) return 0;
-    let total = 0, score = 0;
+    // Use the weakest (minimum) condition, not the average — a phase only
+    // matches when EVERY condition is inside range, so an averaged bar can sit
+    // near 100% while one out-of-range angle blocks the rep from counting.
+    let total = 0, weakest = 1;
     for (const [key, condition] of Object.entries(nextPhase)) {
       if (key === "name") continue;
       total++;
       const a = this._resolve(key, angles);
-      if (!a || a.lowConfidence) continue;
-      score += _conditionCloseness(a.value, condition);
+      const closeness = (!a || a.lowConfidence)
+        ? 0
+        : _conditionCloseness(a.value, condition);
+      weakest = Math.min(weakest, closeness);
     }
-    return total === 0 ? 0 : score / total;
+    return total === 0 ? 0 : weakest;
   }
 
   _evaluateCues(angles) {

@@ -26,10 +26,10 @@ export function isLoggedIn() {
   return Boolean(getToken());
 }
 
-async function request(method, path, body) {
+async function request(method, path, body, { skipAuth = false } = {}) {
   const token = getToken();
   const headers = { "Content-Type": "application/json" };
-  if (token) headers["Authorization"] = `Token ${token}`;
+  if (token && !skipAuth) headers["Authorization"] = `Token ${token}`;
 
   const res = await fetch(`${BASE}${path}`, {
     method,
@@ -54,13 +54,13 @@ export async function register({ email, password, firstName, lastName, role = "p
     last_name: lastName,
     role,
     ...profileFields,
-  });
+  }, { skipAuth: true });
   setToken(data.token);
   return data;
 }
 
 export async function login({ email, password }) {
-  const data = await request("POST", "/auth/login/", { email, password });
+  const data = await request("POST", "/auth/login/", { email, password }, { skipAuth: true });
   setToken(data.token);
   return data;
 }

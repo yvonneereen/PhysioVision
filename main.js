@@ -122,11 +122,14 @@ const EXERCISE_IMAGES = {
 
 function renderExerciseImage(exercise) {
   const src = EXERCISE_IMAGES[exercise.id];
-  if (src && exerciseImageEl && exerciseImageWrap) {
-    exerciseImageEl.src = src;
+  if (!exerciseImageWrap) return;
+  if (src && exerciseImageEl) {
+    exerciseImageEl.onload  = () => { exerciseImageWrap.style.display = ""; };
+    exerciseImageEl.onerror = () => { exerciseImageWrap.style.display = "none"; };
     exerciseImageEl.alt = exercise.name;
+    exerciseImageEl.src = src;
     exerciseImageWrap.style.display = "";
-  } else if (exerciseImageWrap) {
+  } else {
     exerciseImageWrap.style.display = "none";
   }
 }
@@ -603,6 +606,7 @@ async function createLandmarker() {
     FilesetResolver,
     DrawingUtils,
   } = visionTasks);
+  drawingUtils = new DrawingUtils(ctx);
 
   const vision = await FilesetResolver.forVisionTasks(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
@@ -709,7 +713,7 @@ function captureSynchronizedFrame() {
 
 // ── Render loop ───────────────────────────────────────────────────────────────
 
-const drawingUtils = new DrawingUtils(ctx);
+let drawingUtils;
 let running = false;
 let rafId;
 let lastVideoTime = -1;

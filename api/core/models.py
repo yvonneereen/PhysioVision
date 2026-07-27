@@ -82,6 +82,31 @@ class EmailVerification(TimestampedModel):
         return f"Email verification for {self.user.email}"
 
 
+class PasswordResetChallenge(TimestampedModel):
+    """Short-lived reset code and one-time reset token; neither is stored raw."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="password_reset_challenge",
+    )
+    code_hash = models.CharField(max_length=128)
+    expires_at = models.DateTimeField()
+    sent_at = models.DateTimeField(null=True, blank=True)
+    attempts_remaining = models.PositiveSmallIntegerField(default=5)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    reset_token_hash = models.CharField(max_length=64, blank=True)
+    reset_token_expires_at = models.DateTimeField(null=True, blank=True)
+    consumed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "core_passwordresetchallenge"
+
+    def __str__(self) -> str:
+        return f"Password reset for {self.user.email}"
+
+
 # ── Patient Profile ───────────────────────────────────────────
 
 class GoalChoice(models.TextChoices):

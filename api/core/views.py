@@ -15,6 +15,7 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from .ai import generate_agent_reply
+from .email_delivery import EmailDeliveryError
 from .email_verification import (
     VerificationCooldown,
     VerificationDeliveryError,
@@ -29,16 +30,25 @@ from .models import (
     UserRole,
     WellnessScreeningStatus,
 )
+from .password_reset import (
+    PasswordResetCooldown,
+    issue_password_reset,
+    reset_password,
+    verify_password_reset_code,
+)
 from .serializers import (
     CareInvitationAcceptSerializer,
     CareInvitationSerializer,
     ClinicianProfileSerializer,
+    ForgotPasswordSerializer,
     LoginSerializer,
     PatientListSerializer,
     PatientProfileSerializer,
     RegisterSerializer,
     ResendEmailVerificationSerializer,
+    ResetPasswordSerializer,
     VerifyEmailSerializer,
+    VerifyPasswordResetCodeSerializer,
     WellnessScreeningSerializer,
 )
 
@@ -257,6 +267,122 @@ class ResendEmailVerificationView(APIView):
             )
 
         return Response({'detail': 'A new verification code has been sent.'})
+
+
+class ForgotPasswordView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password_reset_request'
+
+    def post(self, request):
+        serializer = ForgotPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = User.objects.filter(
+            email__iexact=serializer.validated_data['email'],
+            email_verified_at__isnull=False,
+            is_active=True,
+        ).first()
+
+        # A generic response prevents attackers from discovering registered
+        # addresses. Real delivery errors are recorded only in server logs.
+        if user:
+            try:
+                issue_password_reset(user)
+            except PasswordResetCooldown:
+                pass
+            except EmailDeliveryError:
+                logger.exception("Could not deliver password reset email")
+
+        return Response({
+            'detail': (
+                'If an active account exists for this email, a 6-digit '
+                'password reset code has been sent.'
+            ),
+        })
+
+
+class VerifyPasswordResetCodeView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password_reset_verify'
+
+    def post(self, request):
+        serializer = VerifyPasswordResetCodeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = User.objects.filter(
+            email__iexact=serializer.validated_data['email'],
+            email_verified_at__isnull=False,
+            is_active=True,
+        ).first()
+        if not user:
+            return Response(
+                {'detail': 'Invalid or expired password reset code.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reset_token, reason = verify_password_reset_code(
+            user,
+            serializer.validated_data['code'],
+        )
+        if not reset_token:
+            messages = {
+                'expired': 'This code has expired. Request a new one.',
+                'attempts_exhausted': (
+                    'Too many incorrect attempts. Request a new code.'
+                ),
+            }
+            return Response(
+                {
+                    'detail': messages.get(
+                        reason,
+                        'Invalid or expired password reset code.',
+                    ),
+                    'code': f'password_reset_{reason}',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response({'reset_token': reset_token})
+
+
+class ResetPasswordView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password_reset_confirm'
+
+    def post(self, request):
+        serializer = ResetPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = User.objects.filter(
+            email__iexact=serializer.validated_data['email'],
+            email_verified_at__isnull=False,
+            is_active=True,
+        ).first()
+        if not user:
+            return Response(
+                {'detail': 'Invalid or expired password reset session.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        changed, reason = reset_password(
+            user,
+            serializer.validated_data['reset_token'],
+            serializer.validated_data['new_password'],
+        )
+        if not changed:
+            if isinstance(reason, list):
+                return Response(
+                    {'new_password': reason},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            return Response(
+                {'detail': 'Invalid or expired password reset session.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response({
+            'detail': 'Your password has been changed. You can now sign in.',
+        })
 
 
 class LogoutView(APIView):

@@ -71,6 +71,9 @@ REST_FRAMEWORK = {
         'auth_login': '10/minute',
         'email_verification': '10/hour',
         'email_verification_resend': '5/hour',
+        'password_reset_request': '5/hour',
+        'password_reset_verify': '10/hour',
+        'password_reset_confirm': '5/hour',
     },
 }
 
@@ -181,7 +184,10 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 
-# Email verification and API session security
+# Email delivery, verification, password recovery, and API session security.
+# EMAIL_PROVIDER=gmail_api sends through Gmail with an OAuth refresh token.
+# Django email remains available for local development and automated tests.
+EMAIL_PROVIDER = env('EMAIL_PROVIDER', default='django').strip().lower()
 EMAIL_BACKEND = env(
     'EMAIL_BACKEND',
     default=(
@@ -199,6 +205,11 @@ DEFAULT_FROM_EMAIL = env(
     'DEFAULT_FROM_EMAIL',
     default='PhysioVision <no-reply@physiovision.app>',
 )
+GMAIL_CLIENT_ID = env('GMAIL_CLIENT_ID', default='')
+GMAIL_CLIENT_SECRET = env('GMAIL_CLIENT_SECRET', default='')
+GMAIL_REFRESH_TOKEN = env('GMAIL_REFRESH_TOKEN', default='')
+GMAIL_SENDER_EMAIL = env('GMAIL_SENDER_EMAIL', default='')
+GMAIL_SENDER_NAME = env('GMAIL_SENDER_NAME', default='PhysioVision')
 EMAIL_VERIFICATION_CODE_TTL_MINUTES = env.int(
     'EMAIL_VERIFICATION_CODE_TTL_MINUTES',
     default=10,
@@ -209,6 +220,22 @@ EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS = env.int(
 )
 EMAIL_VERIFICATION_MAX_ATTEMPTS = env.int(
     'EMAIL_VERIFICATION_MAX_ATTEMPTS',
+    default=5,
+)
+PASSWORD_RESET_CODE_TTL_MINUTES = env.int(
+    'PASSWORD_RESET_CODE_TTL_MINUTES',
+    default=10,
+)
+PASSWORD_RESET_TOKEN_TTL_MINUTES = env.int(
+    'PASSWORD_RESET_TOKEN_TTL_MINUTES',
+    default=15,
+)
+PASSWORD_RESET_RESEND_COOLDOWN_SECONDS = env.int(
+    'PASSWORD_RESET_RESEND_COOLDOWN_SECONDS',
+    default=60,
+)
+PASSWORD_RESET_MAX_ATTEMPTS = env.int(
+    'PASSWORD_RESET_MAX_ATTEMPTS',
     default=5,
 )
 AUTH_TOKEN_TTL_HOURS = env.int('AUTH_TOKEN_TTL_HOURS', default=12)

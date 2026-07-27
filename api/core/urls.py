@@ -15,6 +15,21 @@ urlpatterns = [
         views.ResendEmailVerificationView.as_view(),
         name='auth-resend-verification',
     ),
+    path(
+        'forgot-password/',
+        views.ForgotPasswordView.as_view(),
+        name='auth-forgot-password',
+    ),
+    path(
+        'verify-reset-code/',
+        views.VerifyPasswordResetCodeView.as_view(),
+        name='auth-verify-reset-code',
+    ),
+    path(
+        'reset-password/',
+        views.ResetPasswordView.as_view(),
+        name='auth-reset-password',
+    ),
     path('logout/',   views.LogoutView.as_view(),   name='auth-logout'),
     path('me/',       views.MeView.as_view(),       name='auth-me'),
     path(

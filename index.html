@@ -1393,8 +1393,10 @@
             <input type="password" name="password" required placeholder="••••••••" autocomplete="current-password" />
           </label>
         </div>
+        <p id="loginStatus" style="color:#287a57;margin:.5rem 0;display:none;"></p>
         <p id="loginError" style="color:#e05;margin:.5rem 0;display:none;"></p>
         <button class="button button-coral full-button" type="submit">Sign in →</button>
+        <button class="text-link" id="forgotPasswordButton" type="button" style="margin-top:.75rem;">Forgot password?</button>
       </form>
 
       <!-- Register form (hidden by default) -->
@@ -1455,11 +1457,60 @@
         <button class="button button-light full-button" id="resendVerification" type="button" style="margin-top:.75rem;">Resend code</button>
         <button class="text-link" type="button" id="verificationBackToLogin" onclick="document.getElementById('authTabLogin').click()" style="margin-top:.75rem;">Back to sign in</button>
       </form>
+
+      <!-- Password reset: request email code -->
+      <form id="passwordResetRequestForm" style="display:none;">
+        <p style="margin:0 0 1rem;">Enter the email used for your PhysioVision account.</p>
+        <div class="field-grid">
+          <label style="grid-column:1/-1">
+            <span>Email</span>
+            <input type="email" name="email" required placeholder="you@example.com" autocomplete="email" />
+          </label>
+        </div>
+        <p id="passwordResetRequestError" style="color:#e05;margin:.5rem 0;display:none;"></p>
+        <button class="button button-coral full-button" type="submit">Email reset code →</button>
+        <button class="text-link" type="button" data-password-reset-back style="margin-top:.75rem;">Back to sign in</button>
+      </form>
+
+      <!-- Password reset: verify email code -->
+      <form id="passwordResetVerifyForm" style="display:none;">
+        <p style="margin:0 0 1rem;">
+          Enter the 6-digit password reset code sent to
+          <strong id="passwordResetEmail"></strong>.
+        </p>
+        <div class="field-grid">
+          <label style="grid-column:1/-1">
+            <span>Reset code</span>
+            <input type="text" name="code" required inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" placeholder="123456" autocomplete="one-time-code" />
+          </label>
+        </div>
+        <p id="passwordResetVerifyError" style="color:#e05;margin:.5rem 0;display:none;"></p>
+        <button class="button button-coral full-button" type="submit">Verify code →</button>
+        <button class="text-link" type="button" data-password-reset-back style="margin-top:.75rem;">Back to sign in</button>
+      </form>
+
+      <!-- Password reset: choose a new password -->
+      <form id="passwordResetConfirmForm" style="display:none;">
+        <p style="margin:0 0 1rem;">Choose a new password for your account.</p>
+        <div class="field-grid">
+          <label style="grid-column:1/-1">
+            <span>New password</span>
+            <input type="password" name="newPassword" required minlength="8" placeholder="At least 8 characters" autocomplete="new-password" />
+          </label>
+          <label style="grid-column:1/-1">
+            <span>Confirm new password</span>
+            <input type="password" name="confirmPassword" required minlength="8" placeholder="Enter it again" autocomplete="new-password" />
+          </label>
+        </div>
+        <p id="passwordResetConfirmError" style="color:#e05;margin:.5rem 0;display:none;"></p>
+        <button class="button button-coral full-button" type="submit">Change password →</button>
+        <button class="text-link" type="button" data-password-reset-back style="margin-top:.75rem;">Back to sign in</button>
+      </form>
     </section>
   </div>
 
   <script src="runtime-config.js"></script>
-  <script type="module" src="auth.js?v=14"></script>
+  <script type="module" src="auth.js?v=15"></script>
   <script type="module" src="ui.js?v=13"></script>
   <script type="module" src="therapist.js?v=13"></script>
   <script type="module" src="exercise-library.js?v=13"></script>

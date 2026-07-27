@@ -46,12 +46,28 @@ After creating the backend, set this non-secret Cloudflare Pages build variable:
 PHYSIOVISION_API_BASE=https://your-api.onrender.com/api
 ```
 
-The Render Blueprint also prompts for SMTP settings (`EMAIL_HOST`,
-`EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, and `DEFAULT_FROM_EMAIL`). These are
-required to deliver the 6-digit account-verification code. Use the exact
-Cloudflare production origin, without a trailing slash, for the frontend URL
-variables. Never put database, email, Django, or Gemini secrets in frontend
-code.
+The Render Blueprint sends account-verification and password-reset messages
+through the Gmail API. Set these private Render environment variables:
+
+```text
+EMAIL_PROVIDER=gmail_api
+GMAIL_CLIENT_ID=your OAuth client ID
+GMAIL_CLIENT_SECRET=your OAuth client secret
+GMAIL_REFRESH_TOKEN=your long-lived OAuth refresh token
+GMAIL_SENDER_EMAIL=the Gmail account authorized by that refresh token
+GMAIL_SENDER_NAME=PhysioVision
+```
+
+The sender name is the label recipients see next to the sender address. It
+should normally match the public website name, `PhysioVision`; it does not have
+to match the Google Cloud OAuth app name. Do not store the client secret,
+refresh token, or downloaded Google credential files in Git. The old SMTP
+variables are not used when `EMAIL_PROVIDER=gmail_api`, so they can be removed
+from Render after the Gmail API variables are working.
+
+Use the exact Cloudflare production origin, without a trailing slash, for the
+frontend URL variables. Never put database, email, Django, Gmail, or Gemini
+secrets in frontend code.
 
 Account data is stored per authenticated user in the Django database. The
 frontend keeps only a short-lived, per-tab cache and clears it at sign-out or

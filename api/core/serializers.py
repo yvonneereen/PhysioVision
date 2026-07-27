@@ -116,6 +116,30 @@ class ResendEmailVerificationSerializer(serializers.Serializer):
         return value.strip().lower()
 
 
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        return value.strip().lower()
+
+
+class VerifyPasswordResetCodeSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    code = serializers.RegexField(r"^\d{6}$")
+
+    def validate_email(self, value):
+        return value.strip().lower()
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    reset_token = serializers.CharField(min_length=32, max_length=256)
+    new_password = serializers.CharField(write_only=True, min_length=8)
+
+    def validate_email(self, value):
+        return value.strip().lower()
+
+
 class PatientProfileSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
 

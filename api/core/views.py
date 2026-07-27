@@ -76,8 +76,34 @@ class RegisterView(APIView):
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data['email']
+        existing_user = User.objects.filter(email__iexact=email).first()
+
+        if existing_user and (
+            existing_user.email_verified_at or existing_user.is_active
+        ):
+            return Response(
+                {'email': ['A user with this email already exists.']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         with transaction.atomic():
-            user = serializer.save()
+            if existing_user:
+                # An earlier delivery failure can leave an inactive account in
+                # the database. Since it has never been verified, let the owner
+                # restart registration. The new password only becomes useful
+                # after the emailed code proves control of the address.
+                user = existing_user
+                user.set_password(serializer.validated_data['password'])
+                user.first_name = serializer.validated_data['first_name']
+                user.last_name = serializer.validated_data['last_name']
+                user.save(update_fields=[
+                    'password',
+                    'first_name',
+                    'last_name',
+                    'updated_at',
+                ])
+            else:
+                user = serializer.save()
 
         try:
             issue_email_verification(user)
@@ -96,14 +122,25 @@ class RegisterView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
+        response_status = (
+            status.HTTP_200_OK
+            if existing_user
+            else status.HTTP_201_CREATED
+        )
+        detail = (
+            'Your unverified account was restarted. Check your email for the '
+            'new 6-digit verification code.'
+            if existing_user
+            else 'Check your email for the 6-digit verification code.'
+        )
         return Response(
             {
-                'detail': 'Check your email for the 6-digit verification code.',
+                'detail': detail,
                 'verification_required': True,
                 'email': user.email,
                 'role': user.role,
             },
-            status=status.HTTP_201_CREATED,
+            status=response_status,
         )
 
 

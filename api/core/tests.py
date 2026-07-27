@@ -144,17 +144,8 @@ class ProductionReadinessTests(APITestCase):
             registration,
             format='json',
         )
-        duplicate = self.client.post(
-            '/api/auth/register/',
-            {
-                **registration,
-                'email': 'mixedcase@example.com',
-            },
-            format='json',
-        )
 
         self.assertEqual(created.status_code, 201)
-        self.assertEqual(duplicate.status_code, 400)
         self.assertEqual(
             User.objects.get(email='mixedcase@example.com').email,
             'mixedcase@example.com',
@@ -170,11 +161,84 @@ class ProductionReadinessTests(APITestCase):
         )
         self.assertEqual(verified.status_code, 200)
 
+        duplicate = self.client.post(
+            '/api/auth/register/',
+            {
+                **registration,
+                'email': 'mixedcase@example.com',
+            },
+            format='json',
+        )
+        self.assertEqual(duplicate.status_code, 400)
+
         signed_in = self.client.post(
             '/api/auth/login/',
             {
                 'email': 'MIXEDCASE@example.com',
                 'password': registration['password'],
+            },
+            format='json',
+        )
+        self.assertEqual(signed_in.status_code, 200)
+
+    def test_unverified_registration_can_restart_with_a_new_password(self):
+        registration = {
+            'email': 'restart@example.com',
+            'password': 'first-safe-password',
+            'first_name': 'First',
+            'last_name': 'Attempt',
+            'role': UserRole.PATIENT,
+        }
+        created = self.client.post(
+            '/api/auth/register/',
+            registration,
+            format='json',
+        )
+        first_code = self.verification_code()
+
+        restarted = self.client.post(
+            '/api/auth/register/',
+            {
+                **registration,
+                'email': 'RESTART@example.com',
+                'password': 'replacement-safe-password',
+                'first_name': 'Restarted',
+            },
+            format='json',
+        )
+        second_code = self.verification_code()
+
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(restarted.status_code, 200)
+        self.assertTrue(restarted.data['verification_required'])
+        self.assertEqual(User.objects.filter(
+            email='restart@example.com',
+        ).count(), 1)
+
+        user = User.objects.get(email='restart@example.com')
+        self.assertEqual(user.first_name, 'Restarted')
+        self.assertFalse(user.check_password('first-safe-password'))
+        self.assertTrue(user.check_password('replacement-safe-password'))
+
+        old_code = self.client.post(
+            '/api/auth/verify-email/',
+            {'email': registration['email'], 'code': first_code},
+            format='json',
+        )
+        self.assertEqual(old_code.status_code, 400)
+
+        verified = self.client.post(
+            '/api/auth/verify-email/',
+            {'email': registration['email'], 'code': second_code},
+            format='json',
+        )
+        self.assertEqual(verified.status_code, 200)
+
+        signed_in = self.client.post(
+            '/api/auth/login/',
+            {
+                'email': registration['email'],
+                'password': 'replacement-safe-password',
             },
             format='json',
         )

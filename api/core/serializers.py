@@ -51,10 +51,7 @@ class RegisterSerializer(serializers.Serializer):
     specialty      = serializers.CharField(max_length=100, required=False, allow_blank=True)
 
     def validate_email(self, value):
-        normalized_email = value.strip().lower()
-        if User.objects.filter(email__iexact=normalized_email).exists():
-            raise serializers.ValidationError("A user with this email already exists.")
-        return normalized_email
+        return value.strip().lower()
 
     def create(self, validated_data):
         role     = validated_data['role']

@@ -46,8 +46,11 @@ After creating the backend, set this non-secret Cloudflare Pages build variable:
 PHYSIOVISION_API_BASE=https://your-api.onrender.com/api
 ```
 
-The Render Blueprint sends account-verification and password-reset messages
-through the Gmail API. Set these private Render environment variables:
+The Render Blueprint sends account-verification, two-step sign-in, and
+password-reset messages through the Gmail API. Registration verifies ownership
+of the address once; every later password login sends a fresh six-digit,
+single-use code and does not create an API session until that code is verified.
+Set these private Render environment variables:
 
 ```text
 EMAIL_PROVIDER=gmail_api

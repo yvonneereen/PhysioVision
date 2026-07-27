@@ -7,11 +7,13 @@ import {
   logout,
   register,
   requestPasswordReset,
+  resendLoginVerification,
   resetPassword,
   resendEmailVerification,
   verifyEmail,
+  verifyLogin,
   verifyPasswordResetCode,
-} from "./api.js?v=17";
+} from "./api.js?v=18";
 import { getRoleNavigationState } from "./role-ui.js?v=17";
 
 const shell        = document.getElementById("auth-modal");
@@ -60,6 +62,8 @@ const USER_CACHE_KEYS = [
 ];
 
 let pendingVerificationEmail = "";
+let pendingVerificationPurpose = "account";
+let pendingLoginChallengeId = "";
 let pendingPasswordResetEmail = "";
 let pendingPasswordResetToken = "";
 
@@ -160,6 +164,8 @@ function routeAfterAuthentication(user) {
 }
 
 function selectLoginTab() {
+  pendingVerificationPurpose = "account";
+  pendingLoginChallengeId = "";
   hideAuthForms();
   loginForm.style.display = "";
   authTabs.style.display = "flex";
@@ -179,8 +185,14 @@ function selectRegisterTab(role = "patient") {
   clearError(registerError);
 }
 
-function selectVerification(email, message = "We sent a 6-digit code to") {
+function selectVerification(
+  email,
+  message = "We sent a 6-digit code to",
+  { purpose = "account", challengeId = "" } = {}
+) {
   pendingVerificationEmail = String(email ?? "").trim().toLowerCase();
+  pendingVerificationPurpose = purpose;
+  pendingLoginChallengeId = String(challengeId ?? "");
   hideAuthForms();
   verificationForm.style.display = "";
   authTabs.style.display = "none";
@@ -246,7 +258,25 @@ loginForm.addEventListener("submit", async (e) => {
   clearError(loginStatus);
   const data = new FormData(loginForm);
   try {
-    await login({ email: data.get("email"), password: data.get("password") });
+    const result = await login({
+      email: data.get("email"),
+      password: data.get("password"),
+    });
+    if (
+      result.verification_required
+      && result.verification_purpose === "login"
+      && result.challenge_id
+    ) {
+      selectVerification(
+        result.email ?? data.get("email"),
+        "Enter the 6-digit sign-in code sent to",
+        {
+          purpose: "login",
+          challengeId: result.challenge_id,
+        }
+      );
+      return;
+    }
     const user = await completeAuthentication();
     hideModal();
     updateAuthButtons(true, user);
@@ -368,10 +398,18 @@ verificationForm.addEventListener("submit", async (e) => {
   clearError(verificationError);
   const data = new FormData(verificationForm);
   try {
-    await verifyEmail({
-      email: pendingVerificationEmail,
-      code: String(data.get("code") ?? "").trim(),
-    });
+    const code = String(data.get("code") ?? "").trim();
+    if (pendingVerificationPurpose === "login") {
+      await verifyLogin({
+        challengeId: pendingLoginChallengeId,
+        code,
+      });
+    } else {
+      await verifyEmail({
+        email: pendingVerificationEmail,
+        code,
+      });
+    }
     const user = await completeAuthentication();
     hideModal();
     updateAuthButtons(true, user);
@@ -388,7 +426,12 @@ resendVerification.addEventListener("click", async () => {
   clearError(verificationError);
   resendVerification.disabled = true;
   try {
-    const result = await resendEmailVerification(pendingVerificationEmail);
+    const result = pendingVerificationPurpose === "login"
+      ? await resendLoginVerification(pendingLoginChallengeId)
+      : await resendEmailVerification(pendingVerificationEmail);
+    if (result.challenge_id) {
+      pendingLoginChallengeId = String(result.challenge_id);
+    }
     verificationStatus.textContent = result.detail;
   } catch (err) {
     showError(

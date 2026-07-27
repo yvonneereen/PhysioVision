@@ -81,8 +81,28 @@ export async function register({ email, password, firstName, lastName, role = "p
 
 export async function login({ email, password }) {
   const data = await request("POST", "/auth/login/", { email, password }, { skipAuth: true });
+  if (data.token) setToken(data.token);
+  return data;
+}
+
+export async function verifyLogin({ challengeId, code }) {
+  const data = await request(
+    "POST",
+    "/auth/verify-login/",
+    { challenge_id: challengeId, code },
+    { skipAuth: true }
+  );
   setToken(data.token);
   return data;
+}
+
+export async function resendLoginVerification(challengeId) {
+  return request(
+    "POST",
+    "/auth/resend-login-verification/",
+    { challenge_id: challengeId },
+    { skipAuth: true }
+  );
 }
 
 export async function verifyEmail({ email, code }) {

@@ -109,6 +109,15 @@ class VerifyEmailSerializer(serializers.Serializer):
         return value.strip().lower()
 
 
+class VerifyLoginSerializer(serializers.Serializer):
+    challenge_id = serializers.UUIDField()
+    code = serializers.RegexField(r"^\d{6}$")
+
+
+class ResendLoginVerificationSerializer(serializers.Serializer):
+    challenge_id = serializers.UUIDField()
+
+
 class ResendEmailVerificationSerializer(serializers.Serializer):
     email = serializers.EmailField()
 

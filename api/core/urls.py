@@ -6,6 +6,16 @@ urlpatterns = [
     path('register/', views.RegisterView.as_view(), name='auth-register'),
     path('login/',    views.LoginView.as_view(),    name='auth-login'),
     path(
+        'verify-login/',
+        views.VerifyLoginView.as_view(),
+        name='auth-verify-login',
+    ),
+    path(
+        'resend-login-verification/',
+        views.ResendLoginVerificationView.as_view(),
+        name='auth-resend-login-verification',
+    ),
+    path(
         'verify-email/',
         views.VerifyEmailView.as_view(),
         name='auth-verify-email',

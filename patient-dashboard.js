@@ -7,7 +7,7 @@ import {
   getPrescriptions,
   getSessions,
   isLoggedIn,
-} from "./api.js?v=17";
+} from "./api.js?v=18";
 import {
   analysePatientTrend,
   isCurrentPrescription,

@@ -1,0 +1,134 @@
+import math
+import secrets
+from datetime import timedelta
+
+from django.conf import settings
+from django.contrib.auth.hashers import check_password, make_password
+from django.db import transaction
+from django.utils import timezone
+
+from .email_delivery import EmailDeliveryError, deliver_email
+from .models import LoginVerificationChallenge, User
+
+
+class LoginVerificationCooldown(Exception):
+    def __init__(self, retry_after):
+        self.retry_after = retry_after
+        super().__init__("Please wait before requesting another sign-in code.")
+
+
+class LoginVerificationDeliveryError(Exception):
+    pass
+
+
+def issue_login_verification(
+    user,
+    *,
+    challenge=None,
+    enforce_cooldown=False,
+):
+    """Create or replace the code for a password-authenticated login."""
+
+    now = timezone.now()
+    if challenge is not None:
+        challenge = LoginVerificationChallenge.objects.filter(
+            pk=challenge.pk,
+            user=user,
+            consumed_at__isnull=True,
+        ).first()
+        if not challenge or challenge.expires_at <= now:
+            return None
+
+        cooldown_seconds = (
+            settings.EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS
+        )
+        if enforce_cooldown and challenge.sent_at:
+            elapsed = (now - challenge.sent_at).total_seconds()
+            if elapsed < cooldown_seconds:
+                raise LoginVerificationCooldown(
+                    max(1, math.ceil(cooldown_seconds - elapsed))
+                )
+    else:
+        with transaction.atomic():
+            User.objects.select_for_update().get(pk=user.pk)
+            LoginVerificationChallenge.objects.filter(user=user).delete()
+            challenge = LoginVerificationChallenge.objects.create(
+                user=user,
+                code_hash="",
+                expires_at=now,
+            )
+
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    challenge.code_hash = make_password(code)
+    challenge.expires_at = now + timedelta(
+        minutes=settings.EMAIL_VERIFICATION_CODE_TTL_MINUTES
+    )
+    challenge.sent_at = None
+    challenge.attempts_remaining = (
+        settings.EMAIL_VERIFICATION_MAX_ATTEMPTS
+    )
+    challenge.consumed_at = None
+    challenge.save(update_fields=[
+        "code_hash",
+        "expires_at",
+        "sent_at",
+        "attempts_remaining",
+        "consumed_at",
+        "updated_at",
+    ])
+
+    try:
+        deliver_email(
+            subject="Your PhysioVision sign-in code",
+            message=(
+                f"Your PhysioVision sign-in code is {code}.\n\n"
+                f"It expires in {settings.EMAIL_VERIFICATION_CODE_TTL_MINUTES} "
+                "minutes and can only be used once. If you did not try to "
+                "sign in, change your PhysioVision password."
+            ),
+            recipient=user.email,
+        )
+    except EmailDeliveryError as exc:
+        raise LoginVerificationDeliveryError from exc
+
+    challenge.sent_at = timezone.now()
+    challenge.save(update_fields=["sent_at", "updated_at"])
+    return challenge
+
+
+@transaction.atomic
+def verify_login_code(challenge_id, code):
+    now = timezone.now()
+    challenge = (
+        LoginVerificationChallenge.objects.select_for_update()
+        .select_related("user")
+        .filter(pk=challenge_id)
+        .first()
+    )
+
+    if not challenge or challenge.consumed_at:
+        return None, "invalid"
+    if challenge.expires_at <= now:
+        return None, "expired"
+    if challenge.attempts_remaining == 0:
+        return None, "attempts_exhausted"
+    if not check_password(code, challenge.code_hash):
+        challenge.attempts_remaining -= 1
+        challenge.save(update_fields=[
+            "attempts_remaining",
+            "updated_at",
+        ])
+        reason = (
+            "attempts_exhausted"
+            if challenge.attempts_remaining == 0
+            else "invalid"
+        )
+        return None, reason
+
+    user = challenge.user
+    if not user.is_active or not user.email_verified_at:
+        return None, "invalid"
+
+    challenge.consumed_at = now
+    challenge.save(update_fields=["consumed_at", "updated_at"])
+    return user, None

@@ -22,9 +22,16 @@ from .email_verification import (
     issue_email_verification,
     verify_email_code,
 )
+from .login_verification import (
+    LoginVerificationCooldown,
+    LoginVerificationDeliveryError,
+    issue_login_verification,
+    verify_login_code,
+)
 from .models import (
     CareInvitation,
     CarePath,
+    LoginVerificationChallenge,
     PatientProfile,
     User,
     UserRole,
@@ -46,8 +53,10 @@ from .serializers import (
     PatientProfileSerializer,
     RegisterSerializer,
     ResendEmailVerificationSerializer,
+    ResendLoginVerificationSerializer,
     ResetPasswordSerializer,
     VerifyEmailSerializer,
+    VerifyLoginSerializer,
     VerifyPasswordResetCodeSerializer,
     WellnessScreeningSerializer,
 )
@@ -173,8 +182,126 @@ class LoginView(APIView):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
+        try:
+            challenge = issue_login_verification(user)
+        except LoginVerificationDeliveryError:
+            logger.exception("Could not deliver sign-in verification email")
+            return Response(
+                {
+                    'detail': (
+                        'Your password was accepted, but the sign-in code '
+                        'could not be emailed. Please try again.'
+                    ),
+                    'code': 'login_verification_delivery_failed',
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        return Response(
+            {
+                'detail': 'We emailed you a 6-digit sign-in code.',
+                'verification_required': True,
+                'verification_purpose': 'login',
+                'challenge_id': challenge.id,
+                'email': user.email,
+                'role': user.role,
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class VerifyLoginView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'login_verification'
+
+    def post(self, request):
+        serializer = VerifyLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user, reason = verify_login_code(
+            serializer.validated_data['challenge_id'],
+            serializer.validated_data['code'],
+        )
+        if not user:
+            messages = {
+                'expired': 'This sign-in code has expired. Sign in again.',
+                'attempts_exhausted': (
+                    'Too many incorrect attempts. Sign in again.'
+                ),
+            }
+            return Response(
+                {
+                    'detail': messages.get(
+                        reason,
+                        'Invalid or expired sign-in code.',
+                    ),
+                    'code': f'login_verification_{reason}',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         token = _rotate_token(user)
-        return Response({'token': token.key, 'role': user.role})
+        return Response({
+            'token': token.key,
+            'role': user.role,
+        })
+
+
+class ResendLoginVerificationView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'login_verification_resend'
+
+    def post(self, request):
+        serializer = ResendLoginVerificationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        challenge = (
+            LoginVerificationChallenge.objects.select_related('user')
+            .filter(
+                pk=serializer.validated_data['challenge_id'],
+                consumed_at__isnull=True,
+            )
+            .first()
+        )
+        if not challenge or challenge.expires_at <= timezone.now():
+            return Response(
+                {'detail': 'This sign-in request has expired. Sign in again.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            challenge = issue_login_verification(
+                challenge.user,
+                challenge=challenge,
+                enforce_cooldown=True,
+            )
+        except LoginVerificationCooldown as exc:
+            return Response(
+                {
+                    'detail': (
+                        f'Please wait {exc.retry_after} seconds before '
+                        'requesting another sign-in code.'
+                    ),
+                    'retry_after': exc.retry_after,
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+        except LoginVerificationDeliveryError:
+            logger.exception("Could not resend sign-in verification email")
+            return Response(
+                {'detail': 'The sign-in code could not be sent. Try again.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        if not challenge:
+            return Response(
+                {'detail': 'This sign-in request has expired. Sign in again.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({
+            'detail': 'A new sign-in code has been sent.',
+            'challenge_id': challenge.id,
+        })
 
 
 class VerifyEmailView(APIView):

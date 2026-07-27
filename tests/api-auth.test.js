@@ -50,10 +50,25 @@ await api.register({
 });
 assert.equal(sessionStorage.getItem("physiovision.token"), null);
 
-responses.push({ status: 200, body: { token: "login-token" } });
-await api.login({
+responses.push({
+  status: 202,
+  body: {
+    verification_required: true,
+    verification_purpose: "login",
+    challenge_id: "login-challenge",
+  },
+});
+const loginChallenge = await api.login({
   email: "person@example.com",
   password: "safe-password",
+});
+assert.equal(loginChallenge.challenge_id, "login-challenge");
+assert.equal(sessionStorage.getItem("physiovision.token"), null);
+
+responses.push({ status: 200, body: { token: "login-token" } });
+await api.verifyLogin({
+  challengeId: loginChallenge.challenge_id,
+  code: "456789",
 });
 assert.equal(sessionStorage.getItem("physiovision.token"), "login-token");
 assert.equal(localStorage.getItem("physiovision.token"), null);
@@ -95,8 +110,9 @@ responses.push({ status: 204, body: null });
 await api.logout();
 assert.equal(sessionStorage.getItem("physiovision.token"), null);
 assert.match(requests[0].url, /\/api\/auth\/register\/$/);
-assert.match(requests[3].url, /\/api\/auth\/forgot-password\/$/);
-assert.match(requests[4].url, /\/api\/auth\/verify-reset-code\/$/);
-assert.match(requests[5].url, /\/api\/auth\/reset-password\/$/);
+assert.match(requests[2].url, /\/api\/auth\/verify-login\/$/);
+assert.match(requests[4].url, /\/api\/auth\/forgot-password\/$/);
+assert.match(requests[5].url, /\/api\/auth\/verify-reset-code\/$/);
+assert.match(requests[6].url, /\/api\/auth\/reset-password\/$/);
 
 console.log("API authentication storage tests passed");

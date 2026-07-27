@@ -28,6 +28,30 @@ class ProductionReadinessTests(APITestCase):
     def verification_code(self):
         return re.search(r'\b\d{6}\b', mail.outbox[-1].body).group(0)
 
+    def complete_login(self, email, password):
+        started = self.client.post(
+            '/api/auth/login/',
+            {'email': email, 'password': password},
+            format='json',
+        )
+        self.assertEqual(started.status_code, 202)
+        self.assertTrue(started.data['verification_required'])
+        self.assertEqual(started.data['verification_purpose'], 'login')
+        self.assertTrue(started.data['challenge_id'])
+        self.assertNotIn('token', started.data)
+
+        verified = self.client.post(
+            '/api/auth/verify-login/',
+            {
+                'challenge_id': started.data['challenge_id'],
+                'code': self.verification_code(),
+            },
+            format='json',
+        )
+        self.assertEqual(verified.status_code, 200)
+        self.assertTrue(verified.data['token'])
+        return started, verified
+
     def test_health_check_confirms_database_access(self):
         response = self.client.get('/api/health/')
 
@@ -136,15 +160,11 @@ class ProductionReadinessTests(APITestCase):
         self.assertTrue(user.is_active)
         self.assertIsNotNone(user.email_verified_at)
 
-        signed_in = self.client.post(
-            '/api/auth/login/',
-            {
-                'email': registration['email'],
-                'password': registration['password'],
-            },
-            format='json',
+        sign_in_started, signed_in = self.complete_login(
+            registration['email'],
+            registration['password'],
         )
-        self.assertEqual(signed_in.status_code, 200)
+        self.assertEqual(sign_in_started.status_code, 202)
         self.assertEqual(signed_in.data['role'], UserRole.PATIENT)
         self.assertTrue(signed_in.data['token'])
         self.assertNotEqual(signed_in.data['token'], verified_token)
@@ -164,6 +184,128 @@ class ProductionReadinessTests(APITestCase):
             current_account.data['email'],
             registration['email'],
         )
+
+    def test_verified_user_needs_a_fresh_email_code_for_every_login(self):
+        user = User.objects.create_user(
+            username='two-step@example.com',
+            email='two-step@example.com',
+            password='safe-test-password',
+            first_name='Two',
+            last_name='Step',
+            is_active=True,
+            email_verified_at=timezone.now(),
+        )
+
+        wrong_password = self.client.post(
+            '/api/auth/login/',
+            {'email': user.email, 'password': 'not-the-password'},
+            format='json',
+        )
+        self.assertEqual(wrong_password.status_code, 400)
+        self.assertEqual(len(mail.outbox), 0)
+
+        started = self.client.post(
+            '/api/auth/login/',
+            {'email': user.email, 'password': 'safe-test-password'},
+            format='json',
+        )
+        self.assertEqual(started.status_code, 202)
+        self.assertNotIn('token', started.data)
+        self.assertIn('sign-in code', mail.outbox[-1].subject.lower())
+        valid_code = self.verification_code()
+        wrong_code = (
+            valid_code[:-1]
+            + str((int(valid_code[-1]) + 1) % 10)
+        )
+
+        rejected = self.client.post(
+            '/api/auth/verify-login/',
+            {
+                'challenge_id': started.data['challenge_id'],
+                'code': wrong_code,
+            },
+            format='json',
+        )
+        self.assertEqual(rejected.status_code, 400)
+        self.assertNotIn('token', rejected.data)
+
+        verified = self.client.post(
+            '/api/auth/verify-login/',
+            {
+                'challenge_id': started.data['challenge_id'],
+                'code': valid_code,
+            },
+            format='json',
+        )
+        self.assertEqual(verified.status_code, 200)
+        self.assertTrue(verified.data['token'])
+
+        replayed = self.client.post(
+            '/api/auth/verify-login/',
+            {
+                'challenge_id': started.data['challenge_id'],
+                'code': valid_code,
+            },
+            format='json',
+        )
+        self.assertEqual(replayed.status_code, 400)
+        self.assertNotIn('token', replayed.data)
+
+    @override_settings(EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS=0)
+    @patch(
+        'api.core.login_verification.secrets.randbelow',
+        side_effect=[111111, 222222],
+    )
+    def test_resending_login_code_invalidates_the_previous_code(
+        self,
+        _randbelow,
+    ):
+        user = User.objects.create_user(
+            username='login-resend@example.com',
+            email='login-resend@example.com',
+            password='safe-test-password',
+            is_active=True,
+            email_verified_at=timezone.now(),
+        )
+        started = self.client.post(
+            '/api/auth/login/',
+            {'email': user.email, 'password': 'safe-test-password'},
+            format='json',
+        )
+        first_code = self.verification_code()
+
+        resent = self.client.post(
+            '/api/auth/resend-login-verification/',
+            {'challenge_id': started.data['challenge_id']},
+            format='json',
+        )
+        self.assertEqual(resent.status_code, 200)
+        self.assertEqual(
+            str(resent.data['challenge_id']),
+            str(started.data['challenge_id']),
+        )
+        second_code = self.verification_code()
+
+        old_code = self.client.post(
+            '/api/auth/verify-login/',
+            {
+                'challenge_id': started.data['challenge_id'],
+                'code': first_code,
+            },
+            format='json',
+        )
+        self.assertEqual(old_code.status_code, 400)
+
+        new_code = self.client.post(
+            '/api/auth/verify-login/',
+            {
+                'challenge_id': started.data['challenge_id'],
+                'code': second_code,
+            },
+            format='json',
+        )
+        self.assertEqual(new_code.status_code, 200)
+        self.assertTrue(new_code.data['token'])
 
     def test_registration_normalizes_email_and_rejects_case_duplicates(self):
         registration = {
@@ -206,13 +348,9 @@ class ProductionReadinessTests(APITestCase):
         )
         self.assertEqual(duplicate.status_code, 400)
 
-        signed_in = self.client.post(
-            '/api/auth/login/',
-            {
-                'email': 'MIXEDCASE@example.com',
-                'password': registration['password'],
-            },
-            format='json',
+        _, signed_in = self.complete_login(
+            'MIXEDCASE@example.com',
+            registration['password'],
         )
         self.assertEqual(signed_in.status_code, 200)
 
@@ -269,13 +407,9 @@ class ProductionReadinessTests(APITestCase):
         )
         self.assertEqual(verified.status_code, 200)
 
-        signed_in = self.client.post(
-            '/api/auth/login/',
-            {
-                'email': registration['email'],
-                'password': 'replacement-safe-password',
-            },
-            format='json',
+        _, signed_in = self.complete_login(
+            registration['email'],
+            'replacement-safe-password',
         )
         self.assertEqual(signed_in.status_code, 200)
 
@@ -328,13 +462,9 @@ class ProductionReadinessTests(APITestCase):
             email_verified_at=timezone.now(),
         )
 
-        signed_in = self.client.post(
-            '/api/auth/login/',
-            {
-                'email': user.email,
-                'password': 'old-safe-password',
-            },
-            format='json',
+        _, signed_in = self.complete_login(
+            user.email,
+            'old-safe-password',
         )
         self.assertEqual(signed_in.status_code, 200)
         old_token = signed_in.data['token']
@@ -389,10 +519,9 @@ class ProductionReadinessTests(APITestCase):
         )
         self.assertEqual(old_password.status_code, 400)
 
-        new_password = self.client.post(
-            '/api/auth/login/',
-            {'email': user.email, 'password': 'new-safe-password-2026'},
-            format='json',
+        _, new_password = self.complete_login(
+            user.email,
+            'new-safe-password-2026',
         )
         self.assertEqual(new_password.status_code, 200)
 

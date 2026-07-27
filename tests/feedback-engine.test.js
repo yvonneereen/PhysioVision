@@ -343,7 +343,7 @@ for (const catalogExercise of DRAFT_EXERCISES) {
     engine.update(measurementsForPhase(exercise, stage), timestamp);
   }
 
-  if (exercise.category === "stretch") {
+  if (exercise.category === "stretch" || exercise.category === "balance") {
     assert.equal(engine.inHold, true, `${exercise.id} did not enter its hold`);
     engine.completeHold();
   }

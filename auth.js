@@ -11,7 +11,8 @@ import {
   resendEmailVerification,
   verifyEmail,
   verifyPasswordResetCode,
-} from "./api.js?v=15";
+} from "./api.js?v=16";
+import { getRoleNavigationState } from "./role-ui.js?v=16";
 
 const shell        = document.getElementById("auth-modal");
 const loginForm    = document.getElementById("loginForm");
@@ -38,8 +39,18 @@ const passwordResetEmail = document.getElementById("passwordResetEmail");
 
 const headerSignIn  = document.getElementById("headerSignIn");
 const headerSignOut = document.getElementById("headerSignOut");
+const headerProfile = document.getElementById("headerProfile");
+const headerTherapistView = document.getElementById("headerTherapistView");
+const headerPlanButton = document.getElementById("headerPlanButton");
 const mobileSignIn  = document.getElementById("mobileSignIn");
 const mobileSignOut = document.getElementById("mobileSignOut");
+const mobileProfile = document.getElementById("mobileProfile");
+const mobileTherapistView = document.getElementById("mobileTherapistView");
+const mobilePlanButton = document.getElementById("mobilePlanButton");
+const profileAccountInitials = document.getElementById("profileAccountInitials");
+const profileAccountName = document.getElementById("profileAccountName");
+const profileAccountEmail = document.getElementById("profileAccountEmail");
+const profileAccountRole = document.getElementById("profileAccountRole");
 const USER_CACHE_KEYS = [
   "physiovision.profile.v1",
   "physiovision.calibrations.v1",
@@ -72,11 +83,42 @@ function clearUserCachedData() {
   });
 }
 
-function updateAuthButtons(loggedIn) {
-  headerSignIn.style.display  = loggedIn ? "none" : "";
-  headerSignOut.style.display = loggedIn ? "" : "none";
-  mobileSignIn.style.display  = loggedIn ? "none" : "";
-  mobileSignOut.style.display = loggedIn ? "" : "none";
+function setControlVisible(control, visible) {
+  if (!control) return;
+  control.hidden = !visible;
+  control.style.display = visible ? "" : "none";
+}
+
+function initials(user) {
+  const parts = [user?.first_name, user?.last_name].filter(Boolean);
+  if (!parts.length && user?.email) parts.push(user.email);
+  return parts.map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+}
+
+function renderAccountIdentity(user) {
+  if (!user) return;
+  const fullName = `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim();
+  profileAccountInitials.textContent = initials(user) || "PV";
+  profileAccountName.textContent = fullName || "PhysioVision user";
+  profileAccountEmail.textContent = user.email ?? "";
+  profileAccountRole.textContent =
+    user.role === "clinician" ? "Clinician account" : "Patient account";
+}
+
+function updateAuthButtons(loggedIn, user = null) {
+  const state = getRoleNavigationState(loggedIn, user?.role);
+  document.body.dataset.authRole = loggedIn ? (user?.role ?? "") : "";
+  setControlVisible(headerSignIn, state.showSignIn);
+  setControlVisible(mobileSignIn, state.showSignIn);
+  setControlVisible(headerSignOut, state.showSignOut);
+  setControlVisible(mobileSignOut, state.showSignOut);
+  setControlVisible(headerProfile, state.showPatientProfile);
+  setControlVisible(mobileProfile, state.showPatientProfile);
+  setControlVisible(headerTherapistView, state.showTherapistView);
+  setControlVisible(mobileTherapistView, state.showTherapistView);
+  setControlVisible(headerPlanButton, state.showPlan);
+  setControlVisible(mobilePlanButton, state.showPlan);
+  if (loggedIn && user) renderAccountIdentity(user);
 }
 
 function showModal() {
@@ -205,7 +247,7 @@ loginForm.addEventListener("submit", async (e) => {
     await login({ email: data.get("email"), password: data.get("password") });
     const user = await completeAuthentication();
     hideModal();
-    updateAuthButtons(true);
+    updateAuthButtons(true, user);
     routeAfterAuthentication(user);
   } catch (err) {
     if (err.data?.code === "email_not_verified") {
@@ -330,7 +372,7 @@ verificationForm.addEventListener("submit", async (e) => {
     });
     const user = await completeAuthentication();
     hideModal();
-    updateAuthButtons(true);
+    updateAuthButtons(true, user);
     routeAfterAuthentication(user);
   } catch (err) {
     showError(
@@ -487,7 +529,7 @@ async function completeAuthentication() {
 updateAuthButtons(false);
 if (isLoggedIn()) {
   completeAuthentication()
-    .then(() => updateAuthButtons(true))
+    .then((user) => updateAuthButtons(true, user))
     .catch(() => updateAuthButtons(false));
 } else {
   clearUserCachedData();

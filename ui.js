@@ -103,14 +103,22 @@ import { isLoggedIn } from "./api.js";
   document.querySelectorAll("[data-open]").forEach((button) => {
     button.addEventListener("click", () => {
       let modalId = button.dataset.open;
+      const currentRole =
+        authenticatedRole || document.body.dataset.authRole || null;
       const patientOnly =
         modalId === "plan-modal" || modalId === "profile-modal";
+      const therapistOnly = modalId === "therapist-view";
 
       if (patientOnly && !isLoggedIn()) {
         document.getElementById("authTabLogin")?.click();
         modalId = "auth-modal";
-      } else if (patientOnly && authenticatedRole === "clinician") {
+      } else if (patientOnly && currentRole === "clinician") {
         modalId = "therapist-view";
+      } else if (therapistOnly && !isLoggedIn()) {
+        document.getElementById("authTabLogin")?.click();
+        modalId = "auth-modal";
+      } else if (therapistOnly && currentRole !== "clinician") {
+        return;
       }
 
       openModal(modalId);

@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=31" />
+  <link rel="stylesheet" href="style.css?v=32" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -45,13 +45,28 @@
       >
         Sign in / Register
       </button>
+      <button
+        class="text-button profile-header-button"
+        id="headerProfile"
+        type="button"
+        data-open="profile-modal"
+        hidden
+      >
+        My profile
+      </button>
+      <button
+        class="text-button"
+        id="headerTherapistView"
+        type="button"
+        data-open="therapist-view"
+        hidden
+      >
+        Therapist view
+      </button>
       <button class="text-button profile-header-button" id="headerSignOut" type="button" style="display:none" onclick="window.pvLogout()">
         Sign out
       </button>
-      <button class="text-button" type="button" data-open="therapist-view">
-        Therapist view
-      </button>
-      <button class="button button-small button-light" type="button" data-open="plan-modal">
+      <button class="button button-small button-light" id="headerPlanButton" type="button" data-open="plan-modal">
         Create my plan
       </button>
       <button
@@ -80,10 +95,28 @@
     >
       Sign in / Register
     </button>
+    <button
+      class="text-button mobile-profile-button"
+      id="mobileProfile"
+      type="button"
+      data-open="profile-modal"
+      hidden
+    >
+      My profile
+    </button>
+    <button
+      class="text-button mobile-profile-button"
+      id="mobileTherapistView"
+      type="button"
+      data-open="therapist-view"
+      hidden
+    >
+      Therapist view
+    </button>
     <button class="text-button mobile-profile-button" id="mobileSignOut" type="button" style="display:none" onclick="window.pvLogout()">
       Sign out
     </button>
-    <button class="button button-dark" type="button" data-open="plan-modal">
+    <button class="button button-dark" id="mobilePlanButton" type="button" data-open="plan-modal">
       Create my plan
     </button>
   </nav>
@@ -1120,8 +1153,16 @@
       <button class="modal-close" type="button" data-close-modal aria-label="Close">×</button>
       <p class="eyebrow">Your personal AI profile</p>
       <h2 id="profile-title">Guidance that fits you.</h2>
+      <div class="profile-account-summary">
+        <span class="profile-account-avatar" id="profileAccountInitials" aria-hidden="true">PV</span>
+        <div>
+          <strong id="profileAccountName">Your PhysioVision account</strong>
+          <span id="profileAccountEmail"></span>
+        </div>
+        <em id="profileAccountRole">Patient account</em>
+      </div>
       <p class="form-intro">
-        These preferences are saved only on this device in the prototype. Medical limits are never changed by preferences.
+        Your rehabilitation preferences are stored with your account. This browser tab keeps only a short-lived working copy.
       </p>
       <form id="profileForm">
         <div class="field-grid">
@@ -1510,8 +1551,8 @@
   </div>
 
   <script src="runtime-config.js"></script>
-  <script type="module" src="auth.js?v=15"></script>
-  <script type="module" src="ui.js?v=13"></script>
+  <script type="module" src="auth.js?v=16"></script>
+  <script type="module" src="ui.js?v=14"></script>
   <script type="module" src="therapist.js?v=13"></script>
   <script type="module" src="exercise-library.js?v=13"></script>
   <script type="module" src="main.js?v=45"></script>

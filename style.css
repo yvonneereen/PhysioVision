@@ -3488,6 +3488,55 @@ details.metrics summary {
   width: min(820px, calc(100vw - 32px));
 }
 
+.profile-account-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 20px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--cream);
+}
+
+.profile-account-avatar {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--white);
+  background: var(--green);
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.profile-account-summary strong,
+.profile-account-summary span {
+  display: block;
+}
+
+.profile-account-summary div span {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-account-summary em {
+  padding: 6px 9px;
+  border-radius: 999px;
+  color: #315446;
+  background: var(--mint-light);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+}
+
 .profile-safety-note {
   display: flex;
   gap: 10px;
@@ -4516,6 +4565,15 @@ details.metrics summary {
   .profile-modal,
   .booking-modal {
     padding: 35px 20px 26px;
+  }
+
+  .profile-account-summary {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .profile-account-summary em {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .calibration-overlay {

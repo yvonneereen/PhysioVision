@@ -26,6 +26,7 @@ const frontendEntries = [
   "poses.js",
   "practice-access.js",
   "runtime-config.js",
+  "role-ui.js",
   "therapist.js",
   "ui.js",
   "voice-guidance.js",

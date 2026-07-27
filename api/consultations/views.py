@@ -1,8 +1,8 @@
 from django.utils import timezone
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.viewsets import ModelViewSet
 
-from api.core.models import UserRole
+from api.core.models import ClinicianProfile, UserRole
 
 from .models import Consultation, Escalation
 from .serializers import ConsultationSerializer, EscalationSerializer
@@ -24,7 +24,27 @@ class ConsultationViewSet(ModelViewSet):
         return Consultation.objects.none()
 
     def perform_create(self, serializer):
-        serializer.save(patient=self.request.user.patient_profile)
+        if (
+            self.request.user.role != UserRole.PATIENT
+            or not hasattr(self.request.user, 'patient_profile')
+        ):
+            raise PermissionDenied('Only a patient can request a consultation.')
+
+        patient = self.request.user.patient_profile
+        clinician = (
+            patient.primary_clinician
+            or ClinicianProfile.objects.filter(
+                is_accepting_patients=True
+            ).order_by('user__last_name', 'user__first_name').first()
+        )
+        if not clinician:
+            raise ValidationError({
+                'detail': (
+                    'No physiotherapist is currently available. '
+                    'Please try again later.'
+                )
+            })
+        serializer.save(patient=patient, clinician=clinician)
 
 
 class EscalationViewSet(ModelViewSet):

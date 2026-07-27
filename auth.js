@@ -11,8 +11,8 @@ import {
   resendEmailVerification,
   verifyEmail,
   verifyPasswordResetCode,
-} from "./api.js?v=16";
-import { getRoleNavigationState } from "./role-ui.js?v=16";
+} from "./api.js?v=17";
+import { getRoleNavigationState } from "./role-ui.js?v=17";
 
 const shell        = document.getElementById("auth-modal");
 const loginForm    = document.getElementById("loginForm");
@@ -39,11 +39,13 @@ const passwordResetEmail = document.getElementById("passwordResetEmail");
 
 const headerSignIn  = document.getElementById("headerSignIn");
 const headerSignOut = document.getElementById("headerSignOut");
+const headerPatientDashboard = document.getElementById("headerPatientDashboard");
 const headerProfile = document.getElementById("headerProfile");
 const headerTherapistView = document.getElementById("headerTherapistView");
 const headerPlanButton = document.getElementById("headerPlanButton");
 const mobileSignIn  = document.getElementById("mobileSignIn");
 const mobileSignOut = document.getElementById("mobileSignOut");
+const mobilePatientDashboard = document.getElementById("mobilePatientDashboard");
 const mobileProfile = document.getElementById("mobileProfile");
 const mobileTherapistView = document.getElementById("mobileTherapistView");
 const mobilePlanButton = document.getElementById("mobilePlanButton");
@@ -112,6 +114,8 @@ function updateAuthButtons(loggedIn, user = null) {
   setControlVisible(mobileSignIn, state.showSignIn);
   setControlVisible(headerSignOut, state.showSignOut);
   setControlVisible(mobileSignOut, state.showSignOut);
+  setControlVisible(headerPatientDashboard, state.showPatientDashboard);
+  setControlVisible(mobilePatientDashboard, state.showPatientDashboard);
   setControlVisible(headerProfile, state.showPatientProfile);
   setControlVisible(mobileProfile, state.showPatientProfile);
   setControlVisible(headerTherapistView, state.showTherapistView);
@@ -151,9 +155,7 @@ function routeAfterAuthentication(user) {
         ?.click();
       return;
     }
-    document
-      .getElementById("practice")
-      ?.scrollIntoView({ behavior: "smooth" });
+    window.pvShowPatientDashboard?.();
   }, 0);
 }
 

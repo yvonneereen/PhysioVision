@@ -171,6 +171,10 @@ export async function getSessions() {
   return request("GET", "/sessions/");
 }
 
+export async function getPainCheckins() {
+  return request("GET", "/pain-checkins/");
+}
+
 // ── Calibrations ──────────────────────────────────────────────
 
 export async function postCalibration(calibration) {
@@ -207,6 +211,20 @@ export async function getPrescriptions() {
 
 export async function createPrescription(prescription) {
   return request("POST", "/prescriptions/", prescription);
+}
+
+// ── Consultations and trend alerts ───────────────────────────
+
+export async function getConsultations() {
+  return request("GET", "/consultations/");
+}
+
+export async function createConsultation(consultation) {
+  return request("POST", "/consultations/", consultation);
+}
+
+export async function getEscalations() {
+  return request("GET", "/escalations/");
 }
 
 // ── Role-specific AI assistant ───────────────────────────────

@@ -20,7 +20,6 @@ import { isLoggedIn } from "./api.js";
   const profileForm = document.getElementById("profileForm");
   const planSteps = planForm ? [...planForm.querySelectorAll(".form-step")] : [];
   const progressBars = [...document.querySelectorAll(".modal-progress span")];
-  const toast = document.getElementById("toast");
   const wellnessEligibleOutcome = document.getElementById("wellnessEligibleOutcome");
   const wellnessReviewOutcome = document.getElementById("wellnessReviewOutcome");
   const wellnessReviewReasons = document.getElementById("wellnessReviewReasons");
@@ -29,7 +28,6 @@ import { isLoggedIn } from "./api.js";
   let previousFocus = null;
   let planStep = 1;
   let activeWellnessPlan = null;
-  let toastTimer;
   let authenticatedRole = null;
 
   window.addEventListener("physiovision:auth-role", (event) => {
@@ -106,7 +104,9 @@ import { isLoggedIn } from "./api.js";
       const currentRole =
         authenticatedRole || document.body.dataset.authRole || null;
       const patientOnly =
-        modalId === "plan-modal" || modalId === "profile-modal";
+        modalId === "plan-modal" ||
+        modalId === "profile-modal" ||
+        modalId === "booking-modal";
       const therapistOnly = modalId === "therapist-view";
 
       if (patientOnly && !isLoggedIn()) {
@@ -289,7 +289,11 @@ import { isLoggedIn } from "./api.js";
       exerciseSelect.dispatchEvent(new Event("change", { bubbles: true }));
     }
     closeModal();
-    document.getElementById("practice")?.scrollIntoView({ behavior: "smooth" });
+    if (window.pvStartPatientExercise) {
+      window.pvStartPatientExercise(firstExerciseId);
+    } else {
+      document.getElementById("practice")?.scrollIntoView({ behavior: "smooth" });
+    }
   });
 
   document.querySelector("[data-review-screening]")?.addEventListener("click", () => {
@@ -324,23 +328,6 @@ import { isLoggedIn } from "./api.js";
       if (field) field.checked = true;
     });
   }
-
-  document.querySelectorAll(".date-options, .time-options").forEach((group) => {
-    group.querySelectorAll("button").forEach((button) => {
-      button.addEventListener("click", () => {
-        group.querySelectorAll("button").forEach((item) => {
-          item.classList.toggle("selected", item === button);
-        });
-      });
-    });
-  });
-
-  document.getElementById("confirmBooking")?.addEventListener("click", () => {
-    closeModal();
-    window.clearTimeout(toastTimer);
-    toast?.classList.add("show");
-    toastTimer = window.setTimeout(() => toast?.classList.remove("show"), 4500);
-  });
 
   document.querySelectorAll(".therapist-sidebar nav button").forEach((button) => {
     button.addEventListener("click", () => {

@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=32" />
+  <link rel="stylesheet" href="style.css?v=33" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -44,6 +44,15 @@
         data-auth-mode="login"
       >
         Sign in / Register
+      </button>
+      <button
+        class="text-button profile-header-button"
+        id="headerPatientDashboard"
+        type="button"
+        data-patient-dashboard
+        hidden
+      >
+        My home
       </button>
       <button
         class="text-button profile-header-button"
@@ -97,6 +106,15 @@
     </button>
     <button
       class="text-button mobile-profile-button"
+      id="mobilePatientDashboard"
+      type="button"
+      data-patient-dashboard
+      hidden
+    >
+      My home
+    </button>
+    <button
+      class="text-button mobile-profile-button"
       id="mobileProfile"
       type="button"
       data-open="profile-modal"
@@ -120,6 +138,171 @@
       Create my plan
     </button>
   </nav>
+
+  <main
+    class="patient-dashboard"
+    id="patientDashboard"
+    aria-labelledby="patientDashboardTitle"
+    tabindex="-1"
+    hidden
+  >
+    <section class="patient-dashboard-hero">
+      <div>
+        <p class="eyebrow eyebrow-light">Your PhysioVision home</p>
+        <h1 id="patientDashboardTitle">
+          Welcome back, <span id="patientDashboardName">there</span>.
+        </h1>
+        <p id="patientDashboardIntro">
+          Your plan, progress and support are together in one clear place.
+        </p>
+      </div>
+      <div class="patient-dashboard-primary-actions">
+        <button
+          class="button button-coral"
+          id="patientStartPrimary"
+          type="button"
+          data-patient-start
+        >
+          Start today’s exercises <span aria-hidden="true">→</span>
+        </button>
+        <button
+          class="button button-outline-light"
+          type="button"
+          data-open="booking-modal"
+        >
+          Book consultation
+        </button>
+      </div>
+    </section>
+
+    <section
+      class="patient-trend-alert hidden"
+      id="patientTrendAlert"
+      aria-labelledby="patientTrendAlertTitle"
+    >
+      <span class="patient-trend-alert-icon" aria-hidden="true">!</span>
+      <div>
+        <p class="eyebrow">AI-supported trend check</p>
+        <h2 id="patientTrendAlertTitle">A physiotherapist review is suggested</h2>
+        <p id="patientTrendAlertMessage"></p>
+        <small>
+          This is a trend prompt, not a diagnosis. You decide whether to request
+          a consultation.
+        </small>
+      </div>
+      <button class="button button-dark" type="button" data-open="booking-modal">
+        Book consultation
+      </button>
+    </section>
+
+    <div class="patient-dashboard-grid">
+      <section class="patient-dashboard-card patient-plan-card" aria-labelledby="patientPlanTitle">
+        <div class="patient-card-heading">
+          <div>
+            <p class="eyebrow">My exercise plan</p>
+            <h2 id="patientPlanTitle">Today’s programme</h2>
+          </div>
+          <span class="status-pill" id="patientPlanStatus">Loading plan…</span>
+        </div>
+        <p class="patient-card-intro" id="patientPlanIntro">
+          We are loading the exercises available for your care pathway.
+        </p>
+        <div class="patient-plan-list" id="patientPlanList" aria-live="polite"></div>
+        <div class="patient-plan-actions">
+          <button
+            class="button button-coral"
+            id="patientPlanStart"
+            type="button"
+            data-patient-start
+          >
+            Start exercises <span aria-hidden="true">→</span>
+          </button>
+          <button
+            class="text-link"
+            id="patientCreateWellnessPlan"
+            type="button"
+            data-open="plan-modal"
+          >
+            Create or update my wellness plan
+          </button>
+        </div>
+      </section>
+
+      <section class="patient-dashboard-card patient-trend-card" aria-labelledby="patientTrendTitle">
+        <div class="patient-card-heading">
+          <div>
+            <p class="eyebrow">My progress</p>
+            <h2 id="patientTrendTitle">Recent movement trend</h2>
+          </div>
+          <span class="status-pill" id="patientTrendStatus">Building baseline</span>
+        </div>
+        <p class="patient-card-intro" id="patientTrendMessage">
+          Complete guided sessions and pain check-ins to begin your trend.
+        </p>
+        <div class="patient-metric-grid">
+          <article>
+            <span>Sessions this week</span>
+            <strong id="patientSessionsMetric">—</strong>
+            <small>completed sessions</small>
+          </article>
+          <article>
+            <span>Movement quality</span>
+            <strong id="patientQualityMetric">—</strong>
+            <small>recent measured average</small>
+          </article>
+          <article>
+            <span>Latest pain check-in</span>
+            <strong id="patientPainMetric">—</strong>
+            <small>self-reported, out of 10</small>
+          </article>
+        </div>
+        <div
+          class="patient-trend-chart"
+          id="patientTrendChart"
+          role="img"
+          aria-label="No movement-quality trend is available yet"
+        ></div>
+        <p class="patient-trend-method">
+          Early indicators only. The final clinical trend criteria are still
+          being validated and will remain separate from AI interpretation.
+        </p>
+      </section>
+
+      <aside class="patient-dashboard-side">
+        <section class="patient-support-card">
+          <span class="patient-support-icon" aria-hidden="true">↗</span>
+          <p class="eyebrow">Physiotherapist support</p>
+          <h2>Talk to a professional whenever you choose.</h2>
+          <p>
+            Booking is always available—you do not need to wait for a warning
+            from the AI.
+          </p>
+          <button class="button button-dark full-button" type="button" data-open="booking-modal">
+            Book a consultation
+          </button>
+          <p class="patient-upcoming-consultation" id="patientUpcomingConsultation">
+            No consultation currently scheduled.
+          </p>
+        </section>
+
+        <section class="patient-support-card patient-ai-plan-card">
+          <span class="patient-support-icon" aria-hidden="true">✦</span>
+          <p class="eyebrow">General wellness</p>
+          <h2>Build a personalized plan with AI support.</h2>
+          <p>
+            For older adults without a diagnosed condition or clinician
+            restrictions, a safety screen creates a conservative starting plan.
+          </p>
+          <button class="button button-coral full-button" type="button" data-open="plan-modal">
+            Create my wellness plan
+          </button>
+          <button class="text-link patient-ask-ai" id="patientAskAi" type="button">
+            Ask the movement companion a question
+          </button>
+        </section>
+      </aside>
+    </div>
+  </main>
 
   <main id="main-content">
     <section class="hero">
@@ -333,6 +516,14 @@
     </section>
 
     <section class="practice-section" id="practice">
+      <button
+        class="patient-back-dashboard hidden"
+        id="patientBackToDashboard"
+        type="button"
+        data-patient-dashboard
+      >
+        <span aria-hidden="true">←</span> Back to my home
+      </button>
       <div class="section-kicker section-kicker-light">
         <span>02</span>
         <span>Live exercise guide</span>
@@ -1260,40 +1451,61 @@
     <section class="modal booking-modal" role="dialog" aria-modal="true" aria-labelledby="booking-title">
       <button class="modal-close" type="button" data-close-modal aria-label="Close">×</button>
       <p class="eyebrow">Online consultation</p>
-      <h2 id="booking-title">Choose a time with<br />your physiotherapist.</h2>
+      <h2 id="booking-title">Request a time with<br />a physiotherapist.</h2>
       <div class="therapist-summary">
-        <div class="avatar avatar-mei">ML</div>
-        <div><strong>Mei Lin, PT</strong><span>Musculoskeletal physiotherapist · 12 years</span></div>
-        <span class="status-pill">Available this week</span>
-      </div>
-      <div class="booking-columns">
+        <div class="avatar avatar-mei" id="bookingClinicianAvatar">PV</div>
         <div>
-          <span class="field-label">Select day</span>
-          <div class="date-options">
-            <button type="button"><span>Tue</span><strong>21</strong></button>
-            <button type="button" class="selected"><span>Wed</span><strong>22</strong></button>
-            <button type="button"><span>Thu</span><strong>23</strong></button>
-            <button type="button"><span>Fri</span><strong>24</strong></button>
-          </div>
+          <strong id="bookingClinicianName">Your PhysioVision care team</strong>
+          <span id="bookingClinicianDetail">
+            Your linked physiotherapist is used first. Otherwise, an available
+            platform physiotherapist will review the request.
+          </span>
         </div>
-        <div>
-          <span class="field-label">Select time</span>
-          <div class="time-options">
-            <button type="button">09:30</button>
-            <button type="button" class="selected">11:00</button>
-            <button type="button">14:30</button>
-            <button type="button">16:00</button>
-          </div>
-        </div>
+        <span class="status-pill">Request appointment</span>
       </div>
-      <label class="booking-reason">
-        <span>What would you like to discuss?</span>
-        <textarea rows="2" placeholder="Optional note for your physiotherapist">My right knee feels less stable during half squats.</textarea>
-      </label>
-      <button class="button button-coral full-button" type="button" id="confirmBooking">
-        Confirm video consultation <span aria-hidden="true">→</span>
-      </button>
-      <p class="booking-footnote">Prototype booking—no payment or real appointment will be made.</p>
+      <form id="bookingForm">
+        <div class="booking-columns">
+          <label>
+            <span class="field-label">Preferred day</span>
+            <input id="bookingDate" name="date" type="date" required />
+          </label>
+          <label>
+            <span class="field-label">Preferred time</span>
+            <select id="bookingTime" name="time" required>
+              <option value="09:30">09:30</option>
+              <option value="11:00">11:00</option>
+              <option value="14:30">14:30</option>
+              <option value="16:00">16:00</option>
+            </select>
+          </label>
+          <label>
+            <span class="field-label">Duration</span>
+            <select id="bookingDuration" name="duration">
+              <option value="30">30 minutes</option>
+              <option value="45">45 minutes</option>
+              <option value="60">60 minutes</option>
+            </select>
+          </label>
+          <label class="booking-reason">
+            <span>What would you like to discuss?</span>
+            <textarea
+              id="bookingNotes"
+              name="notes"
+              rows="3"
+              maxlength="1000"
+              placeholder="For example: My right knee has felt less stable during half squats."
+            ></textarea>
+          </label>
+        </div>
+        <p class="booking-status" id="bookingStatus" role="status" aria-live="polite"></p>
+        <button class="button button-coral full-button" type="submit" id="confirmBooking">
+          Request video consultation <span aria-hidden="true">→</span>
+        </button>
+        <p class="booking-footnote">
+          This sends a request; the appointment is confirmed only after a
+          physiotherapist accepts it. This is not an emergency service.
+        </p>
+      </form>
     </section>
   </div>
 
@@ -1406,7 +1618,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite">
     <span>✓</span>
-    <p><strong>Consultation reserved</strong>Wednesday 22 July at 11:00 with Mei Lin</p>
+    <p id="toastMessage"><strong>Consultation requested</strong>Your physiotherapist will confirm the time.</p>
   </div>
 
   <!-- Auth modal -->
@@ -1551,8 +1763,9 @@
   </div>
 
   <script src="runtime-config.js"></script>
-  <script type="module" src="auth.js?v=16"></script>
-  <script type="module" src="ui.js?v=14"></script>
+  <script type="module" src="auth.js?v=17"></script>
+  <script type="module" src="ui.js?v=15"></script>
+  <script type="module" src="patient-dashboard.js?v=1"></script>
   <script type="module" src="therapist.js?v=13"></script>
   <script type="module" src="exercise-library.js?v=13"></script>
   <script type="module" src="main.js?v=45"></script>

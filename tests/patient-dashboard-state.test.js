@@ -1,0 +1,70 @@
+import assert from "node:assert/strict";
+
+import {
+  analysePatientTrend,
+  isCurrentPrescription,
+} from "../patient-dashboard-state.js";
+
+const dates = [
+  "2026-07-27T08:00:00Z",
+  "2026-07-25T08:00:00Z",
+  "2026-07-23T08:00:00Z",
+];
+
+assert.equal(
+  analysePatientTrend({
+    sessions: dates.map((started_at, index) => ({
+      started_at,
+      quality_score: [62, 72, 80][index],
+    })),
+    now: new Date("2026-07-27T12:00:00Z"),
+  }).status,
+  "review_suggested",
+);
+
+assert.equal(
+  analysePatientTrend({
+    painCheckins: dates.map((checked_at, index) => ({
+      checked_at,
+      pain_level: [6, 5, 3][index],
+      recovery_status: index < 2 ? "worse" : "same",
+    })),
+  }).reason,
+  "pain_increase",
+);
+
+assert.equal(
+  analysePatientTrend({
+    escalations: [{
+      status: "open",
+      trigger_type: "quality_decline",
+      description: "Measured movement quality has decreased.",
+      created_at: dates[0],
+    }],
+  }).title,
+  "A physiotherapist review is suggested",
+);
+
+assert.equal(
+  analysePatientTrend({
+    sessions: dates.map((started_at, index) => ({
+      started_at,
+      quality_score: [84, 80, 76][index],
+    })),
+  }).status,
+  "improving",
+);
+
+assert.equal(
+  isCurrentPrescription(
+    {
+      is_active: true,
+      valid_from: "2026-07-01",
+      valid_until: "2026-07-31",
+    },
+    new Date("2026-07-27T12:00:00Z"),
+  ),
+  true,
+);
+
+console.log("patient dashboard state tests passed");

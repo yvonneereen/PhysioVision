@@ -14,7 +14,10 @@ class ConsultationSerializer(serializers.ModelSerializer):
             'patient_notes', 'clinician_notes', 'video_link',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'clinician_notes', 'video_link', 'created_at', 'updated_at']
+        read_only_fields = [
+            'id', 'clinician', 'clinician_name', 'status',
+            'clinician_notes', 'video_link', 'created_at', 'updated_at',
+        ]
 
     def get_clinician_name(self, obj):
         return str(obj.clinician.user)

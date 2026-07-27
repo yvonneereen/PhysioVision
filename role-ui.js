@@ -3,8 +3,9 @@ export function getRoleNavigationState(loggedIn, role) {
   return {
     showSignIn: !authenticated,
     showSignOut: authenticated,
+    showPatientDashboard: authenticated && role === "patient",
     showPatientProfile: authenticated && role === "patient",
     showTherapistView: authenticated && role === "clinician",
-    showPlan: !authenticated || role === "patient",
+    showPlan: !authenticated,
   };
 }

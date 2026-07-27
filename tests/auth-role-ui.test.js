@@ -5,6 +5,7 @@ import { getRoleNavigationState } from "../role-ui.js";
 assert.deepEqual(getRoleNavigationState(false, null), {
   showSignIn: true,
   showSignOut: false,
+  showPatientDashboard: false,
   showPatientProfile: false,
   showTherapistView: false,
   showPlan: true,
@@ -13,14 +14,16 @@ assert.deepEqual(getRoleNavigationState(false, null), {
 assert.deepEqual(getRoleNavigationState(true, "patient"), {
   showSignIn: false,
   showSignOut: true,
+  showPatientDashboard: true,
   showPatientProfile: true,
   showTherapistView: false,
-  showPlan: true,
+  showPlan: false,
 });
 
 assert.deepEqual(getRoleNavigationState(true, "clinician"), {
   showSignIn: false,
   showSignOut: true,
+  showPatientDashboard: false,
   showPatientProfile: false,
   showTherapistView: true,
   showPlan: false,

@@ -3590,11 +3590,13 @@ details.metrics summary {
 }
 
 .patient-app-active .site-header {
+  position: sticky;
+  top: 0;
   grid-template-columns: minmax(210px, 1fr) auto;
   color: var(--white);
   background: var(--ink);
   border-bottom-color: rgba(255, 255, 255, 0.22);
-  box-shadow: none;
+  box-shadow: 0 8px 24px rgba(17, 44, 46, 0.12);
 }
 
 .patient-app-active .header-actions {
@@ -3675,11 +3677,13 @@ details.metrics summary {
   align-items: end;
   padding: clamp(28px, 5vw, 58px);
   overflow: hidden;
+  border: 1px solid rgba(25, 56, 58, 0.18);
   border-radius: 28px;
   color: var(--white);
   background:
     radial-gradient(circle at 82% 10%, rgba(185, 217, 200, 0.24), transparent 32%),
     var(--ink);
+  box-shadow: 0 16px 36px rgba(17, 44, 46, 0.1);
 }
 
 .patient-dashboard-hero h1 {

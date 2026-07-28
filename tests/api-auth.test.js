@@ -23,7 +23,7 @@ globalThis.window = {
 };
 globalThis.fetch = async (url, options) => {
   requests.push({ url, options });
-  const next = responses.shift();
+  const next = await responses.shift();
   return {
     ok: next.status >= 200 && next.status < 300,
     status: next.status,
@@ -106,9 +106,14 @@ await api.resetPassword({
   newPassword: "new-safe-password",
 });
 
-responses.push({ status: 204, body: null });
-await api.logout();
+let finishLogout;
+responses.push(new Promise((resolve) => {
+  finishLogout = resolve;
+}));
+const logoutRequest = api.logout();
 assert.equal(sessionStorage.getItem("physiovision.token"), null);
+finishLogout({ status: 204, body: null });
+await logoutRequest;
 assert.match(requests[0].url, /\/api\/auth\/register\/$/);
 assert.match(requests[2].url, /\/api\/auth\/verify-login\/$/);
 assert.match(requests[4].url, /\/api\/auth\/forgot-password\/$/);

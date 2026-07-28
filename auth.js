@@ -67,6 +67,7 @@ let pendingLoginChallengeId = "";
 let pendingPasswordResetEmail = "";
 let pendingPasswordResetToken = "";
 let loginRequestInProgress = false;
+let logoutRequestInProgress = false;
 
 const authForms = [
   loginForm,
@@ -597,10 +598,29 @@ if (isLoggedIn()) {
   clearUserCachedData();
 }
 
-// Expose logout globally
-window.pvLogout = async () => {
-  await logout();
+async function performLogout() {
+  if (logoutRequestInProgress) return;
+  logoutRequestInProgress = true;
+
+  const revokeToken = logout();
   clearUserCachedData();
   updateAuthButtons(false);
-  location.reload();
-};
+  window.dispatchEvent(new CustomEvent(
+    "physiovision:auth-role",
+    { detail: { role: null, user: null } }
+  ));
+  hideModal();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+
+  try {
+    await revokeToken;
+  } finally {
+    logoutRequestInProgress = false;
+  }
+}
+
+headerSignOut?.addEventListener("click", performLogout);
+mobileSignOut?.addEventListener("click", performLogout);
+
+// Retain the public helper for any older controls or external integrations.
+window.pvLogout = performLogout;

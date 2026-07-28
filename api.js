@@ -147,8 +147,12 @@ export async function resetPassword({ email, resetToken, newPassword }) {
 }
 
 export async function logout() {
-  await request("POST", "/auth/logout/").catch(() => {});
+  // Start server-side token revocation while the token is still available for
+  // the Authorization header, then clear the browser session immediately.
+  // This keeps sign-out responsive even when the hosted API is waking up.
+  const revokeToken = request("POST", "/auth/logout/").catch(() => {});
   clearToken();
+  await revokeToken;
 }
 
 // ── Profile ───────────────────────────────────────────────────

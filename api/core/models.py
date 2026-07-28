@@ -223,6 +223,10 @@ class PatientProfile(TimestampedModel):
         related_name="patients",
     )
 
+    # Slack message timestamp of this patient's parent thread in the alerts
+    # channel, so all Slack activity about them stays grouped in one thread.
+    slack_thread_ts = models.CharField(max_length=32, blank=True, default="")
+
     class Meta:
         db_table            = "core_patientprofile"
         ordering            = ["user__last_name", "user__first_name"]

@@ -247,6 +247,14 @@ export async function createConsultation(consultation) {
   return request("POST", "/consultations/", consultation);
 }
 
+export async function confirmConsultation(id) {
+  return request("POST", `/consultations/${id}/confirm/`);
+}
+
+export async function cancelConsultation(id) {
+  return request("POST", `/consultations/${id}/cancel/`);
+}
+
 export async function getEscalations() {
   return request("GET", "/escalations/");
 }

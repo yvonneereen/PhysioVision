@@ -906,3 +906,33 @@ class CareInvitationFlowTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]['email'], linked.email)
+
+
+from django.test import SimpleTestCase
+
+from .analytics import parse_days_per_week
+
+
+class ParseDaysPerWeekTests(SimpleTestCase):
+    """parse_days_per_week is pure: a dose string → int lower bound."""
+
+    def test_en_dash_range(self):
+        self.assertEqual(parse_days_per_week("4–5"), 4)
+
+    def test_hyphen_range(self):
+        self.assertEqual(parse_days_per_week("4-5"), 4)
+
+    def test_single_number(self):
+        self.assertEqual(parse_days_per_week("7"), 7)
+
+    def test_integer_input(self):
+        self.assertEqual(parse_days_per_week(7), 7)
+
+    def test_empty_string_defaults_to_one(self):
+        self.assertEqual(parse_days_per_week(""), 1)
+
+    def test_none_defaults_to_one(self):
+        self.assertEqual(parse_days_per_week(None), 1)
+
+    def test_non_numeric_defaults_to_one(self):
+        self.assertEqual(parse_days_per_week("as prescribed"), 1)

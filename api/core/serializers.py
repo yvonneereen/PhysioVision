@@ -5,6 +5,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.utils import timezone
 from rest_framework import serializers
 
+from .analytics import adherence_pct, parse_days_per_week, session_quality_trend
 from .models import (
     CareInvitation,
     ClinicianProfile,
@@ -15,12 +16,8 @@ from .models import (
 )
 
 
-def _parse_days_per_week(s):
-    """Parse '4–5' or '4-5' or '4' → int lower bound."""
-    try:
-        return int(re.split(r'[–\-]', str(s))[0])
-    except (ValueError, TypeError):
-        return 1
+# Backwards-compatible alias; canonical implementation now lives in analytics.py.
+_parse_days_per_week = parse_days_per_week
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -256,32 +253,10 @@ class PatientListSerializer(serializers.ModelSerializer):
         return obj.escalations.filter(status='open').count()
 
     def get_trend(self, obj):
-        sessions = [
-            s for s in obj.sessions.order_by('-started_at')[:3]
-            if s.angle_summaries
-        ]
-        if len(sessions) < 2:
-            return 'stable'
-        # Compute per-session scalar: mean of all angle means
-        def session_scalar(s):
-            means = [v['mean'] for v in s.angle_summaries.values() if isinstance(v, dict) and 'mean' in v]
-            return sum(means) / len(means) if means else 0
-        scalars = [session_scalar(s) for s in reversed(sessions)]  # oldest → newest
-        delta = scalars[-1] - scalars[0]
-        if delta > 5:
-            return 'improving'
-        if delta < -5:
-            return 'declining'
-        return 'stable'
+        return session_quality_trend(obj)
 
     def get_adherence_pct(self, obj):
-        prescriptions = [p for p in obj.prescriptions.all() if p.is_active]
-        if not prescriptions:
-            return None
-        week_ago = timezone.now() - timedelta(days=7)
-        sessions_last_7d = obj.sessions.filter(started_at__gte=week_ago).count()
-        target = max(_parse_days_per_week(p.days_per_week) for p in prescriptions)
-        return min(100, round(sessions_last_7d / target * 100)) if target else None
+        return adherence_pct(obj)
 
     def get_latest_pain_level(self, obj):
         checkin = obj.pain_checkins.order_by('-checked_at').first()

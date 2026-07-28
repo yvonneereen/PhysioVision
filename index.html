@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=37" />
+  <link rel="stylesheet" href="style.css?v=41" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -1587,10 +1587,10 @@
           <span>PhysioVision</span>
         </a>
         <nav>
-          <button class="active" type="button"><span>⌂</span> Overview</button>
-          <button type="button"><span>◎</span> Patients</button>
-          <button type="button"><span>□</span> Programmes</button>
-          <button type="button"><span>◷</span> Consultations</button>
+          <button class="active" type="button" data-tab="overview"><span>⌂</span> Overview</button>
+          <button type="button" data-tab="patients"><span>◎</span> Patients</button>
+          <button type="button" data-tab="programmes"><span>□</span> Programmes</button>
+          <button type="button" data-tab="consultations"><span>◷</span> Consultations</button>
         </nav>
         <div class="clinician-profile">
           <div class="avatar avatar-mei" id="clinician-avatar">ML</div>
@@ -1607,23 +1607,97 @@
             Exit dashboard
           </button>
         </div>
-        <div class="clinician-stats">
-          <div><span>Active patients</span><strong id="stat-active-patients">—</strong><em id="stat-active-sub">Loading…</em></div>
-          <div><span>Need review</span><strong id="stat-need-review">—</strong><em id="stat-review-sub" class="attention">Loading…</em></div>
-          <div><span>Adherence</span><strong id="stat-adherence">—</strong><em id="stat-adherence-sub">Loading…</em></div>
-        </div>
-        <div class="patient-table-wrap">
-          <div class="table-heading">
-            <div><strong>Patients needing attention</strong><span>AI-prioritised from recent trends</span></div>
-            <button type="button">View all patients →</button>
+        <!-- ── Overview tab ───────────────────────────────── -->
+        <section class="tab-panel" data-panel="overview">
+          <div class="clinician-stats">
+            <div><span>Active patients</span><strong id="stat-active-patients">—</strong><em id="stat-active-sub">Loading…</em></div>
+            <div><span>Need review</span><strong id="stat-need-review">—</strong><em id="stat-review-sub" class="attention">Loading…</em></div>
+            <div><span>Adherence</span><strong id="stat-adherence">—</strong><em id="stat-adherence-sub">Loading…</em></div>
           </div>
-          <div class="patient-row patient-row-head">
-            <span>Patient</span><span>Programme</span><span>Last session</span><span>Trend</span><span>Pain</span><span>Status</span>
+          <div class="overview-columns">
+            <div class="overview-card">
+              <div class="table-heading">
+                <div><strong>Needs attention</strong><span>Prioritised from escalations &amp; trends</span></div>
+              </div>
+              <div id="overview-attention"><p class="empty-state">Loading…</p></div>
+            </div>
+            <div class="overview-card">
+              <div class="table-heading">
+                <div><strong>Upcoming consultations</strong><span>Next appointments</span></div>
+              </div>
+              <div id="overview-consultations"><p class="empty-state">Loading…</p></div>
+            </div>
           </div>
-          <div id="patient-table-body">
-            <p class="empty-state">Open the dashboard to load your linked patients.</p>
+          <div class="invite-card">
+            <div class="invite-card-copy">
+              <strong>Invite a patient</strong>
+              <span>Generate a one-time code and read it out to the patient. They enter it under “Connect to your physiotherapist” to link their account.</span>
+            </div>
+            <button class="button button-coral button-small" type="button" id="createCareInvite">
+              Generate invitation code
+            </button>
+            <p class="invite-status" id="clinicianInviteStatus"></p>
+            <div class="invite-result hidden" id="careInviteResult">
+              <span class="invite-code" id="careInviteResultCode">—</span>
+              <span class="invite-expiry" id="careInviteExpiry"></span>
+            </div>
           </div>
-        </div>
+        </section>
+
+        <!-- ── Patients tab ───────────────────────────────── -->
+        <section class="tab-panel hidden" data-panel="patients">
+          <div class="patient-table-wrap">
+            <div class="table-heading">
+              <div><strong>All patients</strong><span>Click a patient to view their detail</span></div>
+              <input type="search" id="patient-search" class="dash-search" placeholder="Search patients…" />
+            </div>
+            <div class="patient-row patient-row-head">
+              <span>Patient</span><span>Programme</span><span>Last session</span><span>Trend</span><span>Pain</span><span>Status</span>
+            </div>
+            <div id="patient-table-body">
+              <p class="empty-state">Open the dashboard to load your linked patients.</p>
+            </div>
+          </div>
+          <div id="patient-detail" class="patient-detail hidden"></div>
+        </section>
+
+        <!-- ── Programmes tab ─────────────────────────────── -->
+        <section class="tab-panel hidden" data-panel="programmes">
+          <div class="programme-grid">
+            <form id="rx-form" class="rx-form">
+              <strong>Assign a programme</strong>
+              <label>Patient
+                <select id="rx-patient" required></select>
+              </label>
+              <label>Exercise <small>(live-tracked only)</small>
+                <select id="rx-exercise" required></select>
+              </label>
+              <div class="rx-row">
+                <label>Sets <input id="rx-sets" type="number" min="1" max="10" value="3" required /></label>
+                <label>Reps <input id="rx-reps" type="number" min="1" max="50" value="10" required /></label>
+                <label>Days/week <input id="rx-days" type="text" value="4–5" required /></label>
+              </div>
+              <button class="button button-coral button-small" type="submit">Assign programme</button>
+              <p class="rx-status" id="rx-status"></p>
+            </form>
+            <div class="rx-list-wrap">
+              <div class="table-heading"><div><strong>Active programmes</strong><span>Current prescriptions</span></div></div>
+              <div id="rx-list"><p class="empty-state">Loading…</p></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ── Consultations tab ──────────────────────────── -->
+        <section class="tab-panel hidden" data-panel="consultations">
+          <div class="patient-table-wrap">
+            <div class="table-heading"><div><strong>Upcoming</strong><span>Requested &amp; confirmed</span></div></div>
+            <div id="consult-upcoming"><p class="empty-state">Loading…</p></div>
+          </div>
+          <div class="patient-table-wrap">
+            <div class="table-heading"><div><strong>Past</strong><span>Completed &amp; cancelled</span></div></div>
+            <div id="consult-past"><p class="empty-state">Loading…</p></div>
+          </div>
+        </section>
       </div>
     </section>
   </div>
@@ -1834,8 +1908,8 @@
   <script type="module" src="auth.js?v=19"></script>
   <script type="module" src="ui.js?v=15"></script>
   <script type="module" src="patient-dashboard.js?v=5"></script>
-  <script type="module" src="therapist.js?v=13"></script>
-  <script type="module" src="exercise-library.js?v=13"></script>
+  <script type="module" src="therapist.js?v=14"></script>
+  <script type="module" src="exercise-library.js?v=15"></script>
   <script type="module" src="main.js?v=45"></script>
   <script type="module" src="agent-chat.js?v=13"></script>
   <script type="module" src="care-workflow.js?v=13"></script>

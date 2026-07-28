@@ -1,10 +1,12 @@
 from django.utils import timezone
+from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
 from api.core.models import ClinicianProfile, UserRole
 
-from .models import Consultation, Escalation
+from .models import Consultation, ConsultationStatus, Escalation
 from .serializers import ConsultationSerializer, EscalationSerializer
 
 
@@ -16,12 +18,28 @@ class ConsultationViewSet(ModelViewSet):
         if user.role == UserRole.PATIENT:
             return Consultation.objects.filter(
                 patient=user.patient_profile
-            ).select_related('clinician__user').order_by('-scheduled_at')
+            ).select_related('clinician__user', 'patient__user').order_by('-scheduled_at')
         elif user.role == UserRole.CLINICIAN:
             return Consultation.objects.filter(
                 clinician=user.clinician_profile
-            ).select_related('patient__user').order_by('-scheduled_at')
+            ).select_related('patient__user', 'clinician__user').order_by('-scheduled_at')
         return Consultation.objects.none()
+
+    def _set_status(self, request, new_status):
+        if request.user.role != UserRole.CLINICIAN:
+            raise PermissionDenied('Only the clinician can change a consultation status.')
+        consultation = self.get_object()
+        consultation.status = new_status
+        consultation.save(update_fields=['status', 'updated_at'])
+        return Response(self.get_serializer(consultation).data)
+
+    @action(detail=True, methods=['post'])
+    def confirm(self, request, pk=None):
+        return self._set_status(request, ConsultationStatus.CONFIRMED)
+
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        return self._set_status(request, ConsultationStatus.CANCELLED)
 
     def perform_create(self, serializer):
         if (

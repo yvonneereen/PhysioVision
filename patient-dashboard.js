@@ -40,6 +40,8 @@ const painMetric = document.getElementById("patientPainMetric");
 const trendAlert = document.getElementById("patientTrendAlert");
 const trendAlertTitle = document.getElementById("patientTrendAlertTitle");
 const trendAlertMessage = document.getElementById("patientTrendAlertMessage");
+const trendAlertGuidance = document.getElementById("patientTrendAlertGuidance");
+const consultationCard = document.getElementById("patientConsultationCard");
 const upcomingConsultation = document.getElementById("patientUpcomingConsultation");
 const backToDashboard = document.getElementById("patientBackToDashboard");
 const bookingForm = document.getElementById("bookingForm");
@@ -232,6 +234,7 @@ function renderClinicianPlan(prescriptions) {
   firstExerciseId = active[0]?.exercise ?? null;
   createPlan.hidden = true;
   aiPlanCard.hidden = true;
+  consultationCard.hidden = false;
   const isDemo = active.some((item) => item.is_demo);
   demoNotice.hidden = !isDemo;
 
@@ -293,6 +296,7 @@ function renderWellnessPlan(profile) {
   const eligible = screeningStatus === "eligible";
   createPlan.hidden = false;
   aiPlanCard.hidden = false;
+  consultationCard.hidden = true;
   demoNotice.hidden = true;
 
   if (!eligible) {
@@ -407,6 +411,11 @@ function renderTrendChart(series) {
 
 function renderTrend(data) {
   const trend = analysePatientTrend(data);
+  const profile = currentUser?.profile ?? {};
+  const isPhysiotherapistPath = (
+    (profile.pathway_choice ?? profile.pathwayChoice) === "physiotherapist"
+    || (profile.care_path ?? profile.carePath) === "clinician"
+  );
   trendStatus.textContent = TREND_STATUS_LABELS[trend.status];
   trendStatus.className =
     trend.status === "review_suggested"
@@ -423,8 +432,20 @@ function renderTrend(data) {
   const shouldShowAlert = trend.status === "review_suggested";
   trendAlert.classList.toggle("hidden", !shouldShowAlert);
   if (shouldShowAlert) {
-    trendAlertTitle.textContent = trend.title;
+    trendAlertTitle.textContent = isPhysiotherapistPath
+      ? trend.title
+      : "Pause your wellness plan and seek professional advice";
     trendAlertMessage.textContent = trend.message;
+    trendAlertGuidance.textContent = isPhysiotherapistPath
+      ? (
+        "This is a trend prompt, not a diagnosis. Use your consultation "
+        + "card if you want your physiotherapist to review it."
+      )
+      : (
+        "This is a trend prompt, not a diagnosis. PhysioVision has not "
+        + "connected you to a physiotherapist; contact an independent "
+        + "qualified healthcare professional if symptoms persist or worsen."
+      );
   }
 }
 

@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=34" />
+  <link rel="stylesheet" href="style.css?v=35" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -178,7 +178,7 @@
         <p class="eyebrow">AI-supported trend check</p>
         <h2 id="patientTrendAlertTitle">A physiotherapist review is suggested</h2>
         <p id="patientTrendAlertMessage"></p>
-        <small>
+        <small id="patientTrendAlertGuidance">
           This is a trend prompt, not a diagnosis. You decide whether to request
           a consultation.
         </small>
@@ -274,7 +274,11 @@
       </section>
 
       <aside class="patient-dashboard-side">
-        <section class="patient-support-card">
+        <section
+          class="patient-support-card"
+          id="patientConsultationCard"
+          hidden
+        >
           <span class="patient-support-icon" aria-hidden="true">↗</span>
           <p class="eyebrow">Physiotherapist support</p>
           <h2>Talk to a professional whenever you choose.</h2>
@@ -1840,7 +1844,7 @@
   <script src="runtime-config.js"></script>
   <script type="module" src="auth.js?v=19"></script>
   <script type="module" src="ui.js?v=15"></script>
-  <script type="module" src="patient-dashboard.js?v=3"></script>
+  <script type="module" src="patient-dashboard.js?v=4"></script>
   <script type="module" src="therapist.js?v=13"></script>
   <script type="module" src="exercise-library.js?v=13"></script>
   <script type="module" src="main.js?v=45"></script>

@@ -3688,7 +3688,8 @@ details.metrics summary {
 }
 
 .patient-demo-notice[hidden],
-.patient-ai-plan-card[hidden] {
+.patient-ai-plan-card[hidden],
+#patientConsultationCard[hidden] {
   display: none;
 }
 

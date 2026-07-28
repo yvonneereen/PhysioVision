@@ -4729,6 +4729,33 @@ details.metrics summary {
   background: var(--cream);
 }
 
+/* The clinician dashboard is an application view, not a pop-up dialog. */
+#therapist-view {
+  place-items: stretch;
+  background: var(--cream);
+}
+
+#therapist-view .modal-backdrop {
+  display: none;
+}
+
+#therapist-view .therapist-modal {
+  grid-template-columns: 250px minmax(0, 1fr);
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 100vh;
+  min-height: 100dvh;
+  max-height: none;
+  border-radius: 0;
+  box-shadow: none;
+  transform: none;
+}
+
+#therapist-view .modal-close {
+  display: none;
+}
+
 /* ── Dashboard tabs & views ─────────────────────────────── */
 .tab-panel.hidden { display: none; }
 
@@ -5500,7 +5527,7 @@ details.metrics summary {
     grid-column: 1 / -1;
   }
 
-  .therapist-modal {
+  #therapist-view .therapist-modal {
     grid-template-columns: 80px 1fr;
   }
 
@@ -5833,9 +5860,8 @@ details.metrics summary {
     grid-column: 1 / -1;
   }
 
-  .therapist-modal {
+  #therapist-view .therapist-modal {
     grid-template-columns: 1fr;
-    min-height: calc(100vh - 20px);
   }
 
   .therapist-sidebar {

@@ -8,6 +8,7 @@ from rest_framework import serializers
 from .models import (
     CareInvitation,
     ClinicianProfile,
+    PatientPathwayChoice,
     PatientProfile,
     User,
     UserRole,
@@ -157,17 +158,28 @@ class PatientProfileSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'user', 'goal', 'activity_level', 'mobility_status',
             'focus_side', 'cue_style', 'care_path',
+            'pathway_choice', 'pathway_selected_at',
             'height_cm', 'weight_kg', 'medical_history', 'low_risk_acknowledged',
             'wellness_screening_status', 'wellness_screening_answers',
             'wellness_screened_at',
             'primary_clinician', 'created_at', 'updated_at',
         ]
         read_only_fields = [
-            'id', 'user', 'care_path', 'wellness_screening_status',
+            'id', 'user', 'care_path', 'pathway_choice',
+            'pathway_selected_at', 'wellness_screening_status',
             'wellness_screening_answers', 'wellness_screened_at',
             'created_at', 'updated_at',
         ]
 
+
+
+class PatientPathwayChoiceSerializer(serializers.Serializer):
+    pathway = serializers.ChoiceField(
+        choices=[
+            PatientPathwayChoice.PHYSIOTHERAPIST,
+            PatientPathwayChoice.WELLNESS,
+        ],
+    )
 
 
 class WellnessScreeningSerializer(serializers.Serializer):

@@ -11,6 +11,7 @@ from rest_framework.test import APITestCase
 from .models import (
     CarePath,
     ClinicianProfile,
+    PatientPathwayChoice,
     PatientProfile,
     User,
     UserRole,
@@ -666,6 +667,10 @@ class WellnessScreeningViewTests(APITestCase):
         )
         self.assertEqual(user.patient_profile.care_path, CarePath.WELLNESS)
         self.assertTrue(user.patient_profile.low_risk_acknowledged)
+        self.assertEqual(
+            user.patient_profile.pathway_choice,
+            PatientPathwayChoice.WELLNESS,
+        )
 
     def test_any_unclear_answer_routes_to_review(self):
         user = self.make_patient()
@@ -697,6 +702,112 @@ class WellnessScreeningViewTests(APITestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn('no_concerning_symptoms', response.data)
+
+    def test_physiotherapist_path_cannot_unlock_wellness_exercises(self):
+        user = self.make_patient()
+        user.patient_profile.pathway_choice = (
+            PatientPathwayChoice.PHYSIOTHERAPIST
+        )
+        user.patient_profile.care_path = CarePath.CLINICIAN
+        user.patient_profile.save()
+        self.client.force_authenticate(user)
+
+        response = self.client.post(
+            self.endpoint,
+            self.answers(),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        user.patient_profile.refresh_from_db()
+        self.assertEqual(user.patient_profile.care_path, CarePath.CLINICIAN)
+
+
+class PatientPathwayChoiceViewTests(APITestCase):
+    endpoint = "/api/auth/patient-pathway/"
+
+    def make_patient(self, email="pathway@example.com"):
+        user = User.objects.create_user(
+            username=email,
+            email=email,
+            password="test-password",
+            role=UserRole.PATIENT,
+        )
+        PatientProfile.objects.create(user=user)
+        return user
+
+    def test_patient_can_select_physiotherapist_pathway(self):
+        user = self.make_patient()
+        self.client.force_authenticate(user)
+
+        response = self.client.post(
+            self.endpoint,
+            {"pathway": PatientPathwayChoice.PHYSIOTHERAPIST},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        user.patient_profile.refresh_from_db()
+        self.assertEqual(
+            user.patient_profile.pathway_choice,
+            PatientPathwayChoice.PHYSIOTHERAPIST,
+        )
+        self.assertEqual(user.patient_profile.care_path, CarePath.CLINICIAN)
+        self.assertIsNotNone(user.patient_profile.pathway_selected_at)
+
+    def test_patient_can_select_wellness_pathway(self):
+        user = self.make_patient()
+        self.client.force_authenticate(user)
+
+        response = self.client.post(
+            self.endpoint,
+            {"pathway": PatientPathwayChoice.WELLNESS},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        user.patient_profile.refresh_from_db()
+        self.assertEqual(
+            user.patient_profile.pathway_choice,
+            PatientPathwayChoice.WELLNESS,
+        )
+        self.assertEqual(user.patient_profile.care_path, CarePath.WELLNESS)
+
+    def test_selected_pathway_cannot_be_switched_by_patient(self):
+        user = self.make_patient()
+        user.patient_profile.pathway_choice = PatientPathwayChoice.PHYSIOTHERAPIST
+        user.patient_profile.care_path = CarePath.CLINICIAN
+        user.patient_profile.save()
+        self.client.force_authenticate(user)
+
+        response = self.client.post(
+            self.endpoint,
+            {"pathway": PatientPathwayChoice.WELLNESS},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+
+    def test_clinician_cannot_select_patient_pathway(self):
+        user = User.objects.create_user(
+            username="pathway-clinician@example.com",
+            email="pathway-clinician@example.com",
+            password="test-password",
+            role=UserRole.CLINICIAN,
+        )
+        ClinicianProfile.objects.create(
+            user=user,
+            license_number="DEMO-ONLY",
+        )
+        self.client.force_authenticate(user)
+
+        response = self.client.post(
+            self.endpoint,
+            {"pathway": PatientPathwayChoice.WELLNESS},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
 
 
 class CareInvitationFlowTests(APITestCase):
@@ -751,6 +862,10 @@ class CareInvitationFlowTests(APITestCase):
         self.assertEqual(
             patient.patient_profile.care_path,
             CarePath.NEEDS_REVIEW,
+        )
+        self.assertEqual(
+            patient.patient_profile.pathway_choice,
+            PatientPathwayChoice.PHYSIOTHERAPIST,
         )
 
         second = self.client.post(

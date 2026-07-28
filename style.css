@@ -3677,6 +3677,40 @@ details.metrics summary {
   gap: 10px;
 }
 
+.patient-demo-notice {
+  display: grid;
+  gap: 5px;
+  margin: -4px 0 18px;
+  padding: 16px 18px;
+  border: 1px solid #e4b36e;
+  border-radius: 14px;
+  background: #fff4df;
+}
+
+.patient-demo-notice[hidden],
+.patient-ai-plan-card[hidden] {
+  display: none;
+}
+
+.patient-demo-notice strong {
+  font-size: 13px;
+}
+
+.patient-demo-notice span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.patient-demo-notice a {
+  width: fit-content;
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .patient-plan-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -3856,6 +3890,105 @@ details.metrics summary {
 .patient-ask-ai {
   margin-top: 14px;
   color: var(--white);
+}
+
+.patient-pathway-shell {
+  z-index: 180;
+}
+
+.patient-pathway-modal {
+  width: min(820px, calc(100vw - 32px));
+  padding: clamp(28px, 5vw, 54px);
+}
+
+.patient-pathway-modal .eyebrow,
+.patient-pathway-modal h2 {
+  margin: 0;
+}
+
+.patient-pathway-modal h2 {
+  max-width: 680px;
+  margin-top: 8px;
+  font-size: clamp(32px, 5vw, 56px);
+  line-height: 1.02;
+  letter-spacing: -0.055em;
+}
+
+.patient-pathway-modal .form-intro {
+  max-width: 660px;
+}
+
+.patient-pathway-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin: 26px 0 20px;
+}
+
+.patient-pathway-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  min-height: 190px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  color: var(--green);
+  background: var(--white);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.18s, box-shadow 0.18s, transform 0.18s;
+}
+
+.patient-pathway-option:hover,
+.patient-pathway-option:focus-visible {
+  border-color: var(--coral);
+  box-shadow: 0 15px 35px rgba(23, 56, 58, 0.1);
+  transform: translateY(-2px);
+}
+
+.patient-pathway-option:disabled {
+  cursor: wait;
+  opacity: 0.6;
+  transform: none;
+}
+
+.patient-pathway-number {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--green);
+  background: var(--mint-light);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.patient-pathway-option strong,
+.patient-pathway-option small {
+  display: block;
+}
+
+.patient-pathway-option strong {
+  margin: 5px 0 10px;
+  font-size: 19px;
+  line-height: 1.25;
+}
+
+.patient-pathway-option small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.patient-pathway-status {
+  min-height: 20px;
+  margin: 12px 0 0;
+  color: var(--coral-dark);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .patient-back-dashboard {
@@ -5055,6 +5188,18 @@ details.metrics summary {
   .profile-modal,
   .booking-modal {
     padding: 35px 20px 26px;
+  }
+
+  .patient-pathway-modal {
+    padding: 32px 20px 24px;
+  }
+
+  .patient-pathway-options {
+    grid-template-columns: 1fr;
+  }
+
+  .patient-pathway-option {
+    min-height: 0;
   }
 
   .profile-account-summary {

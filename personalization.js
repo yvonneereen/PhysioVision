@@ -32,6 +32,7 @@ const DEFAULT_PROFILE = Object.freeze({
   focusSide: "right",
   cueStyle: "gentle",
   carePath: "wellness",
+  pathwayChoice: "unselected",
   wellnessScreening: {
     version: 1,
     status: "pending",

@@ -168,6 +168,12 @@ class CarePath(models.TextChoices):
     NEEDS_REVIEW = "needs_review", _("Professional review needed")
 
 
+class PatientPathwayChoice(models.TextChoices):
+    UNSELECTED = "unselected", _("Not selected")
+    PHYSIOTHERAPIST = "physiotherapist", _("Physiotherapist-assigned plan")
+    WELLNESS = "wellness", _("General wellness")
+
+
 class WellnessScreeningStatus(models.TextChoices):
     PENDING = "pending", _("Not completed")
     ELIGIBLE = "eligible", _("Eligible for general wellness")
@@ -189,6 +195,12 @@ class PatientProfile(TimestampedModel):
     focus_side      = models.CharField(max_length=5, choices=FocusSide.choices, default=FocusSide.RIGHT)
     cue_style       = models.CharField(max_length=10, choices=CueStyle.choices, default=CueStyle.GENTLE)
     care_path       = models.CharField(max_length=12, choices=CarePath.choices, default=CarePath.WELLNESS)
+    pathway_choice  = models.CharField(
+        max_length=20,
+        choices=PatientPathwayChoice.choices,
+        default=PatientPathwayChoice.UNSELECTED,
+    )
+    pathway_selected_at = models.DateTimeField(null=True, blank=True)
 
     height_cm             = models.PositiveSmallIntegerField(null=True, blank=True)
     weight_kg             = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)

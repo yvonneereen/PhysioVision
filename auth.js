@@ -13,7 +13,7 @@ import {
   verifyEmail,
   verifyLogin,
   verifyPasswordResetCode,
-} from "./api.js?v=18";
+} from "./api.js?v=19";
 import { getRoleNavigationState } from "./role-ui.js?v=17";
 
 const shell        = document.getElementById("auth-modal");
@@ -524,6 +524,7 @@ async function seedProfileFromApi() {
       focusSide: p.focus_side       ?? "right",
       cueStyle:  p.cue_style        ?? "gentle",
       carePath:  p.care_path        ?? "wellness",
+      pathwayChoice: p.pathway_choice ?? "unselected",
       wellnessScreening: {
         version: 1,
         status: p.wellness_screening_status ?? "pending",

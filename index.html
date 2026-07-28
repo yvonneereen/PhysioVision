@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=33" />
+  <link rel="stylesheet" href="style.css?v=34" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -165,13 +165,6 @@
         >
           Start today’s exercises <span aria-hidden="true">→</span>
         </button>
-        <button
-          class="button button-outline-light"
-          type="button"
-          data-open="booking-modal"
-        >
-          Book consultation
-        </button>
       </div>
     </section>
 
@@ -190,9 +183,6 @@
           a consultation.
         </small>
       </div>
-      <button class="button button-dark" type="button" data-open="booking-modal">
-        Book consultation
-      </button>
     </section>
 
     <div class="patient-dashboard-grid">
@@ -207,6 +197,21 @@
         <p class="patient-card-intro" id="patientPlanIntro">
           We are loading the exercises available for your care pathway.
         </p>
+        <aside class="patient-demo-notice" id="patientDemoNotice" hidden>
+          <strong>Prototype display programme—not a personal prescription</strong>
+          <span>
+            This sample shows an early total-knee-replacement rehabilitation
+            pathway. A real patient must follow their own surgeon and
+            physiotherapist’s instructions.
+          </span>
+          <a
+            href="https://www.massgeneral.org/assets/MGH/pdf/orthopaedics/sports-medicine/physical-therapy/rehabilitation-protocol-for-total-knee-arthroplasty.pdf"
+            target="_blank"
+            rel="noreferrer"
+          >
+            View the Mass General protocol used as the source framework
+          </a>
+        </aside>
         <div class="patient-plan-list" id="patientPlanList" aria-live="polite"></div>
         <div class="patient-plan-actions">
           <button
@@ -285,7 +290,10 @@
           </p>
         </section>
 
-        <section class="patient-support-card patient-ai-plan-card">
+        <section
+          class="patient-support-card patient-ai-plan-card"
+          id="patientAiPlanCard"
+        >
           <span class="patient-support-icon" aria-hidden="true">✦</span>
           <p class="eyebrow">General wellness</p>
           <h2>Build a personalized plan with AI support.</h2>
@@ -293,8 +301,8 @@
             For older adults without a diagnosed condition or clinician
             restrictions, a safety screen creates a conservative starting plan.
           </p>
-          <button class="button button-coral full-button" type="button" data-open="plan-modal">
-            Create my wellness plan
+          <button class="button button-coral full-button" id="patientAiPlanButton" type="button">
+            Ask AI to create my plan
           </button>
           <button class="text-link patient-ask-ai" id="patientAskAi" type="button">
             Ask the movement companion a question
@@ -303,6 +311,73 @@
       </aside>
     </div>
   </main>
+
+  <div
+    class="modal-shell patient-pathway-shell"
+    id="patientPathwayModal"
+    aria-hidden="true"
+  >
+    <div class="modal-backdrop"></div>
+    <section
+      class="modal patient-pathway-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="patientPathwayTitle"
+      aria-describedby="patientPathwayDescription"
+    >
+      <p class="eyebrow">Set up your patient home</p>
+      <h2 id="patientPathwayTitle">Which type of exercise support are you using?</h2>
+      <p class="form-intro" id="patientPathwayDescription">
+        Choose the option that matches your current situation. This controls
+        which exercises and AI functions are available.
+      </p>
+      <div class="patient-pathway-options">
+        <button
+          class="patient-pathway-option"
+          type="button"
+          data-pathway-choice="physiotherapist"
+        >
+          <span class="patient-pathway-number" aria-hidden="true">1</span>
+          <span>
+            <strong>I have a physiotherapist-assigned plan</strong>
+            <small>
+              I have a medical condition, injury or post-operative plan. Show
+              only movements approved for my physiotherapy pathway.
+            </small>
+          </span>
+        </button>
+        <button
+          class="patient-pathway-option"
+          type="button"
+          data-pathway-choice="wellness"
+        >
+          <span class="patient-pathway-number" aria-hidden="true">2</span>
+          <span>
+            <strong>I am here for general wellness</strong>
+            <small>
+              I do not have a diagnosed condition or physiotherapist
+              restriction. Let the AI companion help me create a conservative
+              wellness plan after the safety screen.
+            </small>
+          </span>
+        </button>
+      </div>
+      <div class="profile-safety-note">
+        <span aria-hidden="true">i</span>
+        <p>
+          This choice is not a diagnosis. If you have a condition, recent
+          surgery, concerning symptoms or clinician restrictions, choose the
+          physiotherapist-assigned pathway.
+        </p>
+      </div>
+      <p
+        class="patient-pathway-status"
+        id="patientPathwayStatus"
+        role="status"
+        aria-live="polite"
+      ></p>
+    </section>
+  </div>
 
   <main id="main-content">
     <section class="hero">
@@ -1763,9 +1838,9 @@
   </div>
 
   <script src="runtime-config.js"></script>
-  <script type="module" src="auth.js?v=18"></script>
+  <script type="module" src="auth.js?v=19"></script>
   <script type="module" src="ui.js?v=15"></script>
-  <script type="module" src="patient-dashboard.js?v=2"></script>
+  <script type="module" src="patient-dashboard.js?v=3"></script>
   <script type="module" src="therapist.js?v=13"></script>
   <script type="module" src="exercise-library.js?v=13"></script>
   <script type="module" src="main.js?v=45"></script>

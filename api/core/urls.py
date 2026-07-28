@@ -43,6 +43,11 @@ urlpatterns = [
     path('logout/',   views.LogoutView.as_view(),   name='auth-logout'),
     path('me/',       views.MeView.as_view(),       name='auth-me'),
     path(
+        'patient-pathway/',
+        views.PatientPathwayChoiceView.as_view(),
+        name='patient-pathway',
+    ),
+    path(
         'wellness-screening/',
         views.WellnessScreeningView.as_view(),
         name='wellness-screening',

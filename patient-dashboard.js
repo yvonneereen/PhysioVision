@@ -7,7 +7,8 @@ import {
   getPrescriptions,
   getSessions,
   isLoggedIn,
-} from "./api.js?v=18";
+  selectPatientPathway,
+} from "./api.js?v=19";
 import {
   analysePatientTrend,
   isCurrentPrescription,
@@ -25,6 +26,11 @@ const planList = document.getElementById("patientPlanList");
 const planStart = document.getElementById("patientPlanStart");
 const primaryStart = document.getElementById("patientStartPrimary");
 const createPlan = document.getElementById("patientCreateWellnessPlan");
+const demoNotice = document.getElementById("patientDemoNotice");
+const aiPlanCard = document.getElementById("patientAiPlanCard");
+const aiPlanButton = document.getElementById("patientAiPlanButton");
+const pathwayModal = document.getElementById("patientPathwayModal");
+const pathwayStatus = document.getElementById("patientPathwayStatus");
 const trendStatus = document.getElementById("patientTrendStatus");
 const trendMessage = document.getElementById("patientTrendMessage");
 const trendChart = document.getElementById("patientTrendChart");
@@ -57,6 +63,57 @@ const TREND_STATUS_LABELS = Object.freeze({
   improving: "Improving",
   review_suggested: "Review suggested",
 });
+
+const DEMO_CLINICIAN_PLAN = Object.freeze([
+  {
+    id: "demo-tka-heel-slides",
+    exercise: "heel_slides",
+    exercise_name: "Heel slides",
+    sets: 2,
+    reps: 10,
+    hold_seconds: 0,
+    days_per_week: "daily",
+    notes:
+      "Demo dose only. Use a comfortable, physiotherapist-approved range and do not force the knee through sharp pain.",
+    is_active: true,
+    valid_from: "2020-01-01",
+    valid_until: null,
+    clinician_name: "Prototype programme",
+    is_demo: true,
+  },
+  {
+    id: "demo-tka-hip-bridge",
+    exercise: "hip_bridge",
+    exercise_name: "Supine bridge",
+    sets: 2,
+    reps: 8,
+    hold_seconds: 0,
+    days_per_week: "3",
+    notes:
+      "Demo dose only. Keep the movement controlled and use it only when it is permitted by the patient’s real post-operative plan.",
+    is_active: true,
+    valid_from: "2020-01-01",
+    valid_until: null,
+    clinician_name: "Prototype programme",
+    is_demo: true,
+  },
+  {
+    id: "demo-tka-clamshell",
+    exercise: "clamshell",
+    exercise_name: "Clamshell",
+    sets: 2,
+    reps: 8,
+    hold_seconds: 0,
+    days_per_week: "3",
+    notes:
+      "Demo dose only. Follow surgical precautions and stop if pain or swelling increases.",
+    is_active: true,
+    valid_from: "2020-01-01",
+    valid_until: null,
+    clinician_name: "Prototype programme",
+    is_demo: true,
+  },
+]);
 
 let currentUser = null;
 let currentData = null;
@@ -113,14 +170,14 @@ function openPlanModal() {
   document.querySelector("[data-open='plan-modal']")?.click();
 }
 
-function openBookingModal() {
-  document.querySelector("[data-open='booking-modal']")?.click();
+function openAiCompanion() {
+  document.getElementById("agentChatLauncher")?.click();
 }
 
 function startExercise(exerciseId = firstExerciseId) {
   if (!exerciseId) {
-    if (primaryAction === "booking") {
-      openBookingModal();
+    if (primaryAction === "ai") {
+      openAiCompanion();
     } else if (primaryAction === "reload") {
       loadDashboardData();
     } else {
@@ -174,9 +231,12 @@ function renderClinicianPlan(prescriptions) {
   const active = prescriptions.filter((item) => isCurrentPrescription(item));
   firstExerciseId = active[0]?.exercise ?? null;
   createPlan.hidden = true;
+  aiPlanCard.hidden = true;
+  const isDemo = active.some((item) => item.is_demo);
+  demoNotice.hidden = !isDemo;
 
   if (!active.length) {
-    primaryAction = "booking";
+    primaryAction = "reload";
     planStatus.textContent = "Awaiting assignment";
     planStatus.className = "status-pill status-pill-review";
     planIntro.textContent =
@@ -186,21 +246,29 @@ function renderClinicianPlan(prescriptions) {
       title: "Your specialist is preparing the detailed plan",
       detail:
         "Exercises stay locked until your physiotherapist assigns the movement, dose and restrictions.",
-      note: "You can request a consultation at any time.",
+      note: "Use the single Consultation card if you need to contact a physiotherapist.",
     }));
-    planStart.textContent = "Book consultation";
-    primaryStart.textContent = "Book consultation";
+    planStart.textContent = "Check for my assigned plan";
+    primaryStart.textContent = "Check for assigned exercises";
     return;
   }
 
   primaryAction = "exercise";
-  const clinicianName =
-    active.find((item) => item.clinician_name)?.clinician_name ??
-    "your physiotherapist";
-  planStatus.textContent = "Specialist assigned";
+  const clinicianName = isDemo
+    ? "the prototype display"
+    : (
+      active.find((item) => item.clinician_name)?.clinician_name ??
+      "your physiotherapist"
+    );
+  planStatus.textContent = isDemo ? "Prototype sample" : "Specialist assigned";
   planStatus.className = "status-pill";
   planIntro.textContent =
-    `Detailed plan assigned by ${clinicianName}. Follow these doses and notes exactly.`;
+    isDemo
+      ? (
+        "Example: early rehabilitation after total knee replacement. These "
+        + "sample doses are interface data, not instructions for a real patient."
+      )
+      : `Detailed plan assigned by ${clinicianName}. Follow these doses and notes exactly.`;
   active.forEach((prescription, index) => {
     const hold = prescription.hold_seconds
       ? ` · hold ${prescription.hold_seconds}s`
@@ -224,33 +292,50 @@ function renderWellnessPlan(profile) {
     profile?.wellnessScreening?.status;
   const eligible = screeningStatus === "eligible";
   createPlan.hidden = false;
+  aiPlanCard.hidden = false;
+  demoNotice.hidden = true;
 
   if (!eligible) {
     firstExerciseId = null;
     const needsReview =
       screeningStatus === "needs_review" ||
       (profile?.care_path ?? profile?.carePath) === "needs_review";
-    primaryAction = needsReview ? "booking" : "plan";
-    planStatus.textContent = needsReview ? "Review recommended" : "Safety screen needed";
+    primaryAction = needsReview ? "plan" : "ai";
+    planStatus.textContent = needsReview ? "Review needed" : "No plan yet";
     planStatus.className = needsReview
       ? "status-pill status-pill-review"
       : "status-pill";
     planIntro.textContent = needsReview
-      ? "A self-guided plan was not created because professional guidance may be more appropriate."
-      : "Complete the general-wellness safety screen before creating a self-guided plan.";
+      ? (
+        "No self-guided plan has been created. Review your safety-screen "
+        + "answers before using general-wellness exercises."
+      )
+      : (
+        "No plan has been created yet. Ask the AI movement companion to help "
+        + "you begin a personalized general-wellness plan."
+      );
     planList.appendChild(planRow({
       label: needsReview ? "!" : "1",
       title: needsReview
-        ? "Choose professional guidance"
-        : "Answer the short wellness safety screen",
+        ? "Review the wellness safety screen"
+        : "Start with your AI movement companion",
       detail: needsReview
-        ? "This does not mean that a condition has been diagnosed."
-        : "AI support will only use the conservative wellness pathway after the screen is eligible.",
+        ? (
+          "This is not a diagnosis. Self-guided exercises remain locked while "
+          + "an answer indicates that professional guidance may be safer."
+        )
+        : (
+          "The AI can help clarify your goal. Exercise access is created only "
+          + "after the short general-wellness safety screen is eligible."
+        ),
     }));
     planStart.textContent = needsReview
-      ? "Book consultation"
-      : "Create my wellness plan";
+      ? "Review my safety screen"
+      : "Ask AI to create my plan";
     primaryStart.textContent = planStart.textContent;
+    createPlan.textContent = needsReview
+      ? "Review my wellness safety screen"
+      : "Complete the wellness safety screen";
     return;
   }
 
@@ -279,7 +364,10 @@ function renderPlan(user, prescriptions) {
   planList.innerHTML = "";
   const profile = user.profile ?? {};
   const carePath = profile.care_path ?? profile.carePath;
+  const pathwayChoice =
+    profile.pathway_choice ?? profile.pathwayChoice ?? "unselected";
   if (
+    pathwayChoice === "physiotherapist" ||
     carePath === "clinician" ||
     profile.primary_clinician ||
     profile.primaryClinician
@@ -365,7 +453,9 @@ function renderUpcomingConsultation(consultations) {
 
 function setBookingClinician(prescriptions) {
   const clinicianName =
-    prescriptions.find((item) => item.clinician_name)?.clinician_name;
+    prescriptions.find(
+      (item) => item.clinician_name && !item.is_demo
+    )?.clinician_name;
   if (!clinicianName) return;
   bookingClinicianName.textContent = clinicianName;
   bookingClinicianAvatar.textContent = initials(clinicianName);
@@ -395,6 +485,16 @@ async function loadDashboardData() {
     escalations: read(3),
     consultations: read(4),
   };
+  const pathwayChoice =
+    currentUser.profile?.pathway_choice ??
+    currentUser.profile?.pathwayChoice;
+  if (
+    requests[0].status === "fulfilled" &&
+    pathwayChoice === "physiotherapist" &&
+    currentData.prescriptions.length === 0
+  ) {
+    currentData.prescriptions = DEMO_CLINICIAN_PLAN.map((item) => ({ ...item }));
+  }
 
   window.dispatchEvent(new CustomEvent(
     "physiovision:prescriptions-updated",
@@ -443,12 +543,57 @@ async function activatePatientDashboard(user) {
   if (user?.role !== "patient") return;
   currentUser = user;
   patientName.textContent = user.first_name || "there";
-  intro.textContent =
-    (user.profile?.care_path ?? user.profile?.carePath) === "clinician"
-      ? "Review your specialist-assigned plan, start exercises and follow your progress."
-      : "Create a safe wellness plan, start exercises and follow your progress.";
   setView("dashboard");
+  const choice =
+    user.profile?.pathway_choice ??
+    user.profile?.pathwayChoice ??
+    "unselected";
+  if (choice === "unselected") {
+    intro.textContent =
+      "Choose your exercise pathway to open the correct patient functions.";
+    showPathwayChoice();
+    return;
+  }
+  hidePathwayChoice();
+  updateDashboardIntro(choice);
   await loadDashboardData();
+}
+
+function updateDashboardIntro(choice) {
+  intro.textContent =
+    choice === "physiotherapist"
+      ? "Review your physiotherapist-assigned plan, start approved exercises and follow your progress."
+      : "Use AI support to create a safe wellness plan, start exercises and follow your progress.";
+}
+
+function showPathwayChoice() {
+  pathwayModal.classList.add("is-open");
+  pathwayModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  window.setTimeout(() => {
+    pathwayModal.querySelector("[data-pathway-choice]")?.focus();
+  }, 50);
+}
+
+function hidePathwayChoice() {
+  pathwayModal.classList.remove("is-open");
+  pathwayModal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+}
+
+function browserProfileFromApi(profile) {
+  return {
+    ...(currentUser?.profile ?? {}),
+    carePath: profile.care_path,
+    pathwayChoice: profile.pathway_choice,
+    goal: profile.goal,
+    focusSide: profile.focus_side,
+    cueStyle: profile.cue_style,
+    wellnessScreening: {
+      ...(currentUser?.profile?.wellnessScreening ?? {}),
+      status: profile.wellness_screening_status,
+    },
+  };
 }
 
 function prepareBookingDate() {
@@ -515,8 +660,40 @@ document
   .forEach((button) => button.addEventListener("click", () => startExercise()));
 
 document.getElementById("patientAskAi")?.addEventListener("click", () => {
-  document.getElementById("agentChatLauncher")?.click();
+  openAiCompanion();
 });
+aiPlanButton?.addEventListener("click", openAiCompanion);
+
+pathwayModal
+  ?.querySelectorAll("[data-pathway-choice]")
+  .forEach((button) => {
+    button.addEventListener("click", async () => {
+      const buttons = [
+        ...pathwayModal.querySelectorAll("[data-pathway-choice]"),
+      ];
+      buttons.forEach((item) => { item.disabled = true; });
+      pathwayStatus.textContent = "Saving your pathway…";
+      try {
+        const profile = await selectPatientPathway(
+          button.dataset.pathwayChoice
+        );
+        currentUser = { ...currentUser, profile };
+        const browserProfile = browserProfileFromApi(profile);
+        window.dispatchEvent(new CustomEvent(
+          "physiovision:profile-updated",
+          { detail: browserProfile },
+        ));
+        hidePathwayChoice();
+        updateDashboardIntro(profile.pathway_choice);
+        pathwayStatus.textContent = "";
+        await loadDashboardData();
+      } catch (error) {
+        pathwayStatus.textContent =
+          error.message || "Your pathway could not be saved. Please try again.";
+        buttons.forEach((item) => { item.disabled = false; });
+      }
+    });
+  });
 
 window.addEventListener("physiovision:auth-role", (event) => {
   const user = event.detail?.user;
@@ -546,6 +723,10 @@ window.addEventListener("physiovision:profile-updated", (event) => {
       wellness_screening_status:
         browserProfile.wellnessScreening?.status ??
         currentUser.profile?.wellness_screening_status,
+      pathway_choice:
+        browserProfile.pathwayChoice ??
+        browserProfile.pathway_choice ??
+        currentUser.profile?.pathway_choice,
     },
   };
   renderPlan(currentUser, currentData?.prescriptions ?? []);

@@ -161,6 +161,10 @@ export async function patchMe(fields) {
   return request("PATCH", "/auth/me/", fields);
 }
 
+export async function selectPatientPathway(pathway) {
+  return request("POST", "/auth/patient-pathway/", { pathway });
+}
+
 export async function postWellnessScreening(answers) {
   return request("POST", "/auth/wellness-screening/", answers);
 }

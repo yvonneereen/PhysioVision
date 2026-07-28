@@ -32,6 +32,7 @@ from .models import (
     CareInvitation,
     CarePath,
     LoginVerificationChallenge,
+    PatientPathwayChoice,
     PatientProfile,
     User,
     UserRole,
@@ -50,6 +51,7 @@ from .serializers import (
     ForgotPasswordSerializer,
     LoginSerializer,
     PatientListSerializer,
+    PatientPathwayChoiceSerializer,
     PatientProfileSerializer,
     RegisterSerializer,
     ResendEmailVerificationSerializer,
@@ -556,6 +558,75 @@ class MeView(APIView):
         return Response({'detail': 'No profile found.'}, status=status.HTTP_404_NOT_FOUND)
 
 
+class PatientPathwayChoiceView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if (
+            request.user.role != UserRole.PATIENT
+            or not hasattr(request.user, "patient_profile")
+        ):
+            return Response(
+                {"detail": "A patient account is required."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = PatientPathwayChoiceSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        choice = serializer.validated_data["pathway"]
+        profile = request.user.patient_profile
+
+        if (
+            choice == PatientPathwayChoice.WELLNESS
+            and (
+                profile.primary_clinician_id
+                or profile.prescriptions.filter(is_active=True).exists()
+            )
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "This account has clinician-managed rehabilitation. "
+                        "The wellness pathway cannot replace that programme."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        if (
+            profile.pathway_choice != PatientPathwayChoice.UNSELECTED
+            and profile.pathway_choice != choice
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "Your pathway has already been selected. Contact your "
+                        "physiotherapist or support before changing it."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        profile.pathway_choice = choice
+        profile.pathway_selected_at = profile.pathway_selected_at or timezone.now()
+        profile.care_path = (
+            CarePath.CLINICIAN
+            if choice == PatientPathwayChoice.PHYSIOTHERAPIST
+            else CarePath.WELLNESS
+        )
+        if choice == PatientPathwayChoice.PHYSIOTHERAPIST:
+            profile.low_risk_acknowledged = False
+        profile.save(update_fields=[
+            "pathway_choice",
+            "pathway_selected_at",
+            "care_path",
+            "low_risk_acknowledged",
+            "updated_at",
+        ])
+
+        return Response(PatientProfileSerializer(profile).data)
+
+
 class AgentChatView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -606,6 +677,19 @@ class WellnessScreeningView(APIView):
         serializer.is_valid(raise_exception=True)
         answers = serializer.validated_data
         profile = request.user.patient_profile
+        if (
+            profile.pathway_choice
+            == PatientPathwayChoice.PHYSIOTHERAPIST
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "This account uses a physiotherapist-assigned pathway. "
+                        "A wellness screen cannot unlock self-guided exercises."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
         if profile.primary_clinician_id:
             return Response(
                 {
@@ -630,12 +714,16 @@ class WellnessScreeningView(APIView):
         profile.care_path = (
             CarePath.WELLNESS if eligible else CarePath.NEEDS_REVIEW
         )
+        profile.pathway_choice = PatientPathwayChoice.WELLNESS
+        profile.pathway_selected_at = profile.pathway_selected_at or timezone.now()
         profile.save(update_fields=[
             'wellness_screening_status',
             'wellness_screening_answers',
             'wellness_screened_at',
             'low_risk_acknowledged',
             'care_path',
+            'pathway_choice',
+            'pathway_selected_at',
             'updated_at',
         ])
 
@@ -757,8 +845,13 @@ class CareInvitationAcceptView(APIView):
 
             patient.primary_clinician = invitation.clinician
             patient.care_path = CarePath.NEEDS_REVIEW
+            patient.pathway_choice = PatientPathwayChoice.PHYSIOTHERAPIST
+            patient.pathway_selected_at = (
+                patient.pathway_selected_at or timezone.now()
+            )
             patient.save(update_fields=[
-                "primary_clinician", "care_path", "updated_at",
+                "primary_clinician", "care_path", "pathway_choice",
+                "pathway_selected_at", "updated_at",
             ])
             invitation.accepted_by = patient
             invitation.accepted_at = timezone.now()

@@ -331,6 +331,13 @@ async function submitPrescription(e) {
 // ── Consultations ───────────────────────────────────────────
 
 function consultRow(c, withActions) {
+  // Whose turn it is to respond, for requested consultations.
+  let waiting = "";
+  if (c.status === "requested") {
+    waiting = c.initiated_by === "patient"
+      ? `<span class="consult-waiting">Patient proposed a time</span>`
+      : `<span class="consult-waiting">Awaiting patient</span>`;
+  }
   const actions = withActions ? `
     <span class="consult-actions">
       ${c.status === "requested" ? `<button class="button button-coral button-small" data-confirm="${c.id}">Confirm</button>` : ""}
@@ -338,7 +345,7 @@ function consultRow(c, withActions) {
     </span>` : `<span class="consult-status consult-${c.status}">${c.status}</span>`;
   return `
     <div class="detail-row">
-      <span><strong>${escapeHtml(c.patient_name || "Patient")}</strong></span>
+      <span><strong>${escapeHtml(c.patient_name || "Patient")}</strong>${waiting}</span>
       <span>${new Date(c.scheduled_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</span>
       <span>${c.duration_minutes} min</span>
       ${actions}

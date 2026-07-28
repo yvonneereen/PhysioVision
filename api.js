@@ -255,6 +255,14 @@ export async function cancelConsultation(id) {
   return request("POST", `/consultations/${id}/cancel/`);
 }
 
+export async function acceptConsultation(id) {
+  return request("POST", `/consultations/${id}/accept/`);
+}
+
+export async function updateConsultation(id, data) {
+  return request("PATCH", `/consultations/${id}/`, data);
+}
+
 export async function getEscalations() {
   return request("GET", "/escalations/");
 }

@@ -356,7 +356,11 @@ def schedule_consultation(patient, when_text):
     Runs server-side, so the patient-only API restriction does not apply.
     Returns (consultation, error_message).
     """
-    from api.consultations.models import Consultation, ConsultationStatus
+    from api.consultations.models import (
+        Consultation,
+        ConsultationInitiator,
+        ConsultationStatus,
+    )
 
     if patient.primary_clinician is None:
         return None, "This patient has no linked clinician to book with."
@@ -365,11 +369,13 @@ def schedule_consultation(patient, when_text):
     if scheduled_at is None:
         return None, f"Could not understand the time '{when_text}'. Try e.g. 'Thursday 3pm'."
 
+    # Clinician suggests the time; it awaits the patient's acceptance.
     consultation = Consultation.objects.create(
         patient=patient,
         clinician=patient.primary_clinician,
         scheduled_at=scheduled_at,
         status=ConsultationStatus.REQUESTED,
+        initiated_by=ConsultationInitiator.CLINICIAN,
     )
     return consultation, None
 

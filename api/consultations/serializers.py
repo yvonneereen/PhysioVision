@@ -11,13 +11,14 @@ class ConsultationSerializer(serializers.ModelSerializer):
         model  = Consultation
         fields = [
             'id', 'clinician', 'clinician_name', 'patient', 'patient_name',
-            'scheduled_at', 'duration_minutes', 'status',
+            'scheduled_at', 'duration_minutes', 'status', 'initiated_by',
             'patient_notes', 'clinician_notes', 'video_link',
             'created_at', 'updated_at',
         ]
         read_only_fields = [
             'id', 'clinician', 'clinician_name', 'patient', 'patient_name',
-            'status', 'clinician_notes', 'video_link', 'created_at', 'updated_at',
+            'status', 'initiated_by', 'clinician_notes', 'video_link',
+            'created_at', 'updated_at',
         ]
 
     def get_clinician_name(self, obj):

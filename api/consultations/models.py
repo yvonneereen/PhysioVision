@@ -15,6 +15,11 @@ class ConsultationStatus(models.TextChoices):
     NO_SHOW   = "no_show",   _("No show")
 
 
+class ConsultationInitiator(models.TextChoices):
+    PATIENT   = "patient",   _("Patient")
+    CLINICIAN = "clinician", _("Clinician")
+
+
 class Consultation(TimestampedModel):
     """
     Video consultation booking between a patient and their physiotherapist.
@@ -34,6 +39,13 @@ class Consultation(TimestampedModel):
         choices=ConsultationStatus.choices,
         default=ConsultationStatus.REQUESTED,
         db_index=True,
+    )
+    # Whose turn it is to respond: the side that did NOT last act.
+    # A clinician-initiated request awaits the patient; a patient edit sends it back.
+    initiated_by     = models.CharField(
+        max_length=10,
+        choices=ConsultationInitiator.choices,
+        default=ConsultationInitiator.PATIENT,
     )
 
     patient_notes   = models.TextField(blank=True)

@@ -1,4 +1,6 @@
 import {
+  acceptConsultation,
+  cancelConsultation,
   createConsultation,
   getConsultations,
   getEscalations,
@@ -8,7 +10,8 @@ import {
   getSessions,
   isLoggedIn,
   selectPatientPathway,
-} from "./api.js?v=19";
+  updateConsultation,
+} from "./api.js?v=20";
 import {
   analysePatientTrend,
   isCurrentPrescription,
@@ -46,6 +49,7 @@ const trendAlertMessage = document.getElementById("patientTrendAlertMessage");
 const trendAlertGuidance = document.getElementById("patientTrendAlertGuidance");
 const consultationCard = document.getElementById("patientConsultationCard");
 const upcomingConsultation = document.getElementById("patientUpcomingConsultation");
+const pendingConsultsEl = document.getElementById("patientPendingConsults");
 const backToDashboard = document.getElementById("patientBackToDashboard");
 const bookingForm = document.getElementById("bookingForm");
 const bookingDate = document.getElementById("bookingDate");
@@ -489,6 +493,72 @@ function renderUpcomingConsultation(consultations) {
     })} with ${next.clinician_name || "the PhysioVision care team"}.`;
 }
 
+// Consultations the clinician suggested, awaiting this patient's response.
+function renderPendingConsults(consultations) {
+  if (!pendingConsultsEl) return;
+  const now = new Date();
+  const pending = consultations.filter((c) =>
+    c.status === "requested" &&
+    c.initiated_by === "clinician" &&
+    new Date(c.scheduled_at) >= now
+  );
+
+  if (!pending.length) {
+    pendingConsultsEl.innerHTML = "";
+    return;
+  }
+
+  pendingConsultsEl.innerHTML = pending.map((c) => {
+    const when = formatDate(c.scheduled_at, { hour: "numeric", minute: "2-digit" });
+    return `
+      <div class="pending-consult" data-consult-id="${c.id}" data-consult-when="${c.scheduled_at}">
+        <p class="pending-consult-title">Your physiotherapist suggested a consultation</p>
+        <p class="pending-consult-time">${when} with ${c.clinician_name || "your care team"}</p>
+        <div class="pending-consult-actions">
+          <button class="button button-coral button-small" data-consult-accept="${c.id}">Accept</button>
+          <button class="button button-light button-small" data-consult-propose="${c.id}">Propose new time</button>
+          <button class="button button-light button-small" data-consult-decline="${c.id}">Decline</button>
+        </div>
+        <p class="pending-consult-status" id="pendingStatus-${c.id}"></p>
+      </div>`;
+  }).join("");
+}
+
+async function handlePendingConsultClick(event) {
+  const acceptId  = event.target.getAttribute("data-consult-accept");
+  const proposeId = event.target.getAttribute("data-consult-propose");
+  const declineId = event.target.getAttribute("data-consult-decline");
+  const id = acceptId || proposeId || declineId;
+  if (!id) return;
+
+  const statusEl = document.getElementById(`pendingStatus-${id}`);
+  try {
+    if (acceptId) {
+      await acceptConsultation(acceptId);
+    } else if (declineId) {
+      await cancelConsultation(declineId);
+    } else if (proposeId) {
+      const current = event.target.closest(".pending-consult")?.dataset.consultWhen;
+      const input = window.prompt(
+        "Propose a new date & time (e.g. 2026-08-05 15:30):",
+        current ? current.slice(0, 16).replace("T", " ") : ""
+      );
+      if (!input) return;
+      const parsed = new Date(input.replace(" ", "T"));
+      if (isNaN(parsed.getTime())) {
+        if (statusEl) statusEl.textContent = "Could not read that date/time.";
+        return;
+      }
+      await updateConsultation(proposeId, { scheduled_at: parsed.toISOString() });
+    }
+    await loadDashboardData();
+  } catch (err) {
+    if (statusEl) statusEl.textContent = err.message || "Something went wrong.";
+  }
+}
+
+pendingConsultsEl?.addEventListener("click", handlePendingConsultClick);
+
 function setBookingClinician(prescriptions) {
   const clinicianName =
     prescriptions.find(
@@ -574,6 +644,7 @@ async function loadDashboardData() {
     renderTrend(currentData);
   }
   renderUpcomingConsultation(currentData.consultations);
+  renderPendingConsults(currentData.consultations);
   setBookingClinician(currentData.prescriptions);
 }
 

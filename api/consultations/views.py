@@ -6,7 +6,12 @@ from rest_framework.viewsets import ModelViewSet
 
 from api.core.models import ClinicianProfile, UserRole
 
-from .models import Consultation, ConsultationStatus, Escalation
+from .models import (
+    Consultation,
+    ConsultationInitiator,
+    ConsultationStatus,
+    Escalation,
+)
 from .serializers import ConsultationSerializer, EscalationSerializer
 
 
@@ -25,9 +30,7 @@ class ConsultationViewSet(ModelViewSet):
             ).select_related('patient__user', 'clinician__user').order_by('-scheduled_at')
         return Consultation.objects.none()
 
-    def _set_status(self, request, new_status):
-        if request.user.role != UserRole.CLINICIAN:
-            raise PermissionDenied('Only the clinician can change a consultation status.')
+    def _set_status(self, new_status):
         consultation = self.get_object()
         consultation.status = new_status
         consultation.save(update_fields=['status', 'updated_at'])
@@ -35,11 +38,22 @@ class ConsultationViewSet(ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
-        return self._set_status(request, ConsultationStatus.CONFIRMED)
+        # Clinician confirms a time the patient proposed/requested.
+        if request.user.role != UserRole.CLINICIAN:
+            raise PermissionDenied('Only the clinician can confirm a consultation.')
+        return self._set_status(ConsultationStatus.CONFIRMED)
+
+    @action(detail=True, methods=['post'])
+    def accept(self, request, pk=None):
+        # Patient accepts a time the clinician suggested.
+        if request.user.role != UserRole.PATIENT:
+            raise PermissionDenied('Only the patient can accept a suggested time.')
+        return self._set_status(ConsultationStatus.CONFIRMED)
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
-        return self._set_status(request, ConsultationStatus.CANCELLED)
+        # Either party may cancel their own consultation.
+        return self._set_status(ConsultationStatus.CANCELLED)
 
     def perform_create(self, serializer):
         if (
@@ -62,7 +76,21 @@ class ConsultationViewSet(ModelViewSet):
                     'Please try again later.'
                 )
             })
-        serializer.save(patient=patient, clinician=clinician)
+        serializer.save(
+            patient=patient,
+            clinician=clinician,
+            initiated_by=ConsultationInitiator.PATIENT,
+        )
+
+    def perform_update(self, serializer):
+        # A patient editing the time is proposing a new one — send it back to the
+        # clinician to re-confirm (ping-pong), rather than booking it unilaterally.
+        if self.request.user.role != UserRole.PATIENT:
+            raise PermissionDenied('Use confirm/cancel to act on a consultation.')
+        serializer.save(
+            initiated_by=ConsultationInitiator.PATIENT,
+            status=ConsultationStatus.REQUESTED,
+        )
 
 
 class EscalationViewSet(ModelViewSet):

@@ -3549,7 +3549,7 @@ details.metrics summary {
   color: var(--coral);
 }
 
-.patient-dashboard-hero > div > p:last-child {
+#patientDashboardIntro {
   max-width: 650px;
   margin: 0;
   color: rgba(255, 255, 255, 0.72);
@@ -3557,11 +3557,36 @@ details.metrics summary {
   line-height: 1.55;
 }
 
+.patient-dashboard-feature-list {
+  display: flex;
+  max-width: 780px;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.patient-dashboard-feature-list li {
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.84);
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .patient-dashboard-primary-actions {
   display: flex;
   min-width: 250px;
   flex-direction: column;
   gap: 12px;
+}
+
+.patient-dashboard-primary-actions[hidden],
+.patient-dashboard-side[hidden] {
+  display: none;
 }
 
 .button-outline-light {
@@ -3634,6 +3659,11 @@ details.metrics summary {
   margin-top: 20px;
 }
 
+.patient-dashboard.wellness-dashboard .patient-dashboard-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
 .patient-dashboard-card,
 .patient-support-card {
   border: 1px solid rgba(23, 56, 58, 0.12);
@@ -3688,7 +3718,6 @@ details.metrics summary {
 }
 
 .patient-demo-notice[hidden],
-.patient-ai-plan-card[hidden],
 #patientConsultationCard[hidden] {
   display: none;
 }
@@ -4051,6 +4080,10 @@ details.metrics summary {
 
 @media (max-width: 1050px) {
   .patient-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .patient-dashboard.wellness-dashboard .patient-dashboard-grid {
     grid-template-columns: 1fr;
   }
 

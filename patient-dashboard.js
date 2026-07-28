@@ -20,6 +20,10 @@ const publicMain = document.getElementById("main-content");
 const skipLink = document.querySelector(".skip-link");
 const patientName = document.getElementById("patientDashboardName");
 const intro = document.getElementById("patientDashboardIntro");
+const dashboardFeatures = document.getElementById("patientDashboardFeatures");
+const primaryActions = document.getElementById(
+  "patientDashboardPrimaryActions",
+);
 const planStatus = document.getElementById("patientPlanStatus");
 const planIntro = document.getElementById("patientPlanIntro");
 const planList = document.getElementById("patientPlanList");
@@ -27,8 +31,7 @@ const planStart = document.getElementById("patientPlanStart");
 const primaryStart = document.getElementById("patientStartPrimary");
 const createPlan = document.getElementById("patientCreateWellnessPlan");
 const demoNotice = document.getElementById("patientDemoNotice");
-const aiPlanCard = document.getElementById("patientAiPlanCard");
-const aiPlanButton = document.getElementById("patientAiPlanButton");
+const dashboardSide = document.getElementById("patientDashboardSide");
 const pathwayModal = document.getElementById("patientPathwayModal");
 const pathwayStatus = document.getElementById("patientPathwayStatus");
 const trendStatus = document.getElementById("patientTrendStatus");
@@ -233,7 +236,9 @@ function renderClinicianPlan(prescriptions) {
   const active = prescriptions.filter((item) => isCurrentPrescription(item));
   firstExerciseId = active[0]?.exercise ?? null;
   createPlan.hidden = true;
-  aiPlanCard.hidden = true;
+  dashboard.classList.remove("wellness-dashboard");
+  primaryActions.hidden = false;
+  dashboardSide.hidden = false;
   consultationCard.hidden = false;
   const isDemo = active.some((item) => item.is_demo);
   demoNotice.hidden = !isDemo;
@@ -295,7 +300,9 @@ function renderWellnessPlan(profile) {
     profile?.wellnessScreening?.status;
   const eligible = screeningStatus === "eligible";
   createPlan.hidden = false;
-  aiPlanCard.hidden = false;
+  dashboard.classList.add("wellness-dashboard");
+  primaryActions.hidden = true;
+  dashboardSide.hidden = true;
   consultationCard.hidden = true;
   demoNotice.hidden = true;
 
@@ -336,7 +343,6 @@ function renderWellnessPlan(profile) {
     planStart.textContent = needsReview
       ? "Review my safety screen"
       : "Ask AI to create my plan";
-    primaryStart.textContent = planStart.textContent;
     createPlan.textContent = needsReview
       ? "Review my wellness safety screen"
       : "Complete the wellness safety screen";
@@ -581,10 +587,38 @@ async function activatePatientDashboard(user) {
 }
 
 function updateDashboardIntro(choice) {
-  intro.textContent =
-    choice === "physiotherapist"
-      ? "Review your physiotherapist-assigned plan, start approved exercises and follow your progress."
-      : "Use AI support to create a safe wellness plan, start exercises and follow your progress.";
+  const usesPhysiotherapist = choice === "physiotherapist";
+  intro.textContent = usesPhysiotherapist
+    ? (
+      "Review your physiotherapist-assigned plan, start approved exercises "
+      + "and follow your progress."
+    )
+    : (
+      "For older adults without a diagnosed condition or clinician "
+      + "restrictions. Use AI support to create a conservative wellness plan, "
+      + "complete camera-guided exercises, record pain check-ins and follow "
+      + "your movement progress over time."
+    );
+
+  const features = usesPhysiotherapist
+    ? [
+      "Specialist-assigned programme",
+      "Approved movement guidance",
+      "Progress and pain trends",
+    ]
+    : [
+      "AI-assisted wellness plan",
+      "Camera-guided exercises",
+      "Pain check-ins",
+      "Movement progress trends",
+    ];
+  dashboardFeatures.replaceChildren(
+    ...features.map((label) => {
+      const item = document.createElement("li");
+      item.textContent = label;
+      return item;
+    }),
+  );
 }
 
 function showPathwayChoice() {
@@ -679,11 +713,6 @@ document
 document
   .querySelectorAll("[data-patient-start]")
   .forEach((button) => button.addEventListener("click", () => startExercise()));
-
-document.getElementById("patientAskAi")?.addEventListener("click", () => {
-  openAiCompanion();
-});
-aiPlanButton?.addEventListener("click", openAiCompanion);
 
 pathwayModal
   ?.querySelectorAll("[data-pathway-choice]")

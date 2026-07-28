@@ -1923,6 +1923,7 @@ textarea:focus-visible {
 
 .rep-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
   margin: 4px 0 19px;
@@ -1930,6 +1931,19 @@ textarea:focus-visible {
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }
+
+.set-complete-badge {
+  flex-basis: 100%;
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+  background: color-mix(in srgb, var(--mint) 45%, transparent);
+}
+.set-complete-badge.hidden { display: none; }
 
 .rep-block {
   display: flex;

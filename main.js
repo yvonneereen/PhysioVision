@@ -97,6 +97,8 @@ const symWarnEl          = document.getElementById("symWarning");
 const trackWarnEl        = document.getElementById("trackingWarning");
 const prescEl            = document.getElementById("prescription");
 const repTargetEl        = document.getElementById("repTarget");
+const repLabelEl         = document.getElementById("repLabel");
+const setCompleteBadgeEl = document.getElementById("setCompleteBadge");
 const feedbackEl         = document.getElementById("feedbackBanner");
 const cameraStage        = document.getElementById("cameraStage");
 const personalizationTitle  = document.getElementById("personalizationTitle");
@@ -330,6 +332,24 @@ function hasLivePracticeAccess() {
     return false;
   }
   return true;
+}
+
+// Hold-based exercises (stretches, balance holds) are measured in seconds held,
+// not repetitions. Rep-based exercises count repetitions. Both cap at their goal.
+function isHoldExercise(exercise) {
+  return exercise?.category === "stretch" || exercise?.category === "balance";
+}
+
+function goalMetric(exercise = engine?.exercise) {
+  const dose = activeDose(exercise);
+  const reps = Number(dose.reps);
+  const hold = dose.holdSeconds ?? exercise?.trackingHoldSeconds ?? 0;
+  const isHold = isHoldExercise(exercise);
+  const hasReps = Number.isFinite(reps) && reps > 0;
+  if (isHold && hold > 0) {
+    return { isHold: true, unit: "sec held", perHold: hold, goal: hasReps ? reps * hold : null };
+  }
+  return { isHold: false, unit: "reps", perHold: 0, goal: hasReps ? reps : null };
 }
 
 function activeDose(exercise = engine?.exercise) {
@@ -1040,8 +1060,15 @@ function updateFeedbackPanel(angles, timestampMs) {
     s.count++;
   });
 
-  // Rep counter
-  repCountEl.textContent = fb.repCount;
+  // Rep / hold-seconds counter — hold exercises show seconds held, and both
+  // cap at their goal with a "Set complete" badge once reached.
+  const metric = goalMetric(fb.exercise);
+  let shown = metric.isHold ? fb.repCount * metric.perHold : fb.repCount;
+  const setComplete = metric.goal !== null && shown >= metric.goal;
+  if (metric.goal !== null) shown = Math.min(shown, metric.goal);
+  repCountEl.textContent = shown;
+  if (repLabelEl) repLabelEl.textContent = metric.unit;
+  if (setCompleteBadgeEl) setCompleteBadgeEl.classList.toggle("hidden", !setComplete);
 
   // Highlight active pose card without re-rendering the whole strip
   poseStripEl.querySelectorAll(".pose-card").forEach((card, i) => {
@@ -1502,6 +1529,14 @@ function renderPrescription(ex) {
       ` · ${p.daysPerWeek} days/week`;
     if (repTargetEl) repTargetEl.textContent = p.reps;
   }
+
+  // For hold exercises the goal is expressed in seconds held, not reps.
+  const metric = goalMetric(ex);
+  if (repLabelEl) repLabelEl.textContent = metric.unit;
+  if (repTargetEl && metric.goal !== null && repTargetEl.textContent !== "—") {
+    repTargetEl.textContent = metric.isHold ? `${metric.goal}s` : metric.goal;
+  }
+  if (setCompleteBadgeEl) setCompleteBadgeEl.classList.add("hidden");
 
   // Show inline hold timer only for stretch exercises
   if (ex.category === "stretch" && p.holdSeconds) {

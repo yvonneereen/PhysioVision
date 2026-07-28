@@ -1,5 +1,6 @@
 import base64
 import re
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.core import mail
@@ -11,6 +12,7 @@ from rest_framework.test import APITestCase
 from .models import (
     CarePath,
     ClinicianProfile,
+    LoginVerificationChallenge,
     PatientPathwayChoice,
     PatientProfile,
     User,
@@ -251,6 +253,66 @@ class ProductionReadinessTests(APITestCase):
         )
         self.assertEqual(replayed.status_code, 400)
         self.assertNotIn('token', replayed.data)
+
+    def test_repeated_login_reuses_recent_challenge_and_sends_one_code(self):
+        user = User.objects.create_user(
+            username='single-code@example.com',
+            email='single-code@example.com',
+            password='safe-test-password',
+            is_active=True,
+            email_verified_at=timezone.now(),
+        )
+
+        first = self.client.post(
+            '/api/auth/login/',
+            {'email': user.email, 'password': 'safe-test-password'},
+            format='json',
+        )
+        second = self.client.post(
+            '/api/auth/login/',
+            {'email': user.email, 'password': 'safe-test-password'},
+            format='json',
+        )
+
+        self.assertEqual(first.status_code, 202)
+        self.assertEqual(second.status_code, 202)
+        self.assertEqual(
+            str(first.data['challenge_id']),
+            str(second.data['challenge_id']),
+        )
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('just emailed', second.data['detail'])
+
+    def test_login_after_reuse_window_sends_a_fresh_code(self):
+        user = User.objects.create_user(
+            username='fresh-code@example.com',
+            email='fresh-code@example.com',
+            password='safe-test-password',
+            is_active=True,
+            email_verified_at=timezone.now(),
+        )
+        first = self.client.post(
+            '/api/auth/login/',
+            {'email': user.email, 'password': 'safe-test-password'},
+            format='json',
+        )
+        challenge = LoginVerificationChallenge.objects.get(user=user)
+        challenge.sent_at = timezone.now() - timedelta(seconds=61)
+        challenge.save(update_fields=['sent_at', 'updated_at'])
+
+        second = self.client.post(
+            '/api/auth/login/',
+            {'email': user.email, 'password': 'safe-test-password'},
+            format='json',
+        )
+
+        self.assertEqual(first.status_code, 202)
+        self.assertEqual(second.status_code, 202)
+        self.assertNotEqual(
+            str(first.data['challenge_id']),
+            str(second.data['challenge_id']),
+        )
+        self.assertEqual(len(mail.outbox), 2)
 
     @override_settings(EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS=0)
     @patch(

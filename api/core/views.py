@@ -185,7 +185,10 @@ class LoginView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
         try:
-            challenge = issue_login_verification(user)
+            challenge, code_sent = issue_login_verification(
+                user,
+                reuse_recent=True,
+            )
         except LoginVerificationDeliveryError:
             logger.exception("Could not deliver sign-in verification email")
             return Response(
@@ -201,7 +204,11 @@ class LoginView(APIView):
 
         return Response(
             {
-                'detail': 'We emailed you a 6-digit sign-in code.',
+                'detail': (
+                    'We emailed you a 6-digit sign-in code.'
+                    if code_sent
+                    else 'Use the sign-in code we just emailed you.'
+                ),
                 'verification_required': True,
                 'verification_purpose': 'login',
                 'challenge_id': challenge.id,
@@ -272,7 +279,7 @@ class ResendLoginVerificationView(APIView):
             )
 
         try:
-            challenge = issue_login_verification(
+            challenge, _ = issue_login_verification(
                 challenge.user,
                 challenge=challenge,
                 enforce_cooldown=True,

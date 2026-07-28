@@ -60,6 +60,10 @@ const GOAL_LABELS = Object.freeze({
   better_balance: "Better balance",
   less_stiffness: "Move with less stiffness",
   stay_active: "Stay active",
+  stronger_hips: "Stronger hips",
+  ankle_mobility: "Better ankle movement",
+  walking_confidence: "Walk with confidence",
+  other: "Other",
 });
 
 const TREND_STATUS_LABELS = Object.freeze({
@@ -350,8 +354,15 @@ function renderWellnessPlan(profile) {
   }
 
   primaryAction = "exercise";
-  const goal = GOAL_LABELS[profile.goal] ?? profile.goal ?? "Stay active";
-  const plan = buildConservativeWellnessPlan(goal);
+  const selectedGoal = GOAL_LABELS[profile.goal] ?? profile.goal ?? "Stay active";
+  const isOtherGoal = selectedGoal === "Other";
+  const goal = isOtherGoal
+    ? profile.custom_goal ?? profile.customGoal ?? "Stay active"
+    : selectedGoal;
+  const plan = buildConservativeWellnessPlan(
+    isOtherGoal ? "Stay active" : selectedGoal
+  );
+  plan.goal = goal;
   firstExerciseId = plan.days[0]?.exerciseIds?.[0] ?? null;
   planStatus.textContent = "Wellness plan ready";
   planStatus.className = "status-pill";
@@ -642,6 +653,7 @@ function browserProfileFromApi(profile) {
     carePath: profile.care_path,
     pathwayChoice: profile.pathway_choice,
     goal: profile.goal,
+    customGoal: profile.custom_goal ?? "",
     focusSide: profile.focus_side,
     cueStyle: profile.cue_style,
     wellnessScreening: {

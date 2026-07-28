@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=38" />
+  <link rel="stylesheet" href="style.css?v=39" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -1243,7 +1243,38 @@
               <span class="choice-icon">✦</span>
               <span><strong>Stay active</strong>Create a gentle weekly routine</span>
             </label>
+            <label class="choice-card">
+              <input type="radio" name="goal" value="Stronger hips" />
+              <span class="choice-icon">◇</span>
+              <span><strong>Stronger hips</strong>Build control for standing and daily movement</span>
+            </label>
+            <label class="choice-card">
+              <input type="radio" name="goal" value="Better ankle movement" />
+              <span class="choice-icon">↕</span>
+              <span><strong>Better ankle movement</strong>Improve comfortable foot and ankle mobility</span>
+            </label>
+            <label class="choice-card">
+              <input type="radio" name="goal" value="Walk with confidence" />
+              <span class="choice-icon">→</span>
+              <span><strong>Walk with confidence</strong>Build lower-body control for everyday walking</span>
+            </label>
+            <label class="choice-card">
+              <input type="radio" name="goal" value="Other" />
+              <span class="choice-icon">＋</span>
+              <span><strong>Other</strong>Describe a different general-wellness goal</span>
+            </label>
           </div>
+          <label class="custom-goal-field" id="planCustomGoalField" hidden>
+            <span>What would you like to improve?</span>
+            <input
+              id="planCustomGoal"
+              type="text"
+              name="customGoal"
+              maxlength="120"
+              placeholder="For example, feel more confident moving outdoors"
+            />
+            <small>Describe a general-wellness goal, not a diagnosis or treatment request.</small>
+          </label>
           <button class="button button-dark modal-next" type="button" data-next-step>
             Continue <span aria-hidden="true">→</span>
           </button>
@@ -1441,7 +1472,21 @@
               <option>Better balance</option>
               <option>Move with less stiffness</option>
               <option>Stay active</option>
+              <option>Stronger hips</option>
+              <option>Better ankle movement</option>
+              <option>Walk with confidence</option>
+              <option>Other</option>
             </select>
+          </label>
+          <label id="profileCustomGoalField" hidden>
+            <span>Other goal</span>
+            <input
+              id="profileCustomGoal"
+              type="text"
+              name="customGoal"
+              maxlength="120"
+              placeholder="Describe what you would like to improve"
+            />
           </label>
           <label>
             <span>Usual mobility</span>
@@ -1831,9 +1876,9 @@
   </div>
 
   <script src="runtime-config.js"></script>
-  <script type="module" src="auth.js?v=20"></script>
-  <script type="module" src="ui.js?v=15"></script>
-  <script type="module" src="patient-dashboard.js?v=5"></script>
+  <script type="module" src="auth.js?v=21"></script>
+  <script type="module" src="ui.js?v=16"></script>
+  <script type="module" src="patient-dashboard.js?v=6"></script>
   <script type="module" src="therapist.js?v=13"></script>
   <script type="module" src="exercise-library.js?v=13"></script>
   <script type="module" src="main.js?v=45"></script>

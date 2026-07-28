@@ -3493,7 +3493,7 @@ details.metrics summary {
 .patient-dashboard {
   min-height: calc(100vh - 86px);
   padding: 30px clamp(20px, 5vw, 76px) 64px;
-  color: var(--green);
+  color: var(--ink);
   background:
     radial-gradient(circle at 90% 4%, rgba(185, 217, 200, 0.38), transparent 28%),
     #f3f0e8;
@@ -3508,59 +3508,70 @@ details.metrics summary {
 }
 
 .patient-app-active .site-header {
-  color: var(--ink);
-  background: #f8f6f0;
-  border-bottom-color: rgba(23, 56, 58, 0.14);
-  box-shadow: 0 8px 24px rgba(23, 56, 58, 0.07);
+  grid-template-columns: minmax(210px, 1fr) auto;
+  color: var(--white);
+  background: var(--ink);
+  border-bottom-color: rgba(255, 255, 255, 0.22);
+  box-shadow: none;
+}
+
+.patient-app-active .header-actions {
+  gap: clamp(22px, 2.4vw, 38px);
 }
 
 .patient-app-active .profile-header-button {
-  min-height: 42px;
-  padding: 0 17px;
-  border: 1px solid rgba(23, 56, 58, 0.2);
-  border-radius: 999px;
-  color: var(--green);
-  background: #fffdf8;
+  position: relative;
+  min-height: 0;
+  padding: 11px 0;
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+  background: transparent;
   font-size: 14px;
-  font-weight: 750;
-  box-shadow: 0 4px 12px rgba(23, 56, 58, 0.05);
-  transition:
-    color 0.2s ease,
-    background 0.2s ease,
-    border-color 0.2s ease,
-    transform 0.2s ease;
+  font-weight: 650;
+  box-shadow: none;
+  transition: color 0.2s ease;
+}
+
+.patient-app-active .profile-header-button::after {
+  position: absolute;
+  right: 0;
+  bottom: 6px;
+  left: 0;
+  height: 1px;
+  background: currentColor;
+  content: "";
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 0.25s ease;
 }
 
 .patient-app-active .profile-header-button:hover {
-  border-color: var(--green);
-  background: var(--mint-light);
-  transform: translateY(-1px);
-}
-
-.patient-app-active #headerPatientDashboard {
-  border-color: var(--green);
   color: var(--white);
-  background: var(--green);
+  background: transparent;
+  transform: none;
 }
 
-.patient-app-active #headerPatientDashboard:hover {
-  background: var(--ink-soft);
+.patient-app-active .profile-header-button:hover::after,
+.patient-app-active #headerPatientDashboard::after {
+  transform: scaleX(1);
+  transform-origin: left;
 }
 
 .patient-app-active #headerSignOut {
-  border-color: rgba(239, 91, 61, 0.45);
-  color: #9b3e2e;
-  background: #fff4ef;
+  color: rgba(255, 255, 255, 0.78);
+  background: transparent;
 }
 
 .patient-app-active #headerSignOut:hover {
-  border-color: var(--coral);
-  background: #ffe7df;
+  color: var(--white);
+  background: transparent;
 }
 
-.patient-app-active .menu-toggle {
-  color: var(--ink);
-  background: rgba(23, 56, 58, 0.08);
+.patient-app-active .site-header.is-scrolled .menu-toggle,
+.patient-app-active .site-header .menu-toggle {
+  color: var(--white);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .patient-app-active .mobile-nav > a {
@@ -3586,7 +3597,7 @@ details.metrics summary {
   color: var(--white);
   background:
     radial-gradient(circle at 82% 10%, rgba(185, 217, 200, 0.24), transparent 32%),
-    var(--green);
+    var(--ink);
 }
 
 .patient-dashboard-hero h1 {

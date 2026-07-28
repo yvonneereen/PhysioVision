@@ -21,43 +21,8 @@ class LoginVerificationDeliveryError(Exception):
     pass
 
 
-def issue_login_verification(
-    user,
-    *,
-    challenge=None,
-    enforce_cooldown=False,
-):
-    """Create or replace the code for a password-authenticated login."""
-
-    now = timezone.now()
-    if challenge is not None:
-        challenge = LoginVerificationChallenge.objects.filter(
-            pk=challenge.pk,
-            user=user,
-            consumed_at__isnull=True,
-        ).first()
-        if not challenge or challenge.expires_at <= now:
-            return None
-
-        cooldown_seconds = (
-            settings.EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS
-        )
-        if enforce_cooldown and challenge.sent_at:
-            elapsed = (now - challenge.sent_at).total_seconds()
-            if elapsed < cooldown_seconds:
-                raise LoginVerificationCooldown(
-                    max(1, math.ceil(cooldown_seconds - elapsed))
-                )
-    else:
-        with transaction.atomic():
-            User.objects.select_for_update().get(pk=user.pk)
-            LoginVerificationChallenge.objects.filter(user=user).delete()
-            challenge = LoginVerificationChallenge.objects.create(
-                user=user,
-                code_hash="",
-                expires_at=now,
-            )
-
+def _replace_code_and_deliver(challenge, user, now):
+    """Store and email one new code for the supplied challenge."""
     code = f"{secrets.randbelow(1_000_000):06d}"
     challenge.code_hash = make_password(code)
     challenge.expires_at = now + timedelta(
@@ -94,6 +59,74 @@ def issue_login_verification(
     challenge.sent_at = timezone.now()
     challenge.save(update_fields=["sent_at", "updated_at"])
     return challenge
+
+
+def issue_login_verification(
+    user,
+    *,
+    challenge=None,
+    enforce_cooldown=False,
+    reuse_recent=False,
+):
+    """Create, replace or safely reuse a password-authenticated login code."""
+
+    if challenge is not None:
+        now = timezone.now()
+        challenge = LoginVerificationChallenge.objects.filter(
+            pk=challenge.pk,
+            user=user,
+            consumed_at__isnull=True,
+        ).first()
+        if not challenge or challenge.expires_at <= now:
+            return None, False
+
+        cooldown_seconds = (
+            settings.EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS
+        )
+        if enforce_cooldown and challenge.sent_at:
+            elapsed = (now - challenge.sent_at).total_seconds()
+            if elapsed < cooldown_seconds:
+                raise LoginVerificationCooldown(
+                    max(1, math.ceil(cooldown_seconds - elapsed))
+                )
+        return _replace_code_and_deliver(challenge, user, now), True
+
+    # Hold a per-user database lock until delivery is recorded. If two valid
+    # login requests arrive together, the second waits, sees the newly sent
+    # challenge and reuses it instead of emailing a different code.
+    with transaction.atomic():
+        locked_user = User.objects.select_for_update().get(pk=user.pk)
+        now = timezone.now()
+        existing = LoginVerificationChallenge.objects.filter(
+            user=locked_user,
+        ).first()
+        cooldown_seconds = (
+            settings.EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS
+        )
+        if (
+            reuse_recent
+            and existing
+            and existing.consumed_at is None
+            and existing.expires_at > now
+            and existing.sent_at
+        ):
+            elapsed = (now - existing.sent_at).total_seconds()
+            if elapsed < cooldown_seconds:
+                return existing, False
+
+        if existing:
+            existing.delete()
+        challenge = LoginVerificationChallenge.objects.create(
+            user=locked_user,
+            code_hash="",
+            expires_at=now,
+        )
+        challenge = _replace_code_and_deliver(
+            challenge,
+            locked_user,
+            now,
+        )
+        return challenge, True
 
 
 @transaction.atomic

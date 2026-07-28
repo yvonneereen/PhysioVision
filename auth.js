@@ -66,6 +66,7 @@ let pendingVerificationPurpose = "account";
 let pendingLoginChallengeId = "";
 let pendingPasswordResetEmail = "";
 let pendingPasswordResetToken = "";
+let loginRequestInProgress = false;
 
 const authForms = [
   loginForm,
@@ -254,6 +255,12 @@ tabRegister.addEventListener("click", () => selectRegisterTab());
 // Login
 loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (loginRequestInProgress) return;
+
+  loginRequestInProgress = true;
+  const submitButton = loginForm.querySelector("[type='submit']");
+  submitButton.disabled = true;
+  submitButton.textContent = "Sending code…";
   clearError(loginError);
   clearError(loginStatus);
   const data = new FormData(loginForm);
@@ -287,6 +294,10 @@ loginForm.addEventListener("submit", async (e) => {
       return;
     }
     showError(loginError, err.data?.non_field_errors?.[0] ?? err.message ?? "Login failed.");
+  } finally {
+    loginRequestInProgress = false;
+    submitButton.disabled = false;
+    submitButton.textContent = "Sign in →";
   }
 });
 

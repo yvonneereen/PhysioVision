@@ -4,6 +4,7 @@ import secrets
 import string
 from datetime import timedelta
 
+from django.core import signing
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
@@ -61,6 +62,14 @@ from .serializers import (
     VerifyLoginSerializer,
     VerifyPasswordResetCodeSerializer,
     WellnessScreeningSerializer,
+    WellnessPlanAcceptSerializer,
+    WellnessPlanDraftSerializer,
+    WellnessPlanPreferencesSerializer,
+)
+from .wellness_agent import (
+    WellnessPlanValidationError,
+    generate_wellness_plan,
+    normalize_wellness_plan,
 )
 
 logger = logging.getLogger(__name__)
@@ -555,7 +564,26 @@ class MeView(APIView):
         if user.role == UserRole.PATIENT and hasattr(user, 'patient_profile'):
             serializer = PatientProfileSerializer(user.patient_profile, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
-            serializer.save()
+            plan_inputs = {
+                "goal",
+                "custom_goal",
+                "activity_level",
+                "focus_side",
+                "cue_style",
+            }
+            plan_inputs_changed = any(
+                key in serializer.validated_data
+                and getattr(user.patient_profile, key)
+                != serializer.validated_data[key]
+                for key in plan_inputs
+            )
+            if plan_inputs_changed:
+                serializer.save(
+                    wellness_plan={},
+                    wellness_plan_accepted_at=None,
+                )
+            else:
+                serializer.save()
             return Response(serializer.data)
         elif user.role == UserRole.CLINICIAN and hasattr(user, 'clinician_profile'):
             serializer = ClinicianProfileSerializer(user.clinician_profile, data=request.data, partial=True)
@@ -623,11 +651,15 @@ class PatientPathwayChoiceView(APIView):
         )
         if choice == PatientPathwayChoice.PHYSIOTHERAPIST:
             profile.low_risk_acknowledged = False
+            profile.wellness_plan = {}
+            profile.wellness_plan_accepted_at = None
         profile.save(update_fields=[
             "pathway_choice",
             "pathway_selected_at",
             "care_path",
             "low_risk_acknowledged",
+            "wellness_plan",
+            "wellness_plan_accepted_at",
             "updated_at",
         ])
 
@@ -723,6 +755,11 @@ class WellnessScreeningView(APIView):
         )
         profile.pathway_choice = PatientPathwayChoice.WELLNESS
         profile.pathway_selected_at = profile.pathway_selected_at or timezone.now()
+        # Failing a new safety screen immediately locks an older wellness
+        # plan. Passing still only permits planning and never creates a plan.
+        if not eligible:
+            profile.wellness_plan = {}
+            profile.wellness_plan_accepted_at = None
         profile.save(update_fields=[
             'wellness_screening_status',
             'wellness_screening_answers',
@@ -731,6 +768,8 @@ class WellnessScreeningView(APIView):
             'care_path',
             'pathway_choice',
             'pathway_selected_at',
+            'wellness_plan',
+            'wellness_plan_accepted_at',
             'updated_at',
         ])
 
@@ -739,6 +778,180 @@ class WellnessScreeningView(APIView):
             'care_path': profile.care_path,
             'screened_at': profile.wellness_screened_at,
         })
+
+
+def _wellness_planning_profile(request):
+    if (
+        request.user.role != UserRole.PATIENT
+        or not hasattr(request.user, "patient_profile")
+    ):
+        return None, Response(
+            {"detail": "A patient account is required."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    profile = request.user.patient_profile
+    if (
+        profile.pathway_choice == PatientPathwayChoice.PHYSIOTHERAPIST
+        or profile.care_path == CarePath.CLINICIAN
+        or profile.primary_clinician_id
+    ):
+        return None, Response(
+            {
+                "detail": (
+                    "AI cannot change a physiotherapist-assigned programme."
+                )
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
+    if (
+        profile.wellness_screening_status
+        != WellnessScreeningStatus.ELIGIBLE
+    ):
+        return None, Response(
+            {
+                "detail": (
+                    "Complete the general-wellness safety screen before "
+                    "asking AI to draft a plan."
+                )
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
+    return profile, None
+
+
+class WellnessPlanDraftView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "wellness_plan_draft"
+
+    def post(self, request):
+        _, error = _wellness_planning_profile(request)
+        if error is not None:
+            return error
+        serializer = WellnessPlanDraftSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        preferences = dict(serializer.validated_data)
+        previous_plan = preferences.pop("previous_plan", None)
+        revision = preferences.pop("revision", "")
+        try:
+            plan = generate_wellness_plan(
+                request.user,
+                preferences,
+                previous_plan=previous_plan,
+                revision=revision,
+            )
+        except Exception:
+            logger.exception("Gemini wellness planner failed")
+            return Response(
+                {
+                    "detail": (
+                        "The AI planner is unavailable right now. No plan "
+                        "has been saved."
+                    )
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        token_preferences = {
+            key: value
+            for key, value in serializer.data.items()
+            if key not in {"previous_plan", "revision"}
+        }
+        draft_token = signing.dumps(
+            {
+                "user_id": str(request.user.id),
+                "plan": plan,
+                "preferences": token_preferences,
+            },
+            salt="physiovision.wellness-plan-draft",
+            compress=True,
+        )
+        return Response({
+            "plan": plan,
+            "draft_token": draft_token,
+            "accepted": False,
+        })
+
+
+class WellnessPlanAcceptView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request):
+        _, error = _wellness_planning_profile(request)
+        if error is not None:
+            return error
+        serializer = WellnessPlanAcceptSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            signed_draft = signing.loads(
+                serializer.validated_data["draft_token"],
+                salt="physiovision.wellness-plan-draft",
+                max_age=30 * 60,
+            )
+        except signing.SignatureExpired:
+            return Response(
+                {"detail": "This AI draft has expired. Ask for a new draft."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except signing.BadSignature:
+            return Response(
+                {"detail": "This AI draft could not be verified."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if signed_draft.get("user_id") != str(request.user.id):
+            return Response(
+                {"detail": "This AI draft belongs to a different account."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        preferences_serializer = WellnessPlanPreferencesSerializer(
+            data=signed_draft.get("preferences"),
+        )
+        preferences_serializer.is_valid(raise_exception=True)
+        data = dict(preferences_serializer.validated_data)
+        try:
+            plan = normalize_wellness_plan(signed_draft.get("plan"), data)
+        except WellnessPlanValidationError as exc:
+            return Response(
+                {"detail": f"This draft cannot be accepted: {exc}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        profile = PatientProfile.objects.select_for_update().get(
+            pk=request.user.patient_profile.pk,
+        )
+        if (
+            profile.wellness_screening_status
+            != WellnessScreeningStatus.ELIGIBLE
+            or profile.pathway_choice == PatientPathwayChoice.PHYSIOTHERAPIST
+            or profile.primary_clinician_id
+        ):
+            return Response(
+                {"detail": "The account is no longer eligible for this plan."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        profile.goal = data["goal"]
+        profile.custom_goal = data["custom_goal"]
+        profile.activity_level = data["activity_level"]
+        profile.focus_side = data["focus_side"]
+        profile.cue_style = data["cue_style"]
+        profile.height_cm = data.get("height_cm")
+        profile.weight_kg = data.get("weight_kg")
+        profile.wellness_plan = plan
+        profile.wellness_plan_accepted_at = timezone.now()
+        profile.save(update_fields=[
+            "goal",
+            "custom_goal",
+            "activity_level",
+            "focus_side",
+            "cue_style",
+            "height_cm",
+            "weight_kg",
+            "wellness_plan",
+            "wellness_plan_accepted_at",
+            "updated_at",
+        ])
+        return Response(PatientProfileSerializer(profile).data)
 
 
 INVITE_ALPHABET = string.ascii_uppercase.replace("I", "").replace("O", "") + "23456789"

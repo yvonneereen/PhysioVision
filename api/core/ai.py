@@ -1,7 +1,7 @@
 from django.conf import settings
-from google import genai
 
 from .models import CarePath, UserRole, WellnessScreeningStatus
+from .wellness_agent import accepted_plan_instruction
 
 
 PATIENT_INSTRUCTIONS = """
@@ -45,11 +45,7 @@ def patient_pathway_instruction(user):
         and profile.wellness_screening_status
         == WellnessScreeningStatus.ELIGIBLE
     ):
-        return (
-            "The user completed the prototype's general wellness screening. "
-            "You may explain the conservative plan selected by the application, "
-            "but do not claim medical clearance and do not invent rehabilitation exercises."
-        )
+        return accepted_plan_instruction(profile)
     if profile.wellness_screening_status == WellnessScreeningStatus.PENDING:
         return (
             "The general wellness screening is incomplete. Do not generate an "
@@ -72,6 +68,8 @@ def generate_agent_reply(user, message):
         raise RuntimeError("GEMINI_API_KEY is not configured.")
     if user.role == UserRole.PATIENT:
         instructions = f"{instructions}\n\nCurrent pathway rule:\n{patient_pathway_instruction(user)}"
+
+    from google import genai
 
     client = genai.Client(api_key=settings.GEMINI_API_KEY)
     interaction = client.interactions.create(

@@ -3355,6 +3355,46 @@ details.metrics summary {
   gap: 12px;
 }
 
+.planner-agent-intro {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: -8px 0 20px;
+  padding: 14px;
+  border: 1px solid rgba(66, 143, 98, 0.28);
+  border-radius: 12px;
+  background: var(--mint-light);
+}
+
+.planner-agent-intro > span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 50%;
+  color: var(--white);
+  background: var(--green);
+}
+
+.planner-agent-intro p,
+.planner-agent-intro strong {
+  display: block;
+  margin: 0;
+}
+
+.planner-agent-intro p {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.planner-agent-intro strong {
+  margin-bottom: 3px;
+  color: var(--ink);
+  font-size: 12px;
+}
+
 .field-grid label,
 .history-field {
   position: relative;
@@ -3415,6 +3455,34 @@ details.metrics summary {
   margin-top: 12px;
 }
 
+.planner-notes-field {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.planner-notes-field textarea {
+  min-height: 72px;
+  padding: 12px 15px;
+  resize: vertical;
+}
+
+.planner-request-status {
+  min-height: 18px;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.planner-request-status:not(:empty) {
+  padding-left: 12px;
+  border-left: 3px solid var(--coral);
+}
+
 .history-field textarea,
 .booking-reason textarea {
   min-height: auto;
@@ -3463,6 +3531,35 @@ details.metrics summary {
 .plan-created-icon.review {
   color: #8c2c21;
   background: #fbe8e4;
+}
+
+.plan-created-icon.ai-draft {
+  color: var(--white);
+  background: var(--green);
+}
+
+.planner-rationale {
+  display: grid;
+  gap: 7px;
+  margin: -10px 0 18px;
+}
+
+.planner-rationale p {
+  position: relative;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.planner-rationale p::before {
+  position: absolute;
+  top: 1px;
+  left: 0;
+  content: "✓";
+  color: var(--green);
+  font-weight: 800;
 }
 
 .generated-plan {
@@ -3543,6 +3640,78 @@ details.metrics summary {
   background: #fbe8e4;
 }
 
+.planner-trace {
+  margin: 2px 0 16px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--white);
+}
+
+.planner-trace summary {
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.planner-trace ol {
+  margin: 10px 0 0;
+  padding-left: 19px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.planner-revision {
+  margin: 0 0 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--cream);
+}
+
+.planner-revision > p {
+  margin: 0 0 10px;
+  font-size: 12px;
+}
+
+.planner-revision-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.planner-revision-actions .button {
+  min-height: 42px;
+  padding: 0 16px;
+}
+
+.planner-revision label > span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.planner-revision label > div {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.planner-revision input {
+  min-width: 0;
+  min-height: 44px;
+}
+
+.planner-revision label .button {
+  min-height: 44px;
+  padding: 0 16px;
+}
+
 .wellness-review-outcome ul {
   margin: 0 0 18px;
   padding-left: 20px;
@@ -3555,6 +3724,10 @@ details.metrics summary {
   width: 100%;
 }
 
+.auth-primary-action {
+  margin-top: 16px;
+}
+
 @media (max-width: 640px) {
   .wellness-screening label {
     width: 100%;
@@ -3563,6 +3736,15 @@ details.metrics summary {
   .wellness-screening label + label {
     margin-top: 6px;
     margin-left: 0;
+  }
+
+  .planner-revision-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .planner-revision label > div {
+    grid-template-columns: 1fr;
   }
 }
 

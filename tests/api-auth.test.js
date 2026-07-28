@@ -114,10 +114,49 @@ const logoutRequest = api.logout();
 assert.equal(sessionStorage.getItem("physiovision.token"), null);
 finishLogout({ status: 204, body: null });
 await logoutRequest;
+
+sessionStorage.setItem("physiovision.token", "planning-token");
+responses.push({
+  status: 200,
+  body: {
+    plan: {
+      source: "gemini_wellness_agent",
+      days: [],
+    },
+    draft_token: "signed-draft-token",
+    accepted: false,
+  },
+});
+await api.generateWellnessPlan({
+  goal: "stay_active",
+  activity_level: "lightly_active",
+  focus_side: "both",
+  cue_style: "gentle",
+  days_per_week: 3,
+  minutes_per_session: 10,
+  equipment: "chair",
+});
+
+responses.push({
+  status: 200,
+  body: {
+    wellness_plan: {
+      source: "gemini_wellness_agent",
+      days: [],
+    },
+  },
+});
+await api.acceptWellnessPlan("signed-draft-token");
+assert.equal(
+  JSON.parse(requests[9].options.body).draft_token,
+  "signed-draft-token",
+);
 assert.match(requests[0].url, /\/api\/auth\/register\/$/);
 assert.match(requests[2].url, /\/api\/auth\/verify-login\/$/);
 assert.match(requests[4].url, /\/api\/auth\/forgot-password\/$/);
 assert.match(requests[5].url, /\/api\/auth\/verify-reset-code\/$/);
 assert.match(requests[6].url, /\/api\/auth\/reset-password\/$/);
+assert.match(requests[8].url, /\/api\/auth\/agent\/plan\/$/);
+assert.match(requests[9].url, /\/api\/auth\/agent\/plan\/accept\/$/);
 
 console.log("API authentication storage tests passed");

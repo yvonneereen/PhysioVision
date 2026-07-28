@@ -53,6 +53,16 @@ urlpatterns = [
         name='wellness-screening',
     ),
     path(
+        'agent/plan/',
+        views.WellnessPlanDraftView.as_view(),
+        name='agent-plan-draft',
+    ),
+    path(
+        'agent/plan/accept/',
+        views.WellnessPlanAcceptView.as_view(),
+        name='agent-plan-accept',
+    ),
+    path(
         'care-invitations/',
         views.CareInvitationListCreateView.as_view(),
         name='care-invitations',

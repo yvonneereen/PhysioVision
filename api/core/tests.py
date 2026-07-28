@@ -3,6 +3,7 @@ import re
 from datetime import timedelta
 from unittest.mock import patch
 
+from django.core import signing
 from django.core import mail
 from django.core.cache import cache
 from django.test import override_settings
@@ -828,6 +829,148 @@ class WellnessScreeningViewTests(APITestCase):
         self.assertEqual(response.status_code, 409)
         user.patient_profile.refresh_from_db()
         self.assertEqual(user.patient_profile.care_path, CarePath.CLINICIAN)
+
+
+class WellnessPlanAgentViewTests(APITestCase):
+    draft_endpoint = "/api/auth/agent/plan/"
+    accept_endpoint = "/api/auth/agent/plan/accept/"
+
+    def make_patient(self, *, eligible=True):
+        user = User.objects.create_user(
+            username="planner@example.com",
+            email="planner@example.com",
+            password="test-password",
+            role=UserRole.PATIENT,
+        )
+        PatientProfile.objects.create(
+            user=user,
+            pathway_choice=PatientPathwayChoice.WELLNESS,
+            care_path=CarePath.WELLNESS,
+            wellness_screening_status=(
+                WellnessScreeningStatus.ELIGIBLE
+                if eligible
+                else WellnessScreeningStatus.PENDING
+            ),
+        )
+        return user
+
+    def preferences(self):
+        return {
+            "goal": GoalChoice.STRONGER_KNEES,
+            "custom_goal": "",
+            "activity_level": "lightly_active",
+            "focus_side": "both",
+            "cue_style": "gentle",
+            "days_per_week": 3,
+            "minutes_per_session": 10,
+            "equipment": "chair",
+            "planning_notes": "Prefer short morning sessions.",
+            "age": 68,
+            "height_cm": 163,
+            "weight_kg": 62,
+        }
+
+    def draft(self):
+        return {
+            "summary": "A gradual knee-strength plan.",
+            "rationale": ["Matches the selected goal."],
+            "days": [
+                {
+                    "title": "Control",
+                    "exercise_ids": ["half-squats"],
+                    "duration_minutes": 10,
+                },
+                {
+                    "title": "Seated strength",
+                    "exercise_ids": ["leg-extensions"],
+                    "duration_minutes": 8,
+                },
+                {
+                    "title": "Lower-leg support",
+                    "exercise_ids": ["calf-raises"],
+                    "duration_minutes": 10,
+                },
+            ],
+        }
+
+    def signed_draft(self, user, plan=None):
+        return signing.dumps(
+            {
+                "user_id": str(user.id),
+                "plan": plan or self.draft(),
+                "preferences": self.preferences(),
+            },
+            salt="physiovision.wellness-plan-draft",
+            compress=True,
+        )
+
+    @patch("api.core.views.generate_wellness_plan")
+    def test_eligible_patient_can_request_unaccepted_draft(self, generate):
+        user = self.make_patient()
+        self.client.force_authenticate(user)
+        generate.return_value = {
+            **self.draft(),
+            "source": "gemini_wellness_agent",
+        }
+
+        response = self.client.post(
+            self.draft_endpoint,
+            self.preferences(),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["accepted"])
+        self.assertTrue(response.data["draft_token"])
+        user.patient_profile.refresh_from_db()
+        self.assertEqual(user.patient_profile.wellness_plan, {})
+
+    def test_screening_is_required_before_ai_draft(self):
+        user = self.make_patient(eligible=False)
+        self.client.force_authenticate(user)
+
+        response = self.client.post(
+            self.draft_endpoint,
+            self.preferences(),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+
+    def test_accept_revalidates_and_persists_reviewed_plan(self):
+        user = self.make_patient()
+        self.client.force_authenticate(user)
+        response = self.client.post(
+            self.accept_endpoint,
+            {"draft_token": self.signed_draft(user)},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        user.patient_profile.refresh_from_db()
+        self.assertEqual(
+            user.patient_profile.wellness_plan["source"],
+            "gemini_wellness_agent",
+        )
+        self.assertIsNotNone(
+            user.patient_profile.wellness_plan_accepted_at,
+        )
+
+    def test_accept_rejects_unreviewed_exercise(self):
+        user = self.make_patient()
+        self.client.force_authenticate(user)
+        unsafe_plan = self.draft()
+        unsafe_plan["days"][0]["exercise_ids"] = ["invented-movement"]
+
+        response = self.client.post(
+            self.accept_endpoint,
+            {"draft_token": self.signed_draft(user, unsafe_plan)},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        user.patient_profile.refresh_from_db()
+        self.assertEqual(user.patient_profile.wellness_plan, {})
 
 
 class PatientPathwayChoiceViewTests(APITestCase):

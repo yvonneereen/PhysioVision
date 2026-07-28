@@ -11,12 +11,12 @@ import {
   isLoggedIn,
   selectPatientPathway,
   updateConsultation,
-} from "./api.js?v=20";
+} from "./api.js?v=21";
 import {
   analysePatientTrend,
   isCurrentPrescription,
 } from "./patient-dashboard-state.js?v=1";
-import { buildConservativeWellnessPlan } from "./wellness-screening.js";
+import { saveProfile } from "./personalization.js?v=6";
 
 const dashboard = document.getElementById("patientDashboard");
 const publicMain = document.getElementById("main-content");
@@ -59,7 +59,14 @@ const bookingClinicianAvatar = document.getElementById("bookingClinicianAvatar")
 const toast = document.getElementById("toast");
 const toastMessage = document.getElementById("toastMessage");
 
-const GOAL_LABELS = Object.freeze({
+const TREND_STATUS_LABELS = Object.freeze({
+  building_baseline: "Building baseline",
+  stable: "Steady",
+  improving: "Improving",
+  review_suggested: "Review suggested",
+});
+
+const GOAL_BROWSER_LABELS = Object.freeze({
   stronger_knees: "Stronger knees",
   better_balance: "Better balance",
   less_stiffness: "Move with less stiffness",
@@ -70,11 +77,10 @@ const GOAL_LABELS = Object.freeze({
   other: "Other",
 });
 
-const TREND_STATUS_LABELS = Object.freeze({
-  building_baseline: "Building baseline",
-  stable: "Steady",
-  improving: "Improving",
-  review_suggested: "Review suggested",
+const ACTIVITY_BROWSER_LABELS = Object.freeze({
+  lightly_active: "Lightly active",
+  mostly_seated: "Mostly seated",
+  active_most_days: "Active most days",
 });
 
 const DEMO_CLINICIAN_PLAN = Object.freeze([
@@ -319,7 +325,7 @@ function renderWellnessPlan(profile) {
     const needsReview =
       screeningStatus === "needs_review" ||
       (profile?.care_path ?? profile?.carePath) === "needs_review";
-    primaryAction = needsReview ? "plan" : "ai";
+    primaryAction = "plan";
     planStatus.textContent = needsReview ? "Review needed" : "No plan yet";
     planStatus.className = needsReview
       ? "status-pill status-pill-review"
@@ -357,28 +363,46 @@ function renderWellnessPlan(profile) {
     return;
   }
 
+  const plan = profile.wellness_plan ?? profile.wellnessPlan;
+  if (!plan?.days?.length) {
+    firstExerciseId = null;
+    primaryAction = "plan";
+    planStatus.textContent = "Ready for an AI draft";
+    planStatus.className = "status-pill";
+    planIntro.textContent =
+      "Your safety screen is eligible, but no AI plan has been accepted yet.";
+    planList.appendChild(planRow({
+      label: "✦",
+      title: "Create and review your AI plan",
+      detail:
+        "Answer the short planning interview, review why each session was chosen, and accept the draft before exercises unlock.",
+      note:
+        "Passing the safety screen alone never assigns exercises.",
+    }));
+    planStart.textContent = "Ask AI to draft my plan";
+    createPlan.textContent = "Create my plan with AI";
+    return;
+  }
+
   primaryAction = "exercise";
-  const selectedGoal = GOAL_LABELS[profile.goal] ?? profile.goal ?? "Stay active";
-  const isOtherGoal = selectedGoal === "Other";
-  const goal = isOtherGoal
-    ? profile.custom_goal ?? profile.customGoal ?? "Stay active"
-    : selectedGoal;
-  const plan = buildConservativeWellnessPlan(
-    isOtherGoal ? "Stay active" : selectedGoal
-  );
-  plan.goal = goal;
-  firstExerciseId = plan.days[0]?.exerciseIds?.[0] ?? null;
-  planStatus.textContent = "Wellness plan ready";
+  firstExerciseId =
+    plan.days[0]?.exercise_ids?.[0]
+    ?? plan.days[0]?.exerciseIds?.[0]
+    ?? null;
+  planStatus.textContent = "AI plan accepted";
   planStatus.className = "status-pill";
   planIntro.textContent =
-    "Your conservative general-wellness plan is personalized from your goal and safety-screen answers.";
+    plan.summary
+    ?? "Your accepted AI wellness plan uses reviewed, camera-trackable exercises.";
   plan.days.forEach((day) => {
+    const exerciseIds = day.exercise_ids ?? day.exerciseIds ?? [];
     planList.appendChild(planRow({
       label: day.day,
       title: day.title,
       detail: `${day.exercises} · ${day.duration}`,
-      exerciseId: day.exerciseIds[0],
-      note: "Stop if you feel unwell or develop new or concerning symptoms.",
+      exerciseId: exerciseIds[0],
+      note:
+        "AI draft accepted by you. Stop if you feel unwell or develop new or concerning symptoms.",
     }));
   });
   planStart.innerHTML = 'Start wellness exercises <span aria-hidden="true">→</span>';
@@ -651,6 +675,13 @@ async function loadDashboardData() {
 async function activatePatientDashboard(user) {
   if (user?.role !== "patient") return;
   currentUser = user;
+  saveProfile({
+    ...browserProfileFromApi(user.profile ?? {}),
+    name: user.first_name ?? "",
+  }, {
+    syncBackend: false,
+    syncScreening: false,
+  });
   patientName.textContent = user.first_name || "there";
   setView("dashboard");
   const choice =
@@ -723,14 +754,19 @@ function browserProfileFromApi(profile) {
     ...(currentUser?.profile ?? {}),
     carePath: profile.care_path,
     pathwayChoice: profile.pathway_choice,
-    goal: profile.goal,
+    goal: GOAL_BROWSER_LABELS[profile.goal] ?? profile.goal,
     customGoal: profile.custom_goal ?? "",
+    activity:
+      ACTIVITY_BROWSER_LABELS[profile.activity_level]
+      ?? profile.activity_level,
     focusSide: profile.focus_side,
     cueStyle: profile.cue_style,
     wellnessScreening: {
       ...(currentUser?.profile?.wellnessScreening ?? {}),
       status: profile.wellness_screening_status,
     },
+    wellnessPlan: profile.wellness_plan ?? null,
+    wellnessPlanAcceptedAt: profile.wellness_plan_accepted_at ?? null,
   };
 }
 
@@ -860,6 +896,14 @@ window.addEventListener("physiovision:profile-updated", (event) => {
         browserProfile.pathwayChoice ??
         browserProfile.pathway_choice ??
         currentUser.profile?.pathway_choice,
+      wellness_plan:
+        browserProfile.wellnessPlan ??
+        browserProfile.wellness_plan ??
+        currentUser.profile?.wellness_plan,
+      wellness_plan_accepted_at:
+        browserProfile.wellnessPlanAcceptedAt ??
+        browserProfile.wellness_plan_accepted_at ??
+        currentUser.profile?.wellness_plan_accepted_at,
     },
   };
   renderPlan(currentUser, currentData?.prescriptions ?? []);

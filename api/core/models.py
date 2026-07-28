@@ -218,6 +218,8 @@ class PatientProfile(TimestampedModel):
     )
     wellness_screening_answers = models.JSONField(default=dict, blank=True)
     wellness_screened_at = models.DateTimeField(null=True, blank=True)
+    wellness_plan = models.JSONField(default=dict, blank=True)
+    wellness_plan_accepted_at = models.DateTimeField(null=True, blank=True)
 
     # Null for wellness-path users who have no assigned clinician
     primary_clinician = models.ForeignKey(

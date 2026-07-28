@@ -7,8 +7,11 @@ from rest_framework import serializers
 
 from .analytics import adherence_pct, parse_days_per_week, session_quality_trend
 from .models import (
+    ActivityLevel,
     CareInvitation,
     ClinicianProfile,
+    CueStyle,
+    FocusSide,
     GoalChoice,
     PatientPathwayChoice,
     PatientProfile,
@@ -175,12 +178,14 @@ class PatientProfileSerializer(serializers.ModelSerializer):
             'height_cm', 'weight_kg', 'medical_history', 'low_risk_acknowledged',
             'wellness_screening_status', 'wellness_screening_answers',
             'wellness_screened_at',
+            'wellness_plan', 'wellness_plan_accepted_at',
             'primary_clinician', 'created_at', 'updated_at',
         ]
         read_only_fields = [
             'id', 'user', 'care_path', 'pathway_choice',
             'pathway_selected_at', 'wellness_screening_status',
             'wellness_screening_answers', 'wellness_screened_at',
+            'wellness_plan', 'wellness_plan_accepted_at',
             'created_at', 'updated_at',
         ]
 
@@ -220,6 +225,73 @@ class WellnessScreeningSerializer(serializers.Serializer):
     no_clinician_restrictions = serializers.BooleanField()
     general_wellness_goal = serializers.BooleanField()
     no_concerning_symptoms = serializers.BooleanField()
+
+
+class WellnessPlanPreferencesSerializer(serializers.Serializer):
+    goal = serializers.ChoiceField(choices=GoalChoice.choices)
+    custom_goal = serializers.CharField(
+        max_length=120,
+        required=False,
+        allow_blank=True,
+    )
+    activity_level = serializers.ChoiceField(choices=ActivityLevel.choices)
+    focus_side = serializers.ChoiceField(choices=FocusSide.choices)
+    cue_style = serializers.ChoiceField(choices=CueStyle.choices)
+    days_per_week = serializers.IntegerField(min_value=2, max_value=4)
+    minutes_per_session = serializers.IntegerField(min_value=5, max_value=20)
+    equipment = serializers.ChoiceField(
+        choices=["none", "chair", "chair_band"],
+    )
+    planning_notes = serializers.CharField(
+        max_length=500,
+        required=False,
+        allow_blank=True,
+    )
+    age = serializers.IntegerField(
+        min_value=50,
+        max_value=100,
+        required=False,
+        allow_null=True,
+    )
+    height_cm = serializers.IntegerField(
+        min_value=120,
+        max_value=220,
+        required=False,
+        allow_null=True,
+    )
+    weight_kg = serializers.DecimalField(
+        max_digits=5,
+        decimal_places=1,
+        min_value=30,
+        max_value=250,
+        required=False,
+        allow_null=True,
+    )
+
+    def validate(self, attrs):
+        custom_goal = attrs.get("custom_goal", "").strip()
+        if attrs["goal"] == GoalChoice.OTHER and not custom_goal:
+            raise serializers.ValidationError({
+                "custom_goal": "Describe your general-wellness goal.",
+            })
+        attrs["custom_goal"] = (
+            custom_goal if attrs["goal"] == GoalChoice.OTHER else ""
+        )
+        attrs["planning_notes"] = attrs.get("planning_notes", "").strip()
+        return attrs
+
+
+class WellnessPlanDraftSerializer(WellnessPlanPreferencesSerializer):
+    previous_plan = serializers.JSONField(required=False, allow_null=True)
+    revision = serializers.CharField(
+        max_length=240,
+        required=False,
+        allow_blank=True,
+    )
+
+
+class WellnessPlanAcceptSerializer(serializers.Serializer):
+    draft_token = serializers.CharField(max_length=12000)
 
 
 class CareInvitationSerializer(serializers.ModelSerializer):

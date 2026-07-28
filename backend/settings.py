@@ -76,6 +76,7 @@ REST_FRAMEWORK = {
         'password_reset_request': '5/hour',
         'password_reset_verify': '10/hour',
         'password_reset_confirm': '5/hour',
+        'wellness_plan_draft': '12/hour',
     },
 }
 

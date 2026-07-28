@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=45" />
+  <link rel="stylesheet" href="style.css?v=47" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -1327,6 +1327,7 @@
             If any answer is “No or not sure,” no self-guided plan will be
             generated. The prototype will recommend professional review.
           </p>
+          <p class="planner-request-status" id="wellnessScreeningStatus" role="status" aria-live="polite"></p>
           <div class="modal-actions">
             <button class="text-link" type="button" data-prev-step>← Back</button>
             <button class="button button-dark" type="button" data-next-step>
@@ -1336,12 +1337,21 @@
         </div>
 
         <div class="form-step" data-step="3">
-          <p class="eyebrow">Step 3 of 4</p>
-          <h2>Help us fit the plan to you.</h2>
+          <p class="eyebrow">Step 3 of 4 · AI planning interview</p>
+          <h2>Tell your AI planner what will work for you.</h2>
           <p class="form-intro">
-            These preferences select from a conservative, reviewed wellness
-            exercise list. They do not change medical safety limits.
+            The AI uses these answers to draft a plan from the reviewed
+            exercises your camera can identify. It cannot change the safety
+            result or add unreviewed movements.
           </p>
+          <div class="planner-agent-intro">
+            <span aria-hidden="true">✦</span>
+            <p>
+              <strong>PhysioVision planning agent</strong>
+              I will match your goal, available time and equipment, then show
+              my reasoning before you decide whether to accept the draft.
+            </p>
+          </div>
           <div class="field-grid">
             <label>
               <span>Preferred name</span>
@@ -1353,14 +1363,21 @@
               <em>years</em>
             </label>
             <label>
-              <span>Height</span>
-              <input type="number" name="height" value="163" min="120" max="220" required />
-              <em>cm</em>
+              <span>Days each week</span>
+              <select name="daysPerWeek" required>
+                <option value="2">2 days</option>
+                <option value="3" selected>3 days</option>
+                <option value="4">4 days</option>
+              </select>
             </label>
             <label>
-              <span>Weight</span>
-              <input type="number" name="weight" value="62" min="30" max="250" required />
-              <em>kg</em>
+              <span>Time for each session</span>
+              <select name="minutesPerSession" required>
+                <option value="5">About 5 minutes</option>
+                <option value="10" selected>About 10 minutes</option>
+                <option value="15">About 15 minutes</option>
+                <option value="20">About 20 minutes</option>
+              </select>
             </label>
             <label>
               <span>Current activity</span>
@@ -1371,10 +1388,19 @@
               </select>
             </label>
             <label>
+              <span>Equipment available</span>
+              <select name="equipment">
+                <option value="none">No equipment</option>
+                <option value="chair" selected>Stable chair</option>
+                <option value="chair_band">Stable chair and exercise band</option>
+              </select>
+            </label>
+            <label>
               <span>Focus side</span>
               <select name="focusSide">
                 <option value="right">Right side</option>
                 <option value="left">Left side</option>
+                <option value="both">Both sides</option>
               </select>
             </label>
             <label>
@@ -1385,33 +1411,85 @@
                 <option value="detailed">More explanation</option>
               </select>
             </label>
+            <label>
+              <span>Height <small>(optional)</small></span>
+              <input type="number" name="height" value="163" min="120" max="220" />
+              <em>cm</em>
+            </label>
+            <label>
+              <span>Weight <small>(optional)</small></span>
+              <input type="number" name="weight" value="62" min="30" max="250" />
+              <em>kg</em>
+            </label>
           </div>
+          <label class="planner-notes-field">
+            <span>Anything the planner should consider? <small>(optional)</small></span>
+            <textarea
+              name="planningNotes"
+              maxlength="500"
+              rows="3"
+              placeholder="For example: I prefer shorter sessions in the morning."
+            ></textarea>
+          </label>
+          <p class="planner-request-status" id="plannerRequestStatus" role="status" aria-live="polite"></p>
           <div class="modal-actions">
             <button class="text-link" type="button" data-prev-step>← Back</button>
-            <button class="button button-dark" type="button" data-next-step>
-              Create my plan <span aria-hidden="true">✦</span>
+            <button class="button button-dark" id="requestPlanDraft" type="button">
+              Ask AI to draft my plan <span aria-hidden="true">✦</span>
             </button>
           </div>
         </div>
 
         <div class="form-step" data-step="4">
           <div id="wellnessEligibleOutcome">
-            <div class="plan-created-icon" aria-hidden="true">✓</div>
-            <p class="eyebrow">Your conservative starting plan</p>
-            <h2>Three gentle sessions.<br />One clear goal.</h2>
+            <div class="plan-created-icon ai-draft" aria-hidden="true">✦</div>
+            <p class="eyebrow">AI draft · Not saved yet</p>
+            <h2>Your reviewed wellness-plan draft.</h2>
             <p class="form-intro" id="planSummary">
-              Based on your confirmed wellness pathway, we’ve created a gradual routine.
+              The AI is preparing a gradual routine from your answers.
             </p>
+            <div class="planner-rationale" id="plannerRationale"></div>
             <div class="generated-plan" id="generatedWellnessPlan"></div>
+            <details class="planner-trace">
+              <summary>How the AI created this draft</summary>
+              <ol id="plannerAgentTrace"></ol>
+            </details>
             <div class="plan-note">
               <span>i</span>
               <p>
-                This is a hackathon wellness prototype, not medical clearance.
-                Stop if you feel unwell and seek appropriate professional advice.
+                AI selected only from the reviewed exercise catalogue. This
+                draft is not medical clearance and cannot unlock exercises
+                until you accept it.
               </p>
             </div>
-            <button class="button button-coral full-button" type="button" data-start-plan>
-              Start my first session <span aria-hidden="true">→</span>
+            <div class="planner-revision">
+              <p><strong>Would you like the AI to change anything?</strong></p>
+              <div class="planner-revision-actions">
+                <button class="button button-light" type="button" data-revise-plan="Make every session easier and use the gentlest suitable exercises.">
+                  Make it easier
+                </button>
+                <button class="text-link" type="button" data-edit-plan-answers>
+                  Edit my answers
+                </button>
+              </div>
+              <label>
+                <span>Or describe a change</span>
+                <div>
+                  <input
+                    id="planRevisionRequest"
+                    type="text"
+                    maxlength="240"
+                    placeholder="For example: keep every session under 10 minutes"
+                  />
+                  <button class="button button-dark" type="button" id="requestPlanRevision">
+                    Ask AI to revise
+                  </button>
+                </div>
+              </label>
+            </div>
+            <p class="planner-request-status" id="plannerAcceptStatus" role="status" aria-live="polite"></p>
+            <button class="button button-coral full-button" type="button" data-accept-plan>
+              Accept plan and start <span aria-hidden="true">→</span>
             </button>
           </div>
           <div id="wellnessReviewOutcome" class="wellness-review-outcome hidden">
@@ -1837,7 +1915,7 @@
         </div>
         <p id="loginStatus" style="color:#287a57;margin:.5rem 0;display:none;"></p>
         <p id="loginError" style="color:#e05;margin:.5rem 0;display:none;"></p>
-        <button class="button button-coral full-button" type="submit">Sign in →</button>
+        <button class="button button-coral full-button auth-primary-action" type="submit">Sign in →</button>
         <button class="text-link" id="forgotPasswordButton" type="button" style="margin-top:.75rem;">Forgot password?</button>
       </form>
 
@@ -1895,7 +1973,7 @@
           </label>
         </div>
         <p id="verificationError" style="color:#e05;margin:.5rem 0;display:none;"></p>
-        <button class="button button-coral full-button" type="submit">Verify and sign in →</button>
+        <button class="button button-coral full-button auth-primary-action" type="submit">Verify and sign in →</button>
         <button class="button button-light full-button" id="resendVerification" type="button" style="margin-top:.75rem;">Resend code</button>
         <button class="text-link" type="button" id="verificationBackToLogin" onclick="document.getElementById('authTabLogin').click()" style="margin-top:.75rem;">Back to sign in</button>
       </form>
@@ -1953,8 +2031,8 @@
 
   <script src="runtime-config.js"></script>
   <script type="module" src="auth.js?v=22"></script>
-  <script type="module" src="ui.js?v=16"></script>
-  <script type="module" src="patient-dashboard.js?v=7"></script>
+  <script type="module" src="ui.js?v=17"></script>
+  <script type="module" src="patient-dashboard.js?v=8"></script>
   <script type="module" src="therapist.js?v=15"></script>
   <script type="module" src="exercise-library.js?v=15"></script>
   <script type="module" src="main.js?v=46"></script>

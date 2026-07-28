@@ -173,6 +173,16 @@ export async function postWellnessScreening(answers) {
   return request("POST", "/auth/wellness-screening/", answers);
 }
 
+export async function generateWellnessPlan(preferences) {
+  return request("POST", "/auth/agent/plan/", preferences);
+}
+
+export async function acceptWellnessPlan(draftToken) {
+  return request("POST", "/auth/agent/plan/accept/", {
+    draft_token: draftToken,
+  });
+}
+
 export async function createCareInvitation() {
   return request("POST", "/auth/care-invitations/", {});
 }

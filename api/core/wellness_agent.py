@@ -1,0 +1,357 @@
+import json
+import re
+
+
+class WellnessPlanValidationError(ValueError):
+    pass
+
+
+GOAL_LABELS = {
+    "stronger_knees": "Stronger knees",
+    "better_balance": "Better balance",
+    "less_stiffness": "Move with less stiffness",
+    "stay_active": "Stay active",
+    "stronger_hips": "Stronger hips",
+    "ankle_mobility": "Better ankle movement",
+    "walking_confidence": "Walk with confidence",
+    "other": "Other",
+}
+
+
+# This is the AI agent's reviewed tool catalogue. Gemini may choose only from
+# these camera-trackable exercises; names, equipment limits and plan dose
+# boundaries are enforced again after generation.
+WELLNESS_EXERCISE_CATALOGUE = {
+    "half-squats": {
+        "name": "Half squats",
+        "goals": ["stronger_knees", "better_balance", "stay_active", "walking_confidence"],
+        "equipment": "chair",
+    },
+    "leg-extensions": {
+        "name": "Seated leg extensions",
+        "goals": ["stronger_knees", "stay_active"],
+        "equipment": "chair",
+    },
+    "heel-cord-stretch": {
+        "name": "Heel cord stretch",
+        "goals": ["less_stiffness", "ankle_mobility", "walking_confidence"],
+        "equipment": "none",
+    },
+    "calf-raises": {
+        "name": "Calf raises",
+        "goals": ["stronger_knees", "better_balance", "ankle_mobility", "walking_confidence"],
+        "equipment": "chair",
+    },
+    "hamstring-curls": {
+        "name": "Hamstring curls",
+        "goals": ["stronger_knees", "stay_active", "walking_confidence"],
+        "equipment": "chair",
+    },
+    "hip-abduction": {
+        "name": "Standing hip abduction",
+        "goals": ["better_balance", "stronger_hips", "walking_confidence"],
+        "equipment": "chair",
+    },
+    "straight-leg-raises-supine": {
+        "name": "Supine straight-leg raises",
+        "goals": ["stronger_knees", "stronger_hips"],
+        "equipment": "none",
+    },
+    "hip-adduction": {
+        "name": "Side-lying hip adduction",
+        "goals": ["stronger_hips", "stay_active"],
+        "equipment": "none",
+    },
+    "leg-presses": {
+        "name": "Elastic-band leg presses",
+        "goals": ["stronger_knees", "stronger_hips", "walking_confidence"],
+        "equipment": "band",
+    },
+    "supported_single_leg_balance": {
+        "name": "Supported single-leg balance",
+        "goals": ["better_balance", "walking_confidence"],
+        "equipment": "chair",
+    },
+    "ankle_pumps": {
+        "name": "Ankle pumps",
+        "goals": ["less_stiffness", "ankle_mobility", "stay_active"],
+        "equipment": "none",
+    },
+    "heel_slides": {
+        "name": "Heel slides",
+        "goals": ["less_stiffness", "stay_active"],
+        "equipment": "none",
+    },
+    "hip_bridge": {
+        "name": "Supine bridge",
+        "goals": ["stronger_hips", "stay_active"],
+        "equipment": "none",
+    },
+    "clamshell": {
+        "name": "Clamshell",
+        "goals": ["stronger_hips", "better_balance"],
+        "equipment": "none",
+    },
+}
+
+DAY_SCHEDULES = {
+    2: ["Mon", "Thu"],
+    3: ["Mon", "Wed", "Sat"],
+    4: ["Mon", "Tue", "Thu", "Sat"],
+}
+
+
+def _clean_text(value, *, maximum):
+    return re.sub(r"\s+", " ", str(value or "")).strip()[:maximum]
+
+
+def allowed_exercises(preferences):
+    equipment = preferences.get("equipment", "chair")
+    supported_equipment = {
+        "none": {"none"},
+        "chair": {"none", "chair"},
+        "chair_band": {"none", "chair", "band"},
+    }.get(equipment, {"none", "chair"})
+    return {
+        exercise_id: exercise
+        for exercise_id, exercise in WELLNESS_EXERCISE_CATALOGUE.items()
+        if exercise["equipment"] in supported_equipment
+    }
+
+
+def normalize_wellness_plan(raw_plan, preferences):
+    if not isinstance(raw_plan, dict):
+        raise WellnessPlanValidationError("The AI response was not a plan object.")
+
+    expected_days = int(preferences.get("days_per_week", 3))
+    if expected_days not in DAY_SCHEDULES:
+        raise WellnessPlanValidationError("Choose between two and four sessions per week.")
+
+    available = allowed_exercises(preferences)
+    raw_days = raw_plan.get("days")
+    if not isinstance(raw_days, list) or len(raw_days) != expected_days:
+        raise WellnessPlanValidationError(
+            f"The draft must contain exactly {expected_days} sessions."
+        )
+
+    maximum_minutes = int(preferences.get("minutes_per_session", 10))
+    days = []
+    selected_ids = []
+    for index, raw_day in enumerate(raw_days):
+        if not isinstance(raw_day, dict):
+            raise WellnessPlanValidationError("Every session must be an object.")
+        exercise_ids = raw_day.get("exercise_ids", raw_day.get("exerciseIds"))
+        if not isinstance(exercise_ids, list) or not 1 <= len(exercise_ids) <= 2:
+            raise WellnessPlanValidationError(
+                "Every session must contain one or two reviewed exercises."
+            )
+        exercise_ids = list(dict.fromkeys(str(item) for item in exercise_ids))
+        if not exercise_ids or any(item not in available for item in exercise_ids):
+            raise WellnessPlanValidationError(
+                "The draft included an exercise outside the reviewed catalogue."
+            )
+        duration_minutes = raw_day.get(
+            "duration_minutes",
+            raw_day.get("durationMinutes", maximum_minutes),
+        )
+        try:
+            duration_minutes = int(duration_minutes)
+        except (TypeError, ValueError) as exc:
+            raise WellnessPlanValidationError(
+                "Every session needs a valid duration."
+            ) from exc
+        duration_minutes = min(maximum_minutes, max(5, duration_minutes))
+        exercise_names = [available[item]["name"] for item in exercise_ids]
+        selected_ids.extend(exercise_ids)
+        days.append({
+            "day": DAY_SCHEDULES[expected_days][index],
+            "title": _clean_text(
+                raw_day.get("title") or f"Session {index + 1}",
+                maximum=70,
+            ),
+            "exercise_ids": exercise_ids,
+            "exerciseIds": exercise_ids,
+            "exercises": " · ".join(exercise_names),
+            "duration_minutes": duration_minutes,
+            "duration": f"{duration_minutes} min",
+        })
+
+    goal = preferences.get("goal", "stay_active")
+    if goal != "other" and not any(
+        goal in WELLNESS_EXERCISE_CATALOGUE[exercise_id]["goals"]
+        for exercise_id in selected_ids
+    ):
+        raise WellnessPlanValidationError(
+            "The draft does not include an exercise related to the selected goal."
+        )
+
+    rationale = raw_plan.get("rationale")
+    if not isinstance(rationale, list):
+        rationale = []
+    rationale = [
+        _clean_text(item, maximum=180)
+        for item in rationale[:3]
+        if _clean_text(item, maximum=180)
+    ]
+    if not rationale:
+        rationale = [
+            "The draft uses only reviewed exercises compatible with your answers and available equipment."
+        ]
+
+    goal_label = (
+        _clean_text(preferences.get("custom_goal"), maximum=120)
+        if goal == "other"
+        else GOAL_LABELS.get(goal, "Stay active")
+    )
+    return {
+        "version": 1,
+        "source": "gemini_wellness_agent",
+        "goal": goal_label or "Stay active",
+        "summary": _clean_text(
+            raw_plan.get("summary")
+            or f"A gradual plan focused on {goal_label or 'staying active'}.",
+            maximum=240,
+        ),
+        "rationale": rationale,
+        "days": days,
+        "constraints": {
+            "days_per_week": expected_days,
+            "minutes_per_session": maximum_minutes,
+            "equipment": preferences.get("equipment", "chair"),
+            "safety_screen_required": True,
+        },
+        "agent_trace": [
+            "Confirmed the general-wellness safety screen is eligible.",
+            f"Filtered the reviewed catalogue to {len(available)} compatible exercises.",
+            "Validated every exercise and session against fixed application limits.",
+        ],
+    }
+
+
+def _extract_json(text):
+    candidate = str(text or "").strip()
+    if candidate.startswith("```"):
+        candidate = re.sub(r"^```(?:json)?\s*", "", candidate)
+        candidate = re.sub(r"\s*```$", "", candidate)
+    start = candidate.find("{")
+    end = candidate.rfind("}")
+    if start < 0 or end <= start:
+        raise WellnessPlanValidationError("The AI response did not contain JSON.")
+    try:
+        return json.loads(candidate[start:end + 1])
+    except json.JSONDecodeError as exc:
+        raise WellnessPlanValidationError("The AI response contained invalid JSON.") from exc
+
+
+def _planner_prompt(user, preferences, previous_plan=None, revision=""):
+    available = allowed_exercises(preferences)
+    catalogue = [
+        {
+            "id": exercise_id,
+            "name": item["name"],
+            "suitable_goals": item["goals"],
+            "equipment": item["equipment"],
+        }
+        for exercise_id, item in available.items()
+    ]
+    goal = preferences.get("goal", "stay_active")
+    goal_label = (
+        preferences.get("custom_goal")
+        if goal == "other"
+        else GOAL_LABELS.get(goal, "Stay active")
+    )
+    planning_input = {
+        "preferred_name": user.first_name or "the user",
+        "age": preferences.get("age"),
+        "height_cm": preferences.get("height_cm"),
+        "weight_kg": str(preferences.get("weight_kg") or ""),
+        "goal": goal_label,
+        "activity_level": preferences.get("activity_level"),
+        "focus_side": preferences.get("focus_side"),
+        "coaching_style": preferences.get("cue_style"),
+        "days_per_week": preferences.get("days_per_week"),
+        "minutes_per_session": preferences.get("minutes_per_session"),
+        "equipment": preferences.get("equipment"),
+        "user_notes": preferences.get("planning_notes", ""),
+        "revision_request": revision,
+        "previous_draft": previous_plan or None,
+        "reviewed_catalogue_tool_result": catalogue,
+    }
+    return json.dumps(planning_input, ensure_ascii=True)
+
+
+def generate_wellness_plan(user, preferences, *, previous_plan=None, revision=""):
+    from django.conf import settings
+
+    if not settings.GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY is not configured.")
+
+    from google import genai
+
+    system_instruction = """
+You are the PhysioVision general-wellness planning agent for an older adult.
+The application has already completed a separate, deterministic safety screen.
+You do not diagnose, medically clear, or create rehabilitation treatment.
+
+Use only exercise IDs from reviewed_catalogue_tool_result. Create exactly the
+requested number of sessions, with one or two exercises per session and no
+session longer than minutes_per_session. Prefer gradual variety and the user's
+stated goal, activity, equipment and notes. A revision request may change the
+draft but can never loosen those rules.
+
+Return JSON only, using this shape:
+{
+  "summary": "one short, supportive explanation",
+  "rationale": ["reason one", "reason two"],
+  "days": [
+    {
+      "title": "short session title",
+      "exercise_ids": ["reviewed-id"],
+      "duration_minutes": 10
+    }
+  ]
+}
+Do not include markdown, medical claims, new exercises, sets, repetitions,
+diagnoses, or anything outside the JSON object.
+""".strip()
+
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    prompt = _planner_prompt(user, preferences, previous_plan, revision)
+    validation_feedback = ""
+    last_error = None
+    for _ in range(2):
+        interaction = client.interactions.create(
+            model=settings.GEMINI_MODEL,
+            system_instruction=system_instruction,
+            input=prompt + validation_feedback,
+        )
+        try:
+            return normalize_wellness_plan(
+                _extract_json(interaction.output_text),
+                preferences,
+            )
+        except WellnessPlanValidationError as exc:
+            last_error = exc
+            validation_feedback = (
+                "\nThe previous draft failed application validation: "
+                f"{exc}. Return a corrected complete JSON object."
+            )
+    raise RuntimeError("The AI could not produce a safe plan.") from last_error
+
+
+def accepted_plan_instruction(profile):
+    plan = profile.wellness_plan or {}
+    if not plan:
+        return (
+            "No AI wellness plan has been accepted. Invite the user to open "
+            "Create my plan with AI; do not invent a plan in chat."
+        )
+    sessions = "; ".join(
+        f"{day.get('day')}: {day.get('exercises')}"
+        for day in plan.get("days", [])
+    )
+    return (
+        "The user accepted this AI-drafted, application-validated wellness "
+        f"plan: {sessions}. Explain this plan when asked, but do not silently "
+        "replace it. Plan changes must go through the planning review screen."
+    )

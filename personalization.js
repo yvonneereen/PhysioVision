@@ -38,6 +38,8 @@ const DEFAULT_PROFILE = Object.freeze({
   cueStyle: "gentle",
   carePath: "wellness",
   pathwayChoice: "unselected",
+  wellnessPlan: null,
+  wellnessPlanAcceptedAt: null,
   wellnessScreening: {
     version: 1,
     status: "pending",
@@ -72,7 +74,10 @@ export function hasSavedProfile() {
   }
 }
 
-export function saveProfile(profile) {
+export function saveProfile(
+  profile,
+  { syncBackend = true, syncScreening = true } = {}
+) {
   const previous = loadProfile();
   const next = {
     ...previous,
@@ -86,13 +91,42 @@ export function saveProfile(profile) {
     ).trim().slice(0, 120),
     updatedAt: new Date().toISOString(),
   };
+  const planInputsChanged = (
+    (
+      Object.hasOwn(profile, "goal")
+      && next.goal !== previous.goal
+    )
+    || (
+      Object.hasOwn(profile, "customGoal")
+      && next.customGoal !== previous.customGoal
+    )
+    || (
+      Object.hasOwn(profile, "activity")
+      && next.activity !== previous.activity
+    )
+    || (
+      Object.hasOwn(profile, "focusSide")
+      && next.focusSide !== previous.focusSide
+    )
+    || (
+      Object.hasOwn(profile, "cueStyle")
+      && next.cueStyle !== previous.cueStyle
+    )
+  );
+  if (
+    planInputsChanged
+    && !Object.hasOwn(profile, "wellnessPlan")
+  ) {
+    next.wellnessPlan = null;
+    next.wellnessPlanAcceptedAt = null;
+  }
   writeJson(PROFILE_KEY, next);
   window.dispatchEvent(
     new CustomEvent("physiovision:profile-updated", { detail: next })
   );
 
   // Sync to the authenticated backend; session storage is only a tab cache.
-  if (isLoggedIn()) {
+  if (isLoggedIn() && syncBackend) {
     patchMe({
       goal:            GOAL_API_VALUES[next.goal] ?? next.goal,
       custom_goal:     next.goal === "Other" ? next.customGoal : "",
@@ -103,7 +137,10 @@ export function saveProfile(profile) {
       care_path:       next.carePath,
     }).catch(() => {});
 
-    if (Object.hasOwn(profile, "wellnessScreening")) {
+    if (
+      syncScreening
+      && Object.hasOwn(profile, "wellnessScreening")
+    ) {
       const answers = next.wellnessScreening?.answers ?? {};
       postWellnessScreening({
         not_treating_condition: answers.notTreatingCondition === true,

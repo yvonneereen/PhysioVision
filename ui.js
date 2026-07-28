@@ -4,11 +4,32 @@ import {
   saveProfile,
 } from "./personalization.js";
 import {
-  buildConservativeWellnessPlan,
   evaluateWellnessScreening,
   WELLNESS_SCREENING_KEYS,
 } from "./wellness-screening.js";
-import { isLoggedIn } from "./api.js";
+import {
+  acceptWellnessPlan,
+  generateWellnessPlan,
+  isLoggedIn,
+  postWellnessScreening,
+} from "./api.js?v=21";
+
+const GOAL_API_VALUES = Object.freeze({
+  "Stronger knees": "stronger_knees",
+  "Better balance": "better_balance",
+  "Move with less stiffness": "less_stiffness",
+  "Stay active": "stay_active",
+  "Stronger hips": "stronger_hips",
+  "Better ankle movement": "ankle_mobility",
+  "Walk with confidence": "walking_confidence",
+  "Other": "other",
+});
+
+const ACTIVITY_API_VALUES = Object.freeze({
+  "Lightly active": "lightly_active",
+  "Mostly seated": "mostly_seated",
+  "Active most days": "active_most_days",
+});
 
 (() => {
   const body = document.body;
@@ -24,6 +45,14 @@ import { isLoggedIn } from "./api.js";
   const wellnessReviewOutcome = document.getElementById("wellnessReviewOutcome");
   const wellnessReviewReasons = document.getElementById("wellnessReviewReasons");
   const generatedWellnessPlan = document.getElementById("generatedWellnessPlan");
+  const plannerRationale = document.getElementById("plannerRationale");
+  const plannerAgentTrace = document.getElementById("plannerAgentTrace");
+  const plannerRequestStatus = document.getElementById("plannerRequestStatus");
+  const plannerAcceptStatus = document.getElementById("plannerAcceptStatus");
+  const wellnessScreeningStatus = document.getElementById("wellnessScreeningStatus");
+  const requestPlanDraft = document.getElementById("requestPlanDraft");
+  const requestPlanRevision = document.getElementById("requestPlanRevision");
+  const planRevisionRequest = document.getElementById("planRevisionRequest");
   const planCustomGoalField = document.getElementById("planCustomGoalField");
   const planCustomGoalInput = document.getElementById("planCustomGoal");
   const profileCustomGoalField = document.getElementById("profileCustomGoalField");
@@ -32,6 +61,8 @@ import { isLoggedIn } from "./api.js";
   let previousFocus = null;
   let planStep = 1;
   let activeWellnessPlan = null;
+  let activePlanPreferences = null;
+  let activePlanDraftToken = null;
   let authenticatedRole = null;
 
   window.addEventListener("physiovision:auth-role", (event) => {
@@ -105,6 +136,11 @@ import { isLoggedIn } from "./api.js";
         fillWellnessScreening(planForm, savedProfile.wellnessScreening);
       }
       syncCustomGoalField(planForm, planCustomGoalField, planCustomGoalInput);
+      activeWellnessPlan = null;
+      activePlanPreferences = null;
+      activePlanDraftToken = null;
+      if (plannerRequestStatus) plannerRequestStatus.textContent = "";
+      if (plannerAcceptStatus) plannerAcceptStatus.textContent = "";
       showPlanStep(1);
     } else if (id === "profile-modal") {
       fillFormFromProfile(profileForm, loadProfile());
@@ -260,14 +296,32 @@ import { isLoggedIn } from "./api.js";
 
     const summary = document.getElementById("planSummary");
     if (summary) {
-      summary.textContent = `Based on your confirmed wellness pathway${
-        age ? ` at age ${age}` : ""
-      }, this conservative routine focuses on ${plan.goal.toLowerCase()}.`;
+      summary.textContent = plan.summary || `This reviewed draft focuses on ${
+        plan.goal.toLowerCase()
+      }${age ? ` and reflects the preferences supplied at age ${age}` : ""}.`;
+    }
+    if (plannerRationale) {
+      plannerRationale.replaceChildren(
+        ...(plan.rationale ?? []).map((reason) => {
+          const item = document.createElement("p");
+          item.textContent = reason;
+          return item;
+        })
+      );
+    }
+    if (plannerAgentTrace) {
+      plannerAgentTrace.replaceChildren(
+        ...(plan.agent_trace ?? []).map((event) => {
+          const item = document.createElement("li");
+          item.textContent = event;
+          return item;
+        })
+      );
     }
   }
 
   planForm?.querySelectorAll("[data-next-step]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       if (planStep === 1 && !validatePlanStep(planSteps[0])) return;
 
       if (planStep === 2) {
@@ -276,42 +330,56 @@ import { isLoggedIn } from "./api.js";
         const screening = evaluateWellnessScreening(
           readWellnessScreening(formData)
         );
-        saveProfile({
+        const screeningProfile = {
           carePath:
             screening.status === "eligible" ? "wellness" : "needs_review",
           wellnessScreening: screening,
+        };
+        if (screening.status !== "eligible") {
+          screeningProfile.wellnessPlan = null;
+          screeningProfile.wellnessPlanAcceptedAt = null;
+        }
+        const cachedProfile = saveProfile(screeningProfile, {
+          syncBackend: false,
+          syncScreening: false,
         });
         renderWellnessOutcome(screening);
+        button.disabled = true;
+        if (wellnessScreeningStatus) {
+          wellnessScreeningStatus.textContent = "Checking your answers securely…";
+        }
+        try {
+          const result = await postWellnessScreening({
+            not_treating_condition:
+              screening.answers.notTreatingCondition === true,
+            no_clinician_restrictions:
+              screening.answers.noClinicianRestrictions === true,
+            general_wellness_goal:
+              screening.answers.generalWellnessGoal === true,
+            no_concerning_symptoms:
+              screening.answers.noConcerningSymptoms === true,
+          });
+          cachedProfile.wellnessScreening.screenedAt = result.screened_at;
+          saveProfile(cachedProfile, {
+            syncBackend: false,
+            syncScreening: false,
+          });
+          if (wellnessScreeningStatus) {
+            wellnessScreeningStatus.textContent = "";
+          }
+        } catch (error) {
+          if (wellnessScreeningStatus) {
+            wellnessScreeningStatus.textContent =
+              error.message || "The safety screen could not be saved.";
+          }
+          return;
+        } finally {
+          button.disabled = false;
+        }
         if (screening.status !== "eligible") {
           showPlanStep(4);
           return;
         }
-      }
-
-      if (planStep === 3) {
-        if (!validatePlanStep(planSteps[2])) return;
-        const formData = new FormData(planForm);
-        const goal = String(formData.get("goal") || "Stay active");
-        const customGoal = goal === "Other"
-          ? String(formData.get("customGoal") || "").trim()
-          : "";
-        const planGoal = customGoal || goal;
-        const age = formData.get("age");
-        saveProfile({
-          name: formData.get("name"),
-          age,
-          goal,
-          customGoal,
-          activity: formData.get("activity"),
-          focusSide: formData.get("focusSide"),
-          cueStyle: formData.get("cueStyle"),
-          carePath: "wellness",
-        });
-        const plan = buildConservativeWellnessPlan(
-          goal === "Other" ? "Stay active" : goal
-        );
-        renderWellnessPlan({ ...plan, goal: planGoal }, age);
-        renderWellnessOutcome({ status: "eligible" });
       }
       showPlanStep(planStep + 1);
     });
@@ -321,7 +389,105 @@ import { isLoggedIn } from "./api.js";
     button.addEventListener("click", () => showPlanStep(planStep - 1));
   });
 
-  document.querySelector("[data-start-plan]")?.addEventListener("click", () => {
+  function readPlanPreferences() {
+    const formData = new FormData(planForm);
+    const goalLabel = String(formData.get("goal") || "Stay active");
+    const numberOrNull = (name) => {
+      const value = String(formData.get(name) ?? "").trim();
+      return value ? Number(value) : null;
+    };
+    return {
+      goal: GOAL_API_VALUES[goalLabel] ?? "stay_active",
+      custom_goal:
+        goalLabel === "Other"
+          ? String(formData.get("customGoal") || "").trim()
+          : "",
+      activity_level:
+        ACTIVITY_API_VALUES[String(formData.get("activity"))]
+        ?? "lightly_active",
+      focus_side: String(formData.get("focusSide") || "right"),
+      cue_style: String(formData.get("cueStyle") || "gentle"),
+      days_per_week: Number(formData.get("daysPerWeek") || 3),
+      minutes_per_session: Number(
+        formData.get("minutesPerSession") || 10
+      ),
+      equipment: String(formData.get("equipment") || "chair"),
+      planning_notes: String(
+        formData.get("planningNotes") || ""
+      ).trim(),
+      age: numberOrNull("age"),
+      height_cm: numberOrNull("height"),
+      weight_kg: numberOrNull("weight"),
+    };
+  }
+
+  function setRequestBusy(button, busy, busyLabel) {
+    if (!button) return;
+    if (busy) {
+      button.dataset.originalLabel = button.innerHTML;
+      button.textContent = busyLabel;
+    } else if (button.dataset.originalLabel) {
+      button.innerHTML = button.dataset.originalLabel;
+      delete button.dataset.originalLabel;
+    }
+    button.disabled = busy;
+  }
+
+  async function requestAiPlan(revision = "", triggerButton = null) {
+    if (!validatePlanStep(planSteps[2])) return;
+    const preferences = readPlanPreferences();
+    const button =
+      triggerButton ?? (revision ? requestPlanRevision : requestPlanDraft);
+    const statusElement = revision
+      ? plannerAcceptStatus
+      : plannerRequestStatus;
+    setRequestBusy(button, true, revision ? "Revising safely…" : "Creating a safe draft…");
+    if (statusElement) {
+      statusElement.textContent =
+        "The AI is comparing your preferences with the reviewed exercise catalogue.";
+    }
+    try {
+      const response = await generateWellnessPlan({
+        ...preferences,
+        previous_plan: activeWellnessPlan,
+        revision,
+      });
+      activePlanPreferences = preferences;
+      activePlanDraftToken = response.draft_token;
+      renderWellnessPlan(response.plan, preferences.age);
+      renderWellnessOutcome({ status: "eligible" });
+      if (statusElement) statusElement.textContent = "";
+      showPlanStep(4);
+    } catch (error) {
+      if (statusElement) {
+        statusElement.textContent =
+          error.message || "The AI could not create a draft.";
+      }
+    } finally {
+      setRequestBusy(button, false);
+    }
+  }
+
+  requestPlanDraft?.addEventListener("click", () => requestAiPlan());
+  requestPlanRevision?.addEventListener("click", () => {
+    const revision = planRevisionRequest?.value.trim();
+    if (!revision) {
+      planRevisionRequest?.focus();
+      return;
+    }
+    requestAiPlan(revision, requestPlanRevision);
+  });
+  document.querySelectorAll("[data-revise-plan]").forEach((button) => {
+    button.addEventListener("click", () => {
+      requestAiPlan(button.dataset.revisePlan, button);
+    });
+  });
+  document.querySelector("[data-edit-plan-answers]")?.addEventListener(
+    "click",
+    () => showPlanStep(3)
+  );
+
+  function startAcceptedPlan() {
     const firstExerciseId = activeWellnessPlan?.days?.[0]?.exerciseIds?.[0];
     const exerciseSelect = document.getElementById("exerciseSelect");
     if (firstExerciseId && exerciseSelect) {
@@ -334,7 +500,58 @@ import { isLoggedIn } from "./api.js";
     } else {
       document.getElementById("practice")?.scrollIntoView({ behavior: "smooth" });
     }
-  });
+  }
+
+  document.querySelector("[data-accept-plan]")?.addEventListener(
+    "click",
+    async (event) => {
+      if (
+        !activeWellnessPlan
+        || !activePlanPreferences
+        || !activePlanDraftToken
+      ) return;
+      const button = event.currentTarget;
+      setRequestBusy(button, true, "Saving your accepted plan…");
+      if (plannerAcceptStatus) {
+        plannerAcceptStatus.textContent =
+          "Rechecking the fixed safety rules before saving.";
+      }
+      try {
+        const profile = await acceptWellnessPlan(activePlanDraftToken);
+        const goalLabel = Object.entries(GOAL_API_VALUES).find(
+          ([, value]) => value === profile.goal
+        )?.[0] ?? "Stay active";
+        saveProfile({
+          name: planForm.elements.namedItem("name")?.value ?? "",
+          age: activePlanPreferences.age,
+          goal: goalLabel,
+          customGoal: profile.custom_goal ?? "",
+          activity: planForm.elements.namedItem("activity")?.value,
+          focusSide: profile.focus_side,
+          cueStyle: profile.cue_style,
+          carePath: profile.care_path,
+          pathwayChoice: profile.pathway_choice,
+          wellnessPlan: profile.wellness_plan,
+          wellnessPlanAcceptedAt: profile.wellness_plan_accepted_at,
+        }, {
+          syncBackend: false,
+          syncScreening: false,
+        });
+        activeWellnessPlan = profile.wellness_plan;
+        if (plannerAcceptStatus) {
+          plannerAcceptStatus.textContent = "Plan accepted.";
+        }
+        startAcceptedPlan();
+      } catch (error) {
+        if (plannerAcceptStatus) {
+          plannerAcceptStatus.textContent =
+            error.message || "The plan could not be saved.";
+        }
+      } finally {
+        setRequestBusy(button, false);
+      }
+    }
+  );
 
   document.querySelector("[data-review-screening]")?.addEventListener("click", () => {
     showPlanStep(2);

@@ -3236,6 +3236,48 @@ details.metrics summary {
   line-height: 1.35;
 }
 
+.custom-goal-field {
+  display: grid;
+  gap: 7px;
+  margin: -8px 0 24px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--white);
+}
+
+.custom-goal-field[hidden] {
+  display: none;
+}
+
+.custom-goal-field > span {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.custom-goal-field input {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--ink);
+  background: var(--paper);
+  font: inherit;
+}
+
+.custom-goal-field input:focus {
+  border-color: var(--green);
+  outline: 3px solid rgba(66, 143, 98, 0.16);
+}
+
+.custom-goal-field small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .modal-next {
   width: 100%;
 }

@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('core', '0007_patient_pathway_choice'),
+        ('core', '0008_patientprofile_goal_categories'),
     ]
 
     operations = [

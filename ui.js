@@ -24,6 +24,10 @@ import { isLoggedIn } from "./api.js";
   const wellnessReviewOutcome = document.getElementById("wellnessReviewOutcome");
   const wellnessReviewReasons = document.getElementById("wellnessReviewReasons");
   const generatedWellnessPlan = document.getElementById("generatedWellnessPlan");
+  const planCustomGoalField = document.getElementById("planCustomGoalField");
+  const planCustomGoalInput = document.getElementById("planCustomGoal");
+  const profileCustomGoalField = document.getElementById("profileCustomGoalField");
+  const profileCustomGoalInput = document.getElementById("profileCustomGoal");
   let activeModal = null;
   let previousFocus = null;
   let planStep = 1;
@@ -32,6 +36,29 @@ import { isLoggedIn } from "./api.js";
 
   window.addEventListener("physiovision:auth-role", (event) => {
     authenticatedRole = event.detail?.role ?? null;
+  });
+
+  function syncCustomGoalField(form, field, input) {
+    if (!form || !field || !input) return;
+    const selectedGoal = form.elements.namedItem("goal")?.value;
+    const isOther = selectedGoal === "Other";
+    field.hidden = !isOther;
+    input.required = isOther;
+    if (!isOther) input.setCustomValidity("");
+  }
+
+  planForm?.querySelectorAll('input[name="goal"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      syncCustomGoalField(planForm, planCustomGoalField, planCustomGoalInput);
+      if (input.value === "Other") planCustomGoalInput?.focus();
+    });
+  });
+  profileForm?.elements.namedItem("goal")?.addEventListener("change", () => {
+    syncCustomGoalField(
+      profileForm,
+      profileCustomGoalField,
+      profileCustomGoalInput
+    );
   });
 
   const setHeaderState = () => {
@@ -77,9 +104,15 @@ import { isLoggedIn } from "./api.js";
         fillFormFromProfile(planForm, savedProfile);
         fillWellnessScreening(planForm, savedProfile.wellnessScreening);
       }
+      syncCustomGoalField(planForm, planCustomGoalField, planCustomGoalInput);
       showPlanStep(1);
     } else if (id === "profile-modal") {
       fillFormFromProfile(profileForm, loadProfile());
+      syncCustomGoalField(
+        profileForm,
+        profileCustomGoalField,
+        profileCustomGoalInput
+      );
     } else if (id === "therapist-view") {
       window.pvLoadDashboard?.();
     }
@@ -235,6 +268,8 @@ import { isLoggedIn } from "./api.js";
 
   planForm?.querySelectorAll("[data-next-step]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (planStep === 1 && !validatePlanStep(planSteps[0])) return;
+
       if (planStep === 2) {
         const formData = new FormData(planForm);
         if (!validatePlanStep(planSteps[1])) return;
@@ -256,21 +291,26 @@ import { isLoggedIn } from "./api.js";
       if (planStep === 3) {
         if (!validatePlanStep(planSteps[2])) return;
         const formData = new FormData(planForm);
-        const goal = formData.get("goal") || "moving with confidence";
+        const goal = String(formData.get("goal") || "Stay active");
+        const customGoal = goal === "Other"
+          ? String(formData.get("customGoal") || "").trim()
+          : "";
+        const planGoal = customGoal || goal;
         const age = formData.get("age");
         saveProfile({
           name: formData.get("name"),
           age,
           goal,
+          customGoal,
           activity: formData.get("activity"),
           focusSide: formData.get("focusSide"),
           cueStyle: formData.get("cueStyle"),
           carePath: "wellness",
         });
-        renderWellnessPlan(
-          buildConservativeWellnessPlan(String(goal)),
-          age
+        const plan = buildConservativeWellnessPlan(
+          goal === "Other" ? "Stay active" : goal
         );
+        renderWellnessPlan({ ...plan, goal: planGoal }, age);
         renderWellnessOutcome({ status: "eligible" });
       }
       showPlanStep(planStep + 1);
@@ -304,7 +344,9 @@ import { isLoggedIn } from "./api.js";
     event.preventDefault();
     if (!profileForm.reportValidity()) return;
     const formData = new FormData(profileForm);
-    saveProfile(Object.fromEntries(formData.entries()));
+    const profile = Object.fromEntries(formData.entries());
+    if (profile.goal !== "Other") profile.customGoal = "";
+    saveProfile(profile);
     closeModal(profileForm.closest(".modal-shell"));
   });
 

@@ -111,6 +111,75 @@ const PLAN_TEMPLATES = Object.freeze({
       duration: "10 min",
     },
   ],
+  "Stronger hips": [
+    {
+      day: "Mon",
+      title: "Hip strength and control",
+      exerciseIds: ["hip-abduction", "straight-leg-raises-supine"],
+      exercises: "Hip abduction · Supine straight-leg raises",
+      duration: "10 min",
+    },
+    {
+      day: "Wed",
+      title: "Inner-thigh and hamstring strength",
+      exerciseIds: ["hip-adduction", "hamstring-curls"],
+      exercises: "Hip adduction · Hamstring curls",
+      duration: "10 min",
+    },
+    {
+      day: "Sat",
+      title: "Whole-leg support",
+      exerciseIds: ["leg-presses", "hip-abduction"],
+      exercises: "Elastic-band leg presses · Hip abduction",
+      duration: "11 min",
+    },
+  ],
+  "Better ankle movement": [
+    {
+      day: "Mon",
+      title: "Calf mobility",
+      exerciseIds: ["heel-cord-stretch", "calf-raises"],
+      exercises: "Heel cord stretch · Calf raises",
+      duration: "8 min",
+    },
+    {
+      day: "Wed",
+      title: "Ankle and leg control",
+      exerciseIds: ["calf-raises", "half-squats"],
+      exercises: "Calf raises · Half squats",
+      duration: "9 min",
+    },
+    {
+      day: "Sat",
+      title: "Comfortable lower-leg movement",
+      exerciseIds: ["heel-cord-stretch", "calf-raises"],
+      exercises: "Heel cord stretch · Calf raises",
+      duration: "8 min",
+    },
+  ],
+  "Walk with confidence": [
+    {
+      day: "Mon",
+      title: "Standing strength",
+      exerciseIds: ["half-squats", "calf-raises"],
+      exercises: "Half squats · Calf raises",
+      duration: "9 min",
+    },
+    {
+      day: "Wed",
+      title: "Hip and leg control",
+      exerciseIds: ["hip-abduction", "hamstring-curls"],
+      exercises: "Hip abduction · Hamstring curls",
+      duration: "10 min",
+    },
+    {
+      day: "Sat",
+      title: "Lower-body mobility",
+      exerciseIds: ["leg-presses", "heel-cord-stretch"],
+      exercises: "Elastic-band leg presses · Heel cord stretch",
+      duration: "10 min",
+    },
+  ],
 });
 
 export function evaluateWellnessScreening(answers) {

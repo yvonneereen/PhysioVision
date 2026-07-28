@@ -9,6 +9,7 @@ from .analytics import adherence_pct, parse_days_per_week, session_quality_trend
 from .models import (
     CareInvitation,
     ClinicianProfile,
+    GoalChoice,
     PatientPathwayChoice,
     PatientProfile,
     User,
@@ -39,6 +40,7 @@ class RegisterSerializer(serializers.Serializer):
 
     # Patient-only optional fields
     goal            = serializers.ChoiceField(choices=PatientProfile.goal.field.choices, required=False)  # type: ignore[attr-defined]
+    custom_goal     = serializers.CharField(max_length=120, required=False, allow_blank=True)
     activity_level  = serializers.ChoiceField(choices=PatientProfile.activity_level.field.choices, required=False)  # type: ignore[attr-defined]
     mobility_status = serializers.ChoiceField(choices=PatientProfile.mobility_status.field.choices, required=False)  # type: ignore[attr-defined]
     focus_side      = serializers.ChoiceField(choices=PatientProfile.focus_side.field.choices, required=False)  # type: ignore[attr-defined]
@@ -51,12 +53,26 @@ class RegisterSerializer(serializers.Serializer):
     def validate_email(self, value):
         return value.strip().lower()
 
+    def validate(self, data):
+        if data.get('role') != UserRole.PATIENT:
+            data['custom_goal'] = ''
+            return data
+
+        goal = data.get('goal', GoalChoice.STRONGER_KNEES)
+        custom_goal = data.get('custom_goal', '').strip()
+        if goal == GoalChoice.OTHER and not custom_goal:
+            raise serializers.ValidationError({
+                'custom_goal': 'Describe what you would like to improve.',
+            })
+        data['custom_goal'] = custom_goal if goal == GoalChoice.OTHER else ''
+        return data
+
     def create(self, validated_data):
         role     = validated_data['role']
         password = validated_data.pop('password')
 
         # Pull out profile-specific fields before creating the User
-        patient_fields   = {k: validated_data.pop(k) for k in ['goal', 'activity_level', 'mobility_status', 'focus_side', 'cue_style'] if k in validated_data}
+        patient_fields   = {k: validated_data.pop(k) for k in ['goal', 'custom_goal', 'activity_level', 'mobility_status', 'focus_side', 'cue_style'] if k in validated_data}
         clinician_fields = {k: validated_data.pop(k) for k in ['license_number', 'specialty'] if k in validated_data}
 
         user = User.objects.create_user(
@@ -153,7 +169,7 @@ class PatientProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model  = PatientProfile
         fields = [
-            'id', 'user', 'goal', 'activity_level', 'mobility_status',
+            'id', 'user', 'goal', 'custom_goal', 'activity_level', 'mobility_status',
             'focus_side', 'cue_style', 'care_path',
             'pathway_choice', 'pathway_selected_at',
             'height_cm', 'weight_kg', 'medical_history', 'low_risk_acknowledged',
@@ -167,6 +183,26 @@ class PatientProfileSerializer(serializers.ModelSerializer):
             'wellness_screening_answers', 'wellness_screened_at',
             'created_at', 'updated_at',
         ]
+
+    def validate(self, attrs):
+        current_goal = getattr(
+            self.instance,
+            'goal',
+            GoalChoice.STRONGER_KNEES,
+        )
+        current_custom_goal = getattr(self.instance, 'custom_goal', '')
+        goal = attrs.get('goal', current_goal)
+        custom_goal = attrs.get('custom_goal', current_custom_goal).strip()
+
+        if goal == GoalChoice.OTHER and not custom_goal:
+            raise serializers.ValidationError({
+                'custom_goal': 'Describe what you would like to improve.',
+            })
+
+        attrs['custom_goal'] = (
+            custom_goal if goal == GoalChoice.OTHER else ''
+        )
+        return attrs
 
 
 

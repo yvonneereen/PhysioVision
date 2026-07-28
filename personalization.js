@@ -11,6 +11,10 @@ const GOAL_API_VALUES = Object.freeze({
   "Better balance": "better_balance",
   "Move with less stiffness": "less_stiffness",
   "Stay active": "stay_active",
+  "Stronger hips": "stronger_hips",
+  "Better ankle movement": "ankle_mobility",
+  "Walk with confidence": "walking_confidence",
+  "Other": "other",
 });
 const ACTIVITY_API_VALUES = Object.freeze({
   "Lightly active": "lightly_active",
@@ -27,6 +31,7 @@ const DEFAULT_PROFILE = Object.freeze({
   name: "",
   age: "",
   goal: "Stronger knees",
+  customGoal: "",
   activity: "Lightly active",
   mobility: "Independent",
   focusSide: "right",
@@ -74,6 +79,11 @@ export function saveProfile(profile) {
     ...profile,
     name: String(profile.name ?? previous.name).trim().slice(0, 60),
     age: normaliseAge(profile.age ?? previous.age),
+    customGoal: String(
+      (profile.goal ?? previous.goal) === "Other"
+        ? profile.customGoal ?? previous.customGoal
+        : ""
+    ).trim().slice(0, 120),
     updatedAt: new Date().toISOString(),
   };
   writeJson(PROFILE_KEY, next);
@@ -85,6 +95,7 @@ export function saveProfile(profile) {
   if (isLoggedIn()) {
     patchMe({
       goal:            GOAL_API_VALUES[next.goal] ?? next.goal,
+      custom_goal:     next.goal === "Other" ? next.customGoal : "",
       activity_level:  ACTIVITY_API_VALUES[next.activity] ?? next.activity,
       mobility_status: MOBILITY_API_VALUES[next.mobility] ?? next.mobility,
       focus_side:      next.focusSide,

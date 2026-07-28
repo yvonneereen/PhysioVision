@@ -12,6 +12,7 @@ from rest_framework.test import APITestCase
 from .models import (
     CarePath,
     ClinicianProfile,
+    GoalChoice,
     LoginVerificationChallenge,
     PatientPathwayChoice,
     PatientProfile,
@@ -63,6 +64,50 @@ class ProductionReadinessTests(APITestCase):
             response.json(),
             {'status': 'ok', 'database': 'reachable'},
         )
+
+    def test_patient_profile_accepts_new_and_custom_goal_categories(self):
+        user = User.objects.create_user(
+            username='goal-categories@example.com',
+            email='goal-categories@example.com',
+            password='safe-test-password',
+            role=UserRole.PATIENT,
+            is_active=True,
+            email_verified_at=timezone.now(),
+        )
+        PatientProfile.objects.create(user=user)
+        self.client.force_authenticate(user)
+
+        hips = self.client.patch(
+            '/api/auth/me/',
+            {'goal': GoalChoice.STRONGER_HIPS},
+            format='json',
+        )
+        self.assertEqual(hips.status_code, 200)
+        self.assertEqual(hips.data['goal'], GoalChoice.STRONGER_HIPS)
+        self.assertEqual(hips.data['custom_goal'], '')
+
+        custom = self.client.patch(
+            '/api/auth/me/',
+            {
+                'goal': GoalChoice.OTHER,
+                'custom_goal': 'Feel more confident moving outdoors',
+            },
+            format='json',
+        )
+        self.assertEqual(custom.status_code, 200)
+        self.assertEqual(custom.data['goal'], GoalChoice.OTHER)
+        self.assertEqual(
+            custom.data['custom_goal'],
+            'Feel more confident moving outdoors',
+        )
+
+        missing_description = self.client.patch(
+            '/api/auth/me/',
+            {'goal': GoalChoice.OTHER, 'custom_goal': ''},
+            format='json',
+        )
+        self.assertEqual(missing_description.status_code, 400)
+        self.assertIn('custom_goal', missing_description.data)
 
     @override_settings(
         EMAIL_PROVIDER='gmail_api',

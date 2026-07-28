@@ -136,6 +136,10 @@ class GoalChoice(models.TextChoices):
     BETTER_BALANCE = "better_balance", _("Better balance")
     LESS_STIFFNESS = "less_stiffness", _("Move with less stiffness")
     STAY_ACTIVE    = "stay_active",    _("Stay active")
+    STRONGER_HIPS  = "stronger_hips",  _("Stronger hips")
+    ANKLE_MOBILITY = "ankle_mobility", _("Better ankle movement")
+    WALKING_CONFIDENCE = "walking_confidence", _("Walk with confidence")
+    OTHER          = "other",          _("Other")
 
 
 class ActivityLevel(models.TextChoices):
@@ -190,6 +194,7 @@ class PatientProfile(TimestampedModel):
         limit_choices_to={"role": UserRole.PATIENT},
     )
     goal            = models.CharField(max_length=30, choices=GoalChoice.choices, default=GoalChoice.STRONGER_KNEES)
+    custom_goal     = models.CharField(max_length=120, blank=True)
     activity_level  = models.CharField(max_length=20, choices=ActivityLevel.choices, default=ActivityLevel.LIGHTLY_ACTIVE)
     mobility_status = models.CharField(max_length=25, choices=MobilityStatus.choices, default=MobilityStatus.INDEPENDENT)
     focus_side      = models.CharField(max_length=5, choices=FocusSide.choices, default=FocusSide.RIGHT)

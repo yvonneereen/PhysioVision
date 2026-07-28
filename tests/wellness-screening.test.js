@@ -34,4 +34,15 @@ const plan = buildConservativeWellnessPlan("Better balance");
 assert.equal(plan.days.length, 3);
 assert.ok(plan.days.every((day) => day.exerciseIds.length === 2));
 
+for (const goal of [
+  "Stronger hips",
+  "Better ankle movement",
+  "Walk with confidence",
+]) {
+  const goalPlan = buildConservativeWellnessPlan(goal);
+  assert.equal(goalPlan.goal, goal);
+  assert.equal(goalPlan.days.length, 3);
+  assert.ok(goalPlan.days.every((day) => day.exerciseIds.length === 2));
+}
+
 console.log("wellness screening tests passed");

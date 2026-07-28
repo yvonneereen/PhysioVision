@@ -516,6 +516,10 @@ async function seedProfileFromApi() {
       better_balance: "Better balance",
       less_stiffness: "Move with less stiffness",
       stay_active: "Stay active",
+      stronger_hips: "Stronger hips",
+      ankle_mobility: "Better ankle movement",
+      walking_confidence: "Walk with confidence",
+      other: "Other",
     };
     const activityLabels = {
       lightly_active: "Lightly active",
@@ -530,6 +534,7 @@ async function seedProfileFromApi() {
     const mapped = {
       name:      `${me.first_name} ${me.last_name}`.trim(),
       goal:      goalLabels[p.goal]             ?? p.goal ?? "",
+      customGoal: p.custom_goal                  ?? "",
       activity:  activityLabels[p.activity_level] ?? p.activity_level ?? "",
       mobility:  mobilityLabels[p.mobility_status] ?? p.mobility_status ?? "",
       focusSide: p.focus_side       ?? "right",

@@ -3,6 +3,7 @@ import {
   getExercises, getPrescriptions, createPrescription,
   getConsultations, confirmConsultation, cancelConsultation,
   getPatientSessions, getPatientPainCheckins,
+  requestSlackLinkCode,
 } from "./api.js";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -416,6 +417,33 @@ function renderClinicianInfo(me) {
   const avatarEl = document.getElementById("clinician-avatar");
   if (nameEl)   nameEl.textContent   = name;
   if (avatarEl) avatarEl.textContent = initials(name);
+
+  const btn    = document.getElementById("slack-connect-btn");
+  const status = document.getElementById("slack-connect-status");
+  if (btn && me.profile?.slack_linked) {
+    btn.textContent = "Slack connected";
+    btn.disabled = true;
+    if (status) status.textContent = "✓ Your Slack account is linked.";
+  }
+}
+
+async function connectSlack() {
+  const btn    = document.getElementById("slack-connect-btn");
+  const status = document.getElementById("slack-connect-status");
+  if (!status) return;
+
+  status.textContent = "Generating code…";
+  if (btn) btn.disabled = true;
+  try {
+    const { code } = await requestSlackLinkCode();
+    status.innerHTML =
+      `In Slack, send:<br><code>@Physio Assistant link ${code}</code><br>` +
+      `<small>Code expires in 10 minutes.</small>`;
+  } catch (err) {
+    status.textContent = err.message || "Could not generate a code.";
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 function setLoading(on) {
@@ -461,6 +489,8 @@ async function loadDashboard() {
 document.addEventListener("click", (e) => {
   const tabBtn = e.target.closest("[data-tab]");
   if (tabBtn) { switchTab(tabBtn.getAttribute("data-tab")); return; }
+
+  if (e.target.closest("#slack-connect-btn")) { connectSlack(); return; }
 
   const row = e.target.closest("[data-patient-id]");
   if (row && !e.target.closest(".status-pill")) {

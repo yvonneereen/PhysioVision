@@ -1,7 +1,9 @@
+from datetime import timedelta
+
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 
-from .services import _parse_when, _sparkline
+from .services import _parse_when, _sparkline, link_slack_user, slack_link_code_digest
 
 
 class SparklineTests(SimpleTestCase):
@@ -48,6 +50,142 @@ class ParseWhenTests(SimpleTestCase):
         self.assertTrue(timezone.is_aware(result))
         self.assertEqual((result.year, result.month, result.day), (2026, 8, 1))
         self.assertEqual((result.hour, result.minute), (15, 30))
+
+
+class SlackLinkCodeTests(TestCase):
+    """link_slack_user attaches the Slack user id to the code's clinician."""
+
+    def setUp(self):
+        from api.core.models import ClinicianProfile, SlackLinkCode, User, UserRole
+
+        self.user = User.objects.create_user(
+            username="dr.chen@clinic.com", email="dr.chen@clinic.com",
+            password="pw", role=UserRole.CLINICIAN,
+            first_name="Dr", last_name="Chen",
+        )
+        self.clinician = ClinicianProfile.objects.create(
+            user=self.user, license_number="LIC1",
+        )
+        self.SlackLinkCode = SlackLinkCode
+
+    def _make_code(self, raw="483920", *, ttl_minutes=10):
+        return self.SlackLinkCode.objects.create(
+            clinician=self.clinician,
+            code_digest=slack_link_code_digest(raw),
+            expires_at=timezone.now() + timedelta(minutes=ttl_minutes),
+        )
+
+    def test_valid_code_links_user_and_burns_code(self):
+        link = self._make_code()
+        clinician, error = link_slack_user("483920", "U0123")
+        self.assertIsNone(error)
+        self.assertEqual(clinician.pk, self.clinician.pk)
+        self.clinician.refresh_from_db()
+        link.refresh_from_db()
+        self.assertEqual(self.clinician.slack_user_id, "U0123")
+        self.assertIsNotNone(link.used_at)
+
+    def test_used_code_is_rejected(self):
+        self._make_code()
+        link_slack_user("483920", "U0123")
+        clinician, error = link_slack_user("483920", "U9999")
+        self.assertIsNone(clinician)
+        self.assertIn("already been used", error)
+
+    def test_expired_code_is_rejected(self):
+        self._make_code(ttl_minutes=-1)
+        clinician, error = link_slack_user("483920", "U0123")
+        self.assertIsNone(clinician)
+        self.assertIn("expired", error)
+
+    def test_unknown_code_is_rejected(self):
+        clinician, error = link_slack_user("000000", "U0123")
+        self.assertIsNone(clinician)
+        self.assertIn("isn't valid", error)
+
+
+class ArgAfterTests(SimpleTestCase):
+    """_arg_after extracts the patient name following a command keyword."""
+
+    def _fn(self):
+        from .views import _arg_after
+        return _arg_after
+
+    def test_pain_for_name(self):
+        self.assertEqual(self._fn()("<@u1> pain for sarah", "pain"), "sarah")
+
+    def test_bare_keyword_and_name(self):
+        self.assertEqual(self._fn()("adherence bob jones", "adherence"), "bob jones")
+
+    def test_resolve_strips_mention(self):
+        self.assertEqual(self._fn()("<@ubot> resolve mei ling", "resolve"), "mei ling")
+
+    def test_missing_name_returns_none(self):
+        self.assertIsNone(self._fn()("sessions", "sessions"))
+
+
+class CommandScopingTests(TestCase):
+    """Tier 1 commands resolve and act only on the linked clinician's patients."""
+
+    def setUp(self):
+        from api.consultations.models import Escalation, EscalationTrigger
+        from api.core.models import (
+            ClinicianProfile, PatientProfile, User, UserRole,
+        )
+
+        self.clinician_user = User.objects.create_user(
+            username="dr@c.com", email="dr@c.com", password="pw",
+            role=UserRole.CLINICIAN, first_name="Dee", last_name="Doc",
+        )
+        self.clinician = ClinicianProfile.objects.create(
+            user=self.clinician_user, license_number="L1", slack_user_id="UDOC",
+        )
+        patient_user = User.objects.create_user(
+            username="pat@c.com", email="pat@c.com", password="pw",
+            role=UserRole.PATIENT, first_name="Sarah", last_name="Payne",
+        )
+        self.patient = PatientProfile.objects.create(
+            user=patient_user, primary_clinician=self.clinician,
+        )
+        self.esc = Escalation.objects.create(
+            patient=self.patient, trigger_type=EscalationTrigger.MANUAL,
+            description="Check in.", status="open",
+        )
+
+    def test_find_clinician_by_slack_user(self):
+        from .services import find_clinician_by_slack_user
+        self.assertEqual(find_clinician_by_slack_user("UDOC").pk, self.clinician.pk)
+        self.assertIsNone(find_clinician_by_slack_user("UNKNOWN"))
+        self.assertIsNone(find_clinician_by_slack_user(""))
+
+    def test_resolve_marks_escalations_action_taken(self):
+        from .services import resolve_patient_escalations
+        patient, count, error = resolve_patient_escalations(self.clinician, "sarah")
+        self.assertIsNone(error)
+        self.assertEqual(count, 1)
+        self.esc.refresh_from_db()
+        self.assertEqual(self.esc.status, "action_taken")
+        self.assertEqual(self.esc.reviewed_by_id, self.clinician.pk)
+
+    def test_resolve_unknown_patient_errors(self):
+        from .services import resolve_patient_escalations
+        patient, count, error = resolve_patient_escalations(self.clinician, "nobody")
+        self.assertIsNone(patient)
+        self.assertIn("No patient matching", error)
+
+    def test_resolve_ignores_other_clinicians_patient(self):
+        # A second clinician cannot resolve the first clinician's patient.
+        from api.core.models import ClinicianProfile, User, UserRole
+        from .services import resolve_patient_escalations
+        other_user = User.objects.create_user(
+            username="dr2@c.com", email="dr2@c.com", password="pw",
+            role=UserRole.CLINICIAN, first_name="Ann", last_name="Other",
+        )
+        other = ClinicianProfile.objects.create(user=other_user, license_number="L2")
+        patient, count, error = resolve_patient_escalations(other, "sarah")
+        self.assertIsNone(patient)
+        self.esc.refresh_from_db()
+        self.assertEqual(self.esc.status, "open")
 
 
 class OptionalSlackIntegrationTests(TestCase):

@@ -195,6 +195,10 @@ export async function getClinicianPatients() {
   return request("GET", "/auth/clinician/patients/");
 }
 
+export async function requestSlackLinkCode() {
+  return request("POST", "/auth/slack/link-code/", {});
+}
+
 // ── Sessions ──────────────────────────────────────────────────
 
 export async function postSession(session) {

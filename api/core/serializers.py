@@ -321,9 +321,14 @@ class ClinicianProfileSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'user', 'license_number', 'specialty',
             'years_experience', 'bio', 'is_accepting_patients',
-            'created_at', 'updated_at',
+            'slack_linked', 'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'user', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'user', 'slack_linked', 'created_at', 'updated_at']
+
+    slack_linked = serializers.SerializerMethodField()
+
+    def get_slack_linked(self, obj):
+        return bool(obj.slack_user_id)
 
 
 class PatientListSerializer(serializers.ModelSerializer):

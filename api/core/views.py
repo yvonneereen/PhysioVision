@@ -35,6 +35,7 @@ from .models import (
     LoginVerificationChallenge,
     PatientPathwayChoice,
     PatientProfile,
+    SlackLinkCode,
     User,
     UserRole,
     WellnessScreeningStatus,
@@ -1086,6 +1087,57 @@ class CareInvitationAcceptView(APIView):
             "care_path": patient.care_path,
             "detail": "Linked successfully. Your clinician can now assign a programme.",
         })
+
+
+class SlackLinkCodeView(APIView):
+    """Issue a one-time code the clinician redeems in Slack to link their account."""
+    permission_classes = [IsAuthenticated]
+
+    SLACK_CODE_TTL = timedelta(minutes=10)
+
+    def post(self, request):
+        if (
+            request.user.role != UserRole.CLINICIAN
+            or not hasattr(request.user, "clinician_profile")
+        ):
+            return Response(
+                {"detail": "A clinician account is required."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        from api.slack_bot.services import slack_link_code_digest
+
+        clinician = request.user.clinician_profile
+        # Retire any earlier unused codes so only the latest one works.
+        SlackLinkCode.objects.filter(
+            clinician=clinician, used_at__isnull=True,
+        ).update(used_at=timezone.now())
+
+        raw_code = None
+        for _ in range(10):
+            candidate = "".join(secrets.choice(string.digits) for _ in range(6))
+            digest = slack_link_code_digest(candidate)
+            if not SlackLinkCode.objects.filter(code_digest=digest).exists():
+                raw_code = candidate
+                break
+        if not raw_code:
+            return Response(
+                {"detail": "Could not create a link code. Please try again."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        link = SlackLinkCode.objects.create(
+            clinician=clinician,
+            code_digest=slack_link_code_digest(raw_code),
+            expires_at=timezone.now() + self.SLACK_CODE_TTL,
+        )
+        return Response(
+            {
+                "code": raw_code,
+                "expires_at": link.expires_at,
+                "instructions": f"In Slack, send: @Physio Assistant link {raw_code}",
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class ClinicianPatientsView(APIView):

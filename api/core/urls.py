@@ -78,4 +78,9 @@ urlpatterns = [
         name='clinician-patients',
     ),
     path('agent/chat/', views.AgentChatView.as_view(), name='agent-chat'),
+    path(
+        'slack/link-code/',
+        views.SlackLinkCodeView.as_view(),
+        name='auth-slack-link-code',
+    ),
 ]

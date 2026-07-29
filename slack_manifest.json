@@ -1,10 +1,10 @@
 {
     "display_information": {
-        "name": "Demo App"
+        "name": "Physio Assistant"
     },
     "features": {
         "bot_user": {
-            "display_name": "Demo App",
+            "display_name": "Physio Assistant",
             "always_online": true
         }
     },

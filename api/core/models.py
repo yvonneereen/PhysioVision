@@ -264,6 +264,9 @@ class ClinicianProfile(TimestampedModel):
     years_experience      = models.PositiveSmallIntegerField(null=True, blank=True)
     bio                   = models.TextField(blank=True)
     is_accepting_patients = models.BooleanField(default=True)
+    # Slack user id (e.g. "U0123ABCD") once the clinician links their account via
+    # the dashboard link-code flow. Blank means Slack is not connected.
+    slack_user_id         = models.CharField(max_length=32, blank=True, default="", db_index=True)
 
     class Meta:
         db_table            = "core_clinicianprofile"
@@ -273,6 +276,32 @@ class ClinicianProfile(TimestampedModel):
 
     def __str__(self) -> str:
         return f"Clinician: {self.user}"
+
+
+class SlackLinkCode(TimestampedModel):
+    """
+    One-time numeric code that links a clinician's Slack user to their account.
+
+    Issued on the dashboard ("Connect Slack") and redeemed in Slack via
+    `@Physio Assistant link <code>`. Only a SHA-256 digest is stored; the raw code is
+    shown once on the dashboard and never persisted. Short-lived and single-use.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    clinician = models.ForeignKey(
+        ClinicianProfile,
+        on_delete=models.CASCADE,
+        related_name="slack_link_codes",
+    )
+    code_digest = models.CharField(max_length=64, unique=True, editable=False)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "core_slacklinkcode"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"SlackLinkCode for {self.clinician.user} (used={bool(self.used_at)})"
 
 
 class CareInvitation(TimestampedModel):

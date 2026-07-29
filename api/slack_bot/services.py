@@ -1,3 +1,4 @@
+import hashlib
 import logging
 from datetime import timedelta
 
@@ -6,6 +7,45 @@ from django.db.models import Q
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
+
+
+# ── Slack account linking ─────────────────────────────────────
+
+def slack_link_code_digest(code):
+    """SHA-256 of a link code. Shared by the issuing view and the redeemer so
+    both sides normalise identically (strip whitespace only — codes are digits)."""
+    return hashlib.sha256(code.strip().encode("utf-8")).hexdigest()
+
+
+def link_slack_user(code, slack_user_id):
+    """
+    Redeem a dashboard-issued link code from Slack. Attaches the Slack user id to
+    the owning clinician's profile and burns the code. Returns (clinician, error).
+    """
+    from api.core.models import SlackLinkCode
+
+    if not slack_user_id:
+        return None, "Could not read your Slack user id. Please try again."
+
+    try:
+        link = (
+            SlackLinkCode.objects.select_related("clinician__user")
+            .get(code_digest=slack_link_code_digest(code))
+        )
+    except SlackLinkCode.DoesNotExist:
+        return None, "That code isn't valid. Generate a fresh one from your dashboard."
+
+    if link.used_at is not None:
+        return None, "That code has already been used. Generate a fresh one from your dashboard."
+    if link.expires_at < timezone.now():
+        return None, "That code has expired. Generate a fresh one from your dashboard."
+
+    clinician = link.clinician
+    clinician.slack_user_id = slack_user_id
+    clinician.save(update_fields=["slack_user_id", "updated_at"])
+    link.used_at = timezone.now()
+    link.save(update_fields=["used_at", "updated_at"])
+    return clinician, None
 
 
 def _get_slack_client():
@@ -254,22 +294,24 @@ def build_patient_summary_blocks(patient):
     return [{"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(lines)}}]
 
 
-def build_roster_summary_blocks():
+def build_roster_summary_blocks(clinician=None):
     """
-    Whole-roster scan — the 'check everyone at once' view. NOTE: Slack mentions are
-    not authenticated to a specific clinician, so this covers all patients in the DB
-    (fine for a single-clinic deployment).
+    Roster scan — the 'check everyone at once' view. When `clinician` is given the
+    scan is scoped to that clinician's own patients (the `my patients` command);
+    without it, it covers the whole DB (the global `summary` command).
     """
     from api.core.analytics import adherence_pct, session_quality_trend
     from api.core.models import PatientProfile
 
-    patients = list(
-        PatientProfile.objects.select_related('user').prefetch_related(
-            'sessions', 'prescriptions', 'escalations'
-        )
+    qs = PatientProfile.objects.select_related('user').prefetch_related(
+        'sessions', 'prescriptions', 'escalations'
     )
+    if clinician is not None:
+        qs = qs.filter(primary_clinician=clinician)
+    patients = list(qs)
     if not patients:
-        return [{"type": "section", "text": {"type": "mrkdwn", "text": "No patients on record."}}]
+        empty = "You have no linked patients yet." if clinician else "No patients on record."
+        return [{"type": "section", "text": {"type": "mrkdwn", "text": empty}}]
 
     needs_attention = []
     on_track = 0
@@ -288,7 +330,8 @@ def build_roster_summary_blocks():
 
     avg_adherence = round(sum(adherences) / len(adherences)) if adherences else None
 
-    lines = [f":clipboard: *Roster summary — {len(patients)} patient(s)*"]
+    header = "Your roster" if clinician else "Roster summary"
+    lines = [f":clipboard: *{header} — {len(patients)} patient(s)*"]
     lines.append(
         f"Needs attention: *{len(needs_attention)}* · On track: *{on_track}* · "
         f"Avg adherence: {avg_adherence if avg_adherence is not None else '—'}%"
@@ -302,7 +345,9 @@ def build_roster_summary_blocks():
     return [{"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(lines)}}]
 
 
-def find_patient_by_name(name_query):
+def find_patient_by_name(name_query, clinician=None):
+    """Find a patient by (partial) name. When `clinician` is given, only their
+    own patients are searched — so a linked clinician can't reach another's."""
     from api.core.models import PatientProfile
 
     parts = name_query.strip().split()
@@ -311,13 +356,161 @@ def find_patient_by_name(name_query):
     name_filter = Q()
     for part in parts:
         name_filter |= Q(user__first_name__icontains=part) | Q(user__last_name__icontains=part)
-    return (
+    qs = (
         PatientProfile.objects
         .select_related('user')
         .prefetch_related('sessions', 'pain_checkins', 'escalations')
-        .filter(name_filter)
+    )
+    if clinician is not None:
+        qs = qs.filter(primary_clinician=clinician)
+    return qs.filter(name_filter).first()
+
+
+def find_clinician_by_slack_user(slack_user_id):
+    """Resolve the linked clinician for a Slack user id (set via the link flow)."""
+    from api.core.models import ClinicianProfile
+
+    if not slack_user_id:
+        return None
+    return (
+        ClinicianProfile.objects.select_related('user')
+        .filter(slack_user_id=slack_user_id)
         .first()
     )
+
+
+def _section(text):
+    return [{"type": "section", "text": {"type": "mrkdwn", "text": text}}]
+
+
+# ── Tier 1: triage scoped to the linked clinician ─────────────
+
+def build_needs_review_blocks(clinician):
+    """Open escalations across the clinician's own patients."""
+    from api.consultations.models import Escalation
+
+    escs = (
+        Escalation.objects.filter(status='open', patient__primary_clinician=clinician)
+        .select_related('patient__user')
+        .order_by('-created_at')
+    )
+    if not escs:
+        return _section(":white_check_mark: No open escalations — your roster is clear.")
+
+    lines = [f":rotating_light: *Open escalations — {escs.count()}*"]
+    for e in escs[:15]:
+        label = TRIGGER_LABELS.get(e.trigger_type, e.trigger_type)
+        lines.append(f"  • *{_patient_name(e.patient)}* — {label}: {e.description}")
+    lines.append("\n_Resolve one with_ `@Physio Assistant resolve [name]`")
+    return _section("\n".join(lines))
+
+
+def resolve_patient_escalations(clinician, name_query):
+    """
+    Mark all OPEN escalations for the named patient as action-taken, attributed to
+    this clinician. Returns (patient, count_resolved, error).
+    """
+    from api.consultations.models import EscalationStatus
+
+    patient = find_patient_by_name(name_query, clinician=clinician)
+    if not patient:
+        return None, 0, f"No patient matching '{name_query}' in your roster."
+
+    open_escs = patient.escalations.filter(status=EscalationStatus.OPEN)
+    count = open_escs.count()
+    if count:
+        open_escs.update(
+            status=EscalationStatus.ACTION_TAKEN,
+            reviewed_by=clinician,
+            reviewed_at=timezone.now(),
+            updated_at=timezone.now(),
+        )
+    return patient, count, None
+
+
+def build_today_blocks(clinician):
+    """Today's consultations + flags raised in the last 24h, for this clinician."""
+    from api.consultations.models import Consultation, Escalation
+
+    now = timezone.localtime()
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = day_start + timedelta(days=1)
+
+    consults = (
+        Consultation.objects.filter(
+            clinician=clinician, scheduled_at__gte=day_start, scheduled_at__lt=day_end
+        )
+        .select_related('patient__user')
+        .order_by('scheduled_at')
+    )
+    new_escs = (
+        Escalation.objects.filter(
+            patient__primary_clinician=clinician, status='open',
+            created_at__gte=now - timedelta(hours=24),
+        )
+        .select_related('patient__user')
+    )
+
+    lines = [f":calendar: *Today — {now:%A, %d %b}*"]
+    lines.append(f"\n*Consultations ({consults.count()}):*")
+    if consults:
+        for c in consults:
+            lines.append(f"  • {c.scheduled_at:%H:%M} — {_patient_name(c.patient)} ({c.status})")
+    else:
+        lines.append("  • None scheduled")
+
+    lines.append(f"\n*New flags (last 24h): {new_escs.count()}*")
+    for e in new_escs[:5]:
+        lines.append(f"  • {_patient_name(e.patient)} — {TRIGGER_LABELS.get(e.trigger_type, e.trigger_type)}")
+    return _section("\n".join(lines))
+
+
+# ── Tier 2: quick per-patient lookups ─────────────────────────
+
+def build_pain_blocks(patient):
+    name = _patient_name(patient)
+    pains = patient.pain_checkins.order_by('-checked_at')[:7]
+    if not pains:
+        return _section(f"No pain check-ins on record for {name}.")
+    lines = [f"*Pain diary — {name}*"]
+    for p in pains:
+        note = f" · {p.location_notes}" if p.location_notes else ""
+        lines.append(f"  • {p.checked_at:%d %b}: {p.pain_level}/10{note}")
+    return _section("\n".join(lines))
+
+
+def build_adherence_blocks(patient):
+    from api.core.analytics import adherence_pct, session_quality_trend
+    from api.sessions.models import Session
+
+    name = _patient_name(patient)
+    adherence = adherence_pct(patient)
+    trend = session_quality_trend(patient)
+    last_7d = timezone.now() - timedelta(days=7)
+    recent_count = Session.objects.filter(patient=patient, started_at__gte=last_7d).count()
+    return _section(
+        f"*{name}*\n"
+        f"Adherence: *{adherence if adherence is not None else '—'}%* · "
+        f"Quality trend: *{trend}* · "
+        f"{recent_count} session(s) in the last 7 days"
+    )
+
+
+def build_sessions_blocks(patient):
+    from api.sessions.models import Session
+
+    name = _patient_name(patient)
+    sessions = Session.objects.filter(patient=patient).select_related('exercise').order_by('-started_at')[:6]
+    if not sessions:
+        return _section(f"No sessions logged for {name}.")
+    lines = [f"*Recent sessions — {name}*"]
+    for s in sessions:
+        lines.append(
+            f"  • {s.started_at:%d %b} · {s.exercise.name}: "
+            f"{s.reps_completed}/{s.reps_target} reps, quality {s.quality_score or '—'}/100"
+            f"{f', pain {s.pain_level}/10' if s.pain_level is not None else ''}"
+        )
+    return _section("\n".join(lines))
 
 
 # ── Draft a patient-facing message (draft-only for now) ───────

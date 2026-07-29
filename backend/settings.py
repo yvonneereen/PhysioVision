@@ -243,7 +243,7 @@ PASSWORD_RESET_MAX_ATTEMPTS = env.int(
 )
 AUTH_TOKEN_TTL_HOURS = env.int('AUTH_TOKEN_TTL_HOURS', default=12)
 
-# Slack workbuddy AI
+# Slack Physio Assistant AI
 SLACK_BOT_TOKEN     = env('SLACK_BOT_TOKEN', default='')
 SLACK_SIGNING_SECRET = env('SLACK_SIGNING_SECRET', default='')
 SLACK_CHANNEL_ID    = env('SLACK_CHANNEL_ID', default='#physiovision-alerts')

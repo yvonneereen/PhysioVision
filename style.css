@@ -4303,10 +4303,15 @@ details.metrics summary {
 }
 
 .patient-pathway-option:hover,
-.patient-pathway-option:focus-visible {
+.patient-pathway-option:focus-visible,
+.patient-pathway-option.is-selected {
   border-color: var(--coral);
   box-shadow: 0 15px 35px rgba(23, 56, 58, 0.1);
   transform: translateY(-2px);
+}
+
+.patient-pathway-option.is-selected {
+  background: color-mix(in srgb, var(--mint-light) 58%, var(--white));
 }
 
 .patient-pathway-option:disabled {
@@ -4342,6 +4347,79 @@ details.metrics summary {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.55;
+}
+
+.patient-pathway-invite[hidden] {
+  display: none;
+}
+
+.patient-pathway-invite {
+  margin: 0 0 20px;
+  padding: 20px;
+  border: 1px solid color-mix(in srgb, var(--green) 24%, var(--line));
+  border-radius: 16px;
+  background: var(--mint-light);
+}
+
+.patient-pathway-invite-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  margin-bottom: 17px;
+}
+
+.patient-pathway-invite-heading strong {
+  display: block;
+  margin: 3px 0 4px;
+  color: var(--green);
+  font-size: 17px;
+}
+
+.patient-pathway-invite-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.patient-pathway-invite > label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.patient-pathway-invite-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.patient-pathway-invite-controls input {
+  min-width: 0;
+  min-height: 50px;
+  padding: 0 15px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--ink);
+  background: var(--white);
+  font: 800 16px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.patient-pathway-invite-controls .button {
+  min-height: 50px;
+  white-space: nowrap;
+}
+
+.patient-pathway-invite-status {
+  min-height: 18px;
+  margin: 9px 0 0;
+  color: var(--coral-dark);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .patient-pathway-status {
@@ -5792,6 +5870,14 @@ details.metrics summary {
 
   .patient-pathway-option {
     min-height: 0;
+  }
+
+  .patient-pathway-invite-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .patient-pathway-invite-controls .button {
+    width: 100%;
   }
 
   .profile-account-summary {

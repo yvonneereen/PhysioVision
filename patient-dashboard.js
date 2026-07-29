@@ -1,4 +1,5 @@
 import {
+  acceptCareInvitation,
   acceptConsultation,
   cancelConsultation,
   createConsultation,
@@ -37,6 +38,18 @@ const demoNotice = document.getElementById("patientDemoNotice");
 const dashboardSide = document.getElementById("patientDashboardSide");
 const pathwayModal = document.getElementById("patientPathwayModal");
 const pathwayStatus = document.getElementById("patientPathwayStatus");
+const pathwayInviteForm = document.getElementById(
+  "patientPathwayInviteForm",
+);
+const pathwayInviteCode = document.getElementById(
+  "patientPathwayInviteCode",
+);
+const pathwayInviteSubmit = document.getElementById(
+  "patientPathwayInviteSubmit",
+);
+const pathwayInviteStatus = document.getElementById(
+  "patientPathwayInviteStatus",
+);
 const trendStatus = document.getElementById("patientTrendStatus");
 const trendMessage = document.getElementById("patientTrendMessage");
 const trendChart = document.getElementById("patientTrendChart");
@@ -749,6 +762,39 @@ function hidePathwayChoice() {
   document.body.classList.remove("modal-open");
 }
 
+function setPathwayButtonsDisabled(disabled) {
+  pathwayModal
+    ?.querySelectorAll("[data-pathway-choice]")
+    .forEach((button) => { button.disabled = disabled; });
+}
+
+function showPathwayInviteEntry() {
+  pathwayInviteForm.hidden = false;
+  pathwayStatus.textContent = "";
+  pathwayModal
+    ?.querySelectorAll("[data-pathway-choice]")
+    .forEach((button) => {
+      const selected =
+        button.dataset.pathwayChoice === "physiotherapist";
+      button.classList.toggle("is-selected", selected);
+      button.setAttribute("aria-pressed", String(selected));
+    });
+  window.setTimeout(() => pathwayInviteCode?.focus(), 50);
+}
+
+async function finishPathwaySetup(profile, user = currentUser) {
+  currentUser = { ...user, profile };
+  const browserProfile = browserProfileFromApi(profile);
+  window.dispatchEvent(new CustomEvent(
+    "physiovision:profile-updated",
+    { detail: browserProfile },
+  ));
+  hidePathwayChoice();
+  updateDashboardIntro(profile.pathway_choice);
+  pathwayStatus.textContent = "";
+  await loadDashboardData();
+}
+
 function browserProfileFromApi(profile) {
   return {
     ...(currentUser?.profile ?? {}),
@@ -837,32 +883,72 @@ pathwayModal
   ?.querySelectorAll("[data-pathway-choice]")
   .forEach((button) => {
     button.addEventListener("click", async () => {
-      const buttons = [
-        ...pathwayModal.querySelectorAll("[data-pathway-choice]"),
-      ];
-      buttons.forEach((item) => { item.disabled = true; });
+      if (button.dataset.pathwayChoice === "physiotherapist") {
+        showPathwayInviteEntry();
+        return;
+      }
+
+      pathwayInviteForm.hidden = true;
+      setPathwayButtonsDisabled(true);
       pathwayStatus.textContent = "Saving your pathway…";
       try {
         const profile = await selectPatientPathway(
           button.dataset.pathwayChoice
         );
-        currentUser = { ...currentUser, profile };
-        const browserProfile = browserProfileFromApi(profile);
-        window.dispatchEvent(new CustomEvent(
-          "physiovision:profile-updated",
-          { detail: browserProfile },
-        ));
-        hidePathwayChoice();
-        updateDashboardIntro(profile.pathway_choice);
-        pathwayStatus.textContent = "";
-        await loadDashboardData();
+        await finishPathwaySetup(profile);
       } catch (error) {
         pathwayStatus.textContent =
           error.message || "Your pathway could not be saved. Please try again.";
-        buttons.forEach((item) => { item.disabled = false; });
+        setPathwayButtonsDisabled(false);
       }
     });
   });
+
+pathwayInviteForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const code = pathwayInviteCode.value.trim().toUpperCase();
+  pathwayInviteCode.value = code;
+
+  if (!/^[A-Z2-9]{8}$/.test(code)) {
+    pathwayInviteStatus.textContent =
+      "Enter the complete 8-character invitation code.";
+    pathwayInviteCode.focus();
+    return;
+  }
+
+  setPathwayButtonsDisabled(true);
+  pathwayInviteCode.disabled = true;
+  pathwayInviteSubmit.disabled = true;
+  pathwayInviteStatus.textContent = "Checking invitation…";
+
+  try {
+    const result = await acceptCareInvitation(code);
+    let refreshedUser;
+    try {
+      refreshedUser = await getMe();
+    } catch (_) {
+      refreshedUser = {
+        ...currentUser,
+        profile: {
+          ...(currentUser?.profile ?? {}),
+          care_path: result.care_path,
+          pathway_choice: "physiotherapist",
+        },
+      };
+    }
+    pathwayInviteStatus.textContent =
+      `Connected to ${result.clinician}. Loading your patient home…`;
+    await finishPathwaySetup(refreshedUser.profile, refreshedUser);
+    pathwayInviteCode.value = "";
+  } catch (error) {
+    pathwayInviteStatus.textContent =
+      error.message || "The invitation could not be accepted.";
+    setPathwayButtonsDisabled(false);
+    pathwayInviteCode.disabled = false;
+    pathwayInviteSubmit.disabled = false;
+    pathwayInviteCode.focus();
+  }
+});
 
 window.addEventListener("physiovision:auth-role", (event) => {
   const user = event.detail?.user;

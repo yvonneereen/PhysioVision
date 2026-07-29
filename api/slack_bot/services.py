@@ -513,6 +513,91 @@ def build_sessions_blocks(patient):
     return _section("\n".join(lines))
 
 
+# ── Tier 3: write-back actions that close a loop ──────────────
+
+def send_patient_message(clinician, name_query):
+    """
+    Draft an encouraging message and actually email it to the patient.
+    Returns (patient, sent_body, error).
+    """
+    from api.core.email_delivery import EmailDeliveryError, deliver_email
+
+    patient = find_patient_by_name(name_query, clinician=clinician)
+    if not patient:
+        return None, None, f"No patient matching '{name_query}' in your roster."
+    recipient = patient.user.email
+    if not recipient:
+        return patient, None, f"{patient.user.first_name} has no email address on file."
+
+    body = generate_patient_message(patient)
+    if body.startswith("GEMINI_API_KEY not configured"):
+        return patient, None, body
+
+    try:
+        deliver_email(
+            subject="A note from your physiotherapy team",
+            message=body,
+            recipient=recipient,
+        )
+    except EmailDeliveryError as exc:
+        return patient, None, f"Drafted, but the email could not be sent: {exc}"
+    return patient, body, None
+
+
+def confirm_consultation(clinician, name_query):
+    """Confirm the patient's soonest pending (requested) consultation. Returns
+    (consultation, error)."""
+    from api.consultations.models import Consultation, ConsultationStatus
+
+    patient = find_patient_by_name(name_query, clinician=clinician)
+    if not patient:
+        return None, f"No patient matching '{name_query}' in your roster."
+
+    consult = (
+        Consultation.objects.filter(
+            patient=patient, clinician=clinician, status=ConsultationStatus.REQUESTED,
+        )
+        .order_by('scheduled_at')
+        .first()
+    )
+    if not consult:
+        return None, f"{patient.user.first_name} has no pending consultation to confirm."
+
+    consult.status = ConsultationStatus.CONFIRMED
+    consult.save(update_fields=['status', 'updated_at'])
+    return consult, None
+
+
+def assign_exercise(clinician, exercise_query, name_query):
+    """
+    Create an active prescription (sensible defaults), retiring any earlier active
+    one for the same exercise. Returns (patient, (exercise, prescription), error).
+    """
+    from api.catalogue.models import Exercise, Prescription
+
+    patient = find_patient_by_name(name_query, clinician=clinician)
+    if not patient:
+        return None, None, f"No patient matching '{name_query}' in your roster."
+
+    exercise = Exercise.objects.filter(
+        is_active=True, name__icontains=exercise_query,
+    ).first()
+    if not exercise:
+        return patient, None, f"No active exercise matching '{exercise_query}'."
+
+    # Honour the one-active-prescription-per-(patient, exercise) constraint.
+    Prescription.objects.filter(
+        patient=patient, exercise=exercise, is_active=True,
+    ).update(is_active=False)
+
+    prescription = Prescription.objects.create(
+        patient=patient, clinician=clinician, exercise=exercise,
+        sets=3, reps=10, days_per_week="3",
+        valid_from=timezone.localdate(), is_active=True,
+    )
+    return patient, (exercise, prescription), None
+
+
 # ── Draft a patient-facing message (draft-only for now) ───────
 
 def generate_patient_message(patient):

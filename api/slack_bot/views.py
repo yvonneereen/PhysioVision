@@ -124,6 +124,63 @@ if settings.SLACK_BOT_TOKEN and settings.SLACK_SIGNING_SECRET:
                     say(blocks=getattr(services, builder_name)(patient))
                     return
 
+            # ── Tier 3: write-back actions ──
+            if "send" in text and "message" in text:
+                if not clinician:
+                    _need_link(); return
+                from .services import send_patient_message
+                name = _arg_after(text, "message")
+                if not name:
+                    say("Which patient? e.g. `@Physio Assistant send message to Sarah`"); return
+                patient, body, error = send_patient_message(clinician, name)
+                if error:
+                    say(error)
+                else:
+                    say(f":email: Sent to *{patient.user.first_name}* ({patient.user.email}):\n>{body}")
+                return
+
+            if "confirm" in text:
+                if not clinician:
+                    _need_link(); return
+                from .services import confirm_consultation
+                name = _arg_after(text, "confirm")
+                if not name:
+                    say("Which patient? e.g. `@Physio Assistant confirm Sarah`"); return
+                consult, error = confirm_consultation(clinician, name)
+                if error:
+                    say(error)
+                else:
+                    say(
+                        f":white_check_mark: Confirmed consultation with "
+                        f"*{consult.patient.user.first_name}* on "
+                        f"*{consult.scheduled_at:%a %d %b, %H:%M}*."
+                    )
+                return
+
+            if "assign" in text:
+                if not clinician:
+                    _need_link(); return
+                m = re.search(
+                    r"assign\s+(.+?)\s+to\s+([a-z][a-z .'-]*)",
+                    re.sub(r'<@[^>]+>', '', text),
+                )
+                if not m:
+                    say("Format: `@Physio Assistant assign [exercise] to [name]`"); return
+                from .services import assign_exercise
+                patient, result, error = assign_exercise(
+                    clinician, m.group(1).strip(), m.group(2).strip()
+                )
+                if error:
+                    say(error)
+                else:
+                    exercise, rx = result
+                    say(
+                        f":clipboard: Assigned *{exercise.name}* to "
+                        f"*{patient.user.first_name}* — {rx.sets}×{rx.reps}, "
+                        f"{rx.days_per_week}×/wk."
+                    )
+                return
+
             name_match = re.search(
                 r'(?:for|show|book|about)\s+([a-z ]+?)'
                 r'(?:\s+(?:progress|note|summary|message|on|at|tomorrow|today|next|mon|tue|wed|thu|fri|sat|sun)|\s*$)',
@@ -217,6 +274,10 @@ if settings.SLACK_BOT_TOKEN and settings.SLACK_SIGNING_SECRET:
                     "• `@Physio Assistant draft note for [name]` — clinical note from last session\n"
                     "• `@Physio Assistant draft message for [name]` — encouraging patient message\n"
                     "• `@Physio Assistant book [name] [when]` — request a consultation\n"
+                    "*Actions:*\n"
+                    "• `@Physio Assistant send message to [name]` — email the patient an encouragement\n"
+                    "• `@Physio Assistant confirm [name]` — confirm their pending consultation\n"
+                    "• `@Physio Assistant assign [exercise] to [name]` — prescribe an exercise\n"
                     "• `@Physio Assistant summary` — whole-clinic overview"
                 )
 

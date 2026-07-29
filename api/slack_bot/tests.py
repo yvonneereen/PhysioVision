@@ -187,6 +187,49 @@ class CommandScopingTests(TestCase):
         self.esc.refresh_from_db()
         self.assertEqual(self.esc.status, "open")
 
+    def test_confirm_consultation_flips_status(self):
+        from api.consultations.models import Consultation, ConsultationStatus
+        from .services import confirm_consultation
+        c = Consultation.objects.create(
+            patient=self.patient, clinician=self.clinician,
+            scheduled_at=timezone.now() + timedelta(days=1),
+            status=ConsultationStatus.REQUESTED,
+        )
+        consult, error = confirm_consultation(self.clinician, "sarah")
+        self.assertIsNone(error)
+        c.refresh_from_db()
+        self.assertEqual(c.status, ConsultationStatus.CONFIRMED)
+
+    def test_confirm_without_pending_errors(self):
+        from .services import confirm_consultation
+        consult, error = confirm_consultation(self.clinician, "sarah")
+        self.assertIsNone(consult)
+        self.assertIn("no pending consultation", error)
+
+    def test_assign_exercise_creates_active_prescription(self):
+        from api.catalogue.models import Exercise, Prescription
+        from .services import assign_exercise
+        ex = Exercise.objects.create(
+            id="half-squats", name="Half Squats", category="strengthening",
+            rep_rule="standing → squat → standing", is_active=True,
+            tracked_angles_config={}, phases_config=[], cues_config={},
+        )
+        patient, result, error = assign_exercise(self.clinician, "half sq", "sarah")
+        self.assertIsNone(error)
+        exercise, rx = result
+        self.assertEqual(exercise.pk, ex.pk)
+        self.assertTrue(
+            Prescription.objects.filter(
+                patient=self.patient, exercise=ex, is_active=True,
+            ).exists()
+        )
+
+    def test_assign_unknown_exercise_errors(self):
+        from .services import assign_exercise
+        patient, result, error = assign_exercise(self.clinician, "nonesuch", "sarah")
+        self.assertIsNone(result)
+        self.assertIn("No active exercise", error)
+
 
 class OptionalSlackIntegrationTests(TestCase):
     @override_settings(

@@ -1470,6 +1470,46 @@ textarea:focus-visible {
   font-size: 19px;
 }
 
+.camera-placeholder-actions {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  width: min(440px, calc(100% - 40px));
+  text-align: center;
+}
+
+.camera-placeholder-actions p {
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.camera-placeholder-actions strong {
+  font-size: clamp(20px, 2vw, 26px);
+}
+
+.camera-setup-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  width: 100%;
+  min-height: 62px;
+  padding: 16px 22px;
+  font-size: 16px;
+  text-align: left;
+}
+
+.camera-setup-button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.camera-placeholder-actions small {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .position-guide {
   position: relative;
   width: 180px;

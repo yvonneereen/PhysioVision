@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=51" />
+  <link rel="stylesheet" href="style.css?v=52" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -831,7 +831,24 @@
                 <span class="guide-leg guide-leg-left"></span>
                 <span class="guide-leg guide-leg-right"></span>
               </div>
-              <p><strong>Stand where your full body fits</strong>Face your phone and keep a chair nearby</p>
+              <div class="camera-placeholder-actions">
+                <p>
+                  <strong>Stand where your full body fits</strong>
+                  Press the large button below to begin your camera setup.
+                </p>
+                <button
+                  class="button button-coral camera-setup-button"
+                  id="openCalibrationPrimary"
+                  type="button"
+                  disabled
+                >
+                  <span id="primaryCalibrationLabel">Set up my camera to continue</span>
+                  <span aria-hidden="true">→</span>
+                </button>
+                <small>
+                  Face your device and keep a stable chair nearby for support.
+                </small>
+              </div>
             </div>
             <div class="camera-topbar">
               <div id="status" class="status" role="status" aria-live="polite">
@@ -2088,7 +2105,7 @@
   <script type="module" src="patient-dashboard.js?v=10"></script>
   <script type="module" src="therapist.js?v=15"></script>
   <script type="module" src="exercise-library.js?v=15"></script>
-  <script type="module" src="main.js?v=47"></script>
+  <script type="module" src="main.js?v=48"></script>
   <script type="module" src="agent-chat.js?v=13"></script>
   <script type="module" src="care-workflow.js?v=13"></script>
 </body>

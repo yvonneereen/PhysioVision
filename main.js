@@ -152,6 +152,10 @@ function renderExerciseImage(exercise) {
 const calibrationBadge      = document.getElementById("calibrationBadge");
 const calibrationDetail     = document.getElementById("calibrationDetail");
 const openCalibrationBtn    = document.getElementById("openCalibration");
+const openCalibrationPrimary =
+  document.getElementById("openCalibrationPrimary");
+const primaryCalibrationLabel =
+  document.getElementById("primaryCalibrationLabel");
 const calibrationOverlay    = document.getElementById("calibrationOverlay");
 const calibrationStepLabel  = document.getElementById("calibrationStepLabel");
 const calibrationTitle      = document.getElementById("calibrationTitle");
@@ -1233,21 +1237,26 @@ function renderPersonalization() {
       engine.exercise.calibration
     )} · safety limits unchanged`;
     openCalibrationBtn.textContent = "Recalibrate";
+    primaryCalibrationLabel.textContent = "Update my camera setup";
   } else if (supportsCalibration) {
     calibrationBadge.textContent = "Standard range";
     calibrationDetail.textContent =
       `Calibrate ${engine.exercise.name} to your movement.`;
     openCalibrationBtn.textContent = "Calibrate";
+    primaryCalibrationLabel.textContent = "Set up my camera to continue";
   } else {
     calibrationBadge.textContent = "Standard range";
     calibrationDetail.textContent = "Personal calibration is unavailable for this exercise.";
     openCalibrationBtn.textContent = "Unavailable";
+    primaryCalibrationLabel.textContent = "Camera setup unavailable";
   }
 
   const requiredModelsReady = Boolean(
     poseLandmarker && (!exerciseUsesHand(engine.exercise) || handLandmarker)
   );
   openCalibrationBtn.disabled = !requiredModelsReady || !supportsCalibration;
+  openCalibrationPrimary.disabled =
+    !requiredModelsReady || !supportsCalibration;
 }
 
 function calibrationSummary(calibration, config) {
@@ -1296,10 +1305,14 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-openCalibrationBtn.addEventListener("click", async () => {
+let calibrationReturnFocus = openCalibrationBtn;
+
+async function openCalibrationFlow(event) {
+  const trigger = event.currentTarget;
   if (!engine.exercise.calibration) return;
   if (!running && !(await activateCameraGuide())) return;
 
+  calibrationReturnFocus = trigger;
   calibrationDraft = null;
   calibrationSession = {
     exerciseId: engine.exercise.id,
@@ -1311,7 +1324,10 @@ openCalibrationBtn.addEventListener("click", async () => {
   calibrationOverlay.classList.remove("hidden");
   renderCalibrationStep();
   calibrationAction.focus();
-});
+}
+
+openCalibrationBtn.addEventListener("click", openCalibrationFlow);
+openCalibrationPrimary.addEventListener("click", openCalibrationFlow);
 
 calibrationCancel.addEventListener("click", cancelCalibration);
 
@@ -1492,7 +1508,7 @@ function cancelCalibration() {
   calibrationSession = null;
   calibrationDraft = null;
   calibrationOverlay?.classList.add("hidden");
-  if (wasActive) openCalibrationBtn?.focus();
+  if (wasActive) calibrationReturnFocus?.focus();
 }
 
 // ── Static panel renders ──────────────────────────────────────────────────────

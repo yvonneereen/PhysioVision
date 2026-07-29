@@ -3833,6 +3833,69 @@ details.metrics summary {
   resize: vertical;
 }
 
+.planner-history-question {
+  margin: 14px 0 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fafbf9;
+}
+
+.planner-history-question legend {
+  padding: 0 6px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.planner-history-question > p {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.planner-history-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.planner-history-options label {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid #cfd8d3;
+  border-radius: 9px;
+  color: var(--muted);
+  background: var(--white);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.planner-history-options label:has(input:checked) {
+  border-color: var(--green);
+  color: var(--ink);
+  background: var(--mint-light);
+}
+
+.planner-history-options input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--green);
+}
+
+.planner-medical-history small {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
 .planner-request-status {
   min-height: 18px;
   margin: 10px 0 0;

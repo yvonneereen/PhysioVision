@@ -865,6 +865,8 @@ class WellnessPlanAgentViewTests(APITestCase):
             "minutes_per_session": 10,
             "equipment": "chair",
             "planning_notes": "Prefer short morning sessions.",
+            "has_relevant_history": False,
+            "medical_history": "",
             "age": 68,
             "height_cm": 163,
             "weight_kg": 62,
@@ -955,6 +957,79 @@ class WellnessPlanAgentViewTests(APITestCase):
         self.assertIsNotNone(
             user.patient_profile.wellness_plan_accepted_at,
         )
+
+    def test_accept_persists_recovered_history_from_signed_draft(self):
+        user = self.make_patient()
+        self.client.force_authenticate(user)
+        preferences = {
+            **self.preferences(),
+            "has_relevant_history": True,
+            "medical_history": (
+                "Recovered from an old right knee injury; deep bending can "
+                "still feel uncomfortable."
+            ),
+        }
+        plan = {
+            "summary": "A cautious knee-strength plan.",
+            "rationale": ["Uses the lower-load reviewed subset."],
+            "days": [
+                {
+                    "title": "Seated control",
+                    "exercise_ids": ["leg-extensions"],
+                    "duration_minutes": 10,
+                },
+                {
+                    "title": "Gentle control",
+                    "exercise_ids": ["leg-extensions"],
+                    "duration_minutes": 10,
+                },
+                {
+                    "title": "Seated strength",
+                    "exercise_ids": ["leg-extensions"],
+                    "duration_minutes": 10,
+                },
+            ],
+        }
+        draft_token = signing.dumps(
+            {
+                "user_id": str(user.id),
+                "plan": plan,
+                "preferences": preferences,
+            },
+            salt="physiovision.wellness-plan-draft",
+            compress=True,
+        )
+
+        response = self.client.post(
+            self.accept_endpoint,
+            {"draft_token": draft_token},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        user.patient_profile.refresh_from_db()
+        self.assertEqual(
+            user.patient_profile.medical_history,
+            preferences["medical_history"],
+        )
+
+    @patch("api.core.views.generate_wellness_plan")
+    def test_recovered_history_requires_a_description(self, generate):
+        user = self.make_patient()
+        self.client.force_authenticate(user)
+        response = self.client.post(
+            self.draft_endpoint,
+            {
+                **self.preferences(),
+                "has_relevant_history": True,
+                "medical_history": "",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("medical_history", response.data)
+        generate.assert_not_called()
 
     def test_accept_rejects_unreviewed_exercise(self):
         user = self.make_patient()

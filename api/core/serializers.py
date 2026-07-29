@@ -237,13 +237,22 @@ class WellnessPlanPreferencesSerializer(serializers.Serializer):
     activity_level = serializers.ChoiceField(choices=ActivityLevel.choices)
     focus_side = serializers.ChoiceField(choices=FocusSide.choices)
     cue_style = serializers.ChoiceField(choices=CueStyle.choices)
-    days_per_week = serializers.IntegerField(min_value=2, max_value=4)
-    minutes_per_session = serializers.IntegerField(min_value=5, max_value=20)
+    days_per_week = serializers.IntegerField(min_value=1, max_value=7)
+    minutes_per_session = serializers.IntegerField(min_value=5, max_value=30)
     equipment = serializers.ChoiceField(
         choices=["none", "chair", "chair_band"],
     )
     planning_notes = serializers.CharField(
         max_length=500,
+        required=False,
+        allow_blank=True,
+    )
+    has_relevant_history = serializers.BooleanField(
+        required=False,
+        default=False,
+    )
+    medical_history = serializers.CharField(
+        max_length=1000,
         required=False,
         allow_blank=True,
     )
@@ -278,6 +287,17 @@ class WellnessPlanPreferencesSerializer(serializers.Serializer):
             custom_goal if attrs["goal"] == GoalChoice.OTHER else ""
         )
         attrs["planning_notes"] = attrs.get("planning_notes", "").strip()
+        medical_history = attrs.get("medical_history", "").strip()
+        if attrs["has_relevant_history"] and not medical_history:
+            raise serializers.ValidationError({
+                "medical_history": (
+                    "Describe the recovered medical, injury, or surgery "
+                    "history the planner should consider."
+                ),
+            })
+        attrs["medical_history"] = (
+            medical_history if attrs["has_relevant_history"] else ""
+        )
         return attrs
 
 

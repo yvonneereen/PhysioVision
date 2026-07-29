@@ -393,7 +393,7 @@ function renderWellnessPlan(profile) {
         "Passing the safety screen alone never assigns exercises.",
     }));
     planStart.textContent = "Ask AI to draft my plan";
-    createPlan.textContent = "Create my plan with AI";
+    createPlan.hidden = true;
     return;
   }
 
@@ -817,6 +817,8 @@ function browserProfileFromApi(profile) {
     },
     wellnessPlan: profile.wellness_plan ?? null,
     wellnessPlanAcceptedAt: profile.wellness_plan_accepted_at ?? null,
+    hasRelevantHistory: Boolean(profile.medical_history),
+    medicalHistory: profile.medical_history ?? "",
   };
 }
 

@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=52" />
+  <link rel="stylesheet" href="style.css?v=53" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -1534,9 +1534,13 @@
             <label>
               <span>Days each week</span>
               <select name="daysPerWeek" required>
+                <option value="1">1 day</option>
                 <option value="2">2 days</option>
                 <option value="3" selected>3 days</option>
                 <option value="4">4 days</option>
+                <option value="5">5 days</option>
+                <option value="6">6 days</option>
+                <option value="7">7 days</option>
               </select>
             </label>
             <label>
@@ -1546,6 +1550,8 @@
                 <option value="10" selected>About 10 minutes</option>
                 <option value="15">About 15 minutes</option>
                 <option value="20">About 20 minutes</option>
+                <option value="25">About 25 minutes</option>
+                <option value="30">About 30 minutes</option>
               </select>
             </label>
             <label>
@@ -1591,6 +1597,54 @@
               <em>kg</em>
             </label>
           </div>
+          <fieldset class="planner-history-question">
+            <legend>
+              Do you have any past medical, injury, or surgery history that
+              you have recovered from but the planner should still consider?
+            </legend>
+            <p>
+              This includes an old injury that may make certain movements
+              uncomfortable. If the issue is current, worsening, or has
+              clinician restrictions, return to the safety screen instead.
+            </p>
+            <div class="planner-history-options">
+              <label>
+                <input
+                  type="radio"
+                  name="hasRelevantHistory"
+                  value="false"
+                  required
+                />
+                No history to consider
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="hasRelevantHistory"
+                  value="true"
+                />
+                Yes, I will describe it
+              </label>
+            </div>
+          </fieldset>
+          <label
+            class="planner-notes-field planner-medical-history"
+            id="plannerMedicalHistoryField"
+            hidden
+          >
+            <span>Recovered medical or injury history</span>
+            <textarea
+              id="plannerMedicalHistory"
+              name="medicalHistory"
+              maxlength="1000"
+              rows="3"
+              placeholder="For example: I recovered from a right knee injury two years ago, but deep bending can still feel uncomfortable."
+            ></textarea>
+            <small>
+              The planner will use a lower-load exercise subset and shorter
+              sessions. It cannot guarantee that an exercise will not cause pain.
+            </small>
+          </label>
           <label class="planner-notes-field">
             <span>Anything the planner should consider? <small>(optional)</small></span>
             <textarea
@@ -2206,8 +2260,8 @@
 
   <script src="runtime-config.js"></script>
   <script type="module" src="auth.js?v=23"></script>
-  <script type="module" src="ui.js?v=17"></script>
-  <script type="module" src="patient-dashboard.js?v=10"></script>
+  <script type="module" src="ui.js?v=18"></script>
+  <script type="module" src="patient-dashboard.js?v=12"></script>
   <script type="module" src="therapist.js?v=15"></script>
   <script type="module" src="exercise-library.js?v=15"></script>
   <script type="module" src="main.js?v=49"></script>

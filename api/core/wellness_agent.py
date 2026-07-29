@@ -76,36 +76,6 @@ WELLNESS_EXERCISE_CATALOGUE = {
         "equipment": "band",
         "history_cautious": False,
     },
-    "supported_single_leg_balance": {
-        "name": "Supported single-leg balance",
-        "goals": ["better_balance", "walking_confidence"],
-        "equipment": "chair",
-        "history_cautious": True,
-    },
-    "ankle_pumps": {
-        "name": "Ankle pumps",
-        "goals": ["less_stiffness", "ankle_mobility", "stay_active"],
-        "equipment": "none",
-        "history_cautious": True,
-    },
-    "heel_slides": {
-        "name": "Heel slides",
-        "goals": ["less_stiffness", "stay_active"],
-        "equipment": "none",
-        "history_cautious": True,
-    },
-    "hip_bridge": {
-        "name": "Supine bridge",
-        "goals": ["stronger_hips", "stay_active"],
-        "equipment": "none",
-        "history_cautious": False,
-    },
-    "clamshell": {
-        "name": "Clamshell",
-        "goals": ["stronger_hips", "better_balance"],
-        "equipment": "none",
-        "history_cautious": True,
-    },
 }
 
 DAY_SCHEDULES = {

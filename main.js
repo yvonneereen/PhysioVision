@@ -161,6 +161,8 @@ const openCalibrationPrimary =
   document.getElementById("openCalibrationPrimary");
 const primaryCalibrationLabel =
   document.getElementById("primaryCalibrationLabel");
+const cameraSetupStatus =
+  document.getElementById("cameraSetupStatus");
 const calibrationOverlay    = document.getElementById("calibrationOverlay");
 const calibrationStepLabel  = document.getElementById("calibrationStepLabel");
 const calibrationTitle      = document.getElementById("calibrationTitle");
@@ -1523,8 +1525,28 @@ let calibrationReturnFocus = openCalibrationBtn;
 
 async function openCalibrationFlow(event) {
   const trigger = event.currentTarget;
-  if (!engine.exercise.calibration) return;
-  if (!running && !(await activateCameraGuide())) return;
+  cameraSetupStatus.hidden = true;
+  cameraSetupStatus.textContent = "";
+  if (!engine.exercise.calibration) {
+    cameraSetupStatus.textContent =
+      "Camera setup is unavailable for this exercise.";
+    cameraSetupStatus.hidden = false;
+    return;
+  }
+  if (!running && !(await activateCameraGuide())) {
+    cameraSetupStatus.textContent = engine.exercise.requiresClinicianPlan
+      && profile.carePath !== "clinician"
+      ? (
+        "This movement requires a physiotherapist-approved care plan. "
+        + "Return to My home and create a new general-wellness AI plan."
+      )
+      : (
+        statusEl.textContent
+        || "Camera setup could not start. Check the message above and try again."
+      );
+    cameraSetupStatus.hidden = false;
+    return;
+  }
 
   calibrationReturnFocus = trigger;
   calibrationDraft = null;

@@ -90,13 +90,25 @@ class WellnessAgentGuardrailTests(unittest.TestCase):
         available = allowed_exercises(preferences(equipment="none"))
         self.assertNotIn("half-squats", available)
         self.assertNotIn("leg-presses", available)
-        self.assertIn("ankle_pumps", available)
+        self.assertIn("hip-adduction", available)
+
+    def test_clinician_only_exercises_are_never_available_to_wellness_plans(self):
+        available = allowed_exercises(preferences(equipment="chair_band"))
+
+        for exercise_id in (
+            "supported_single_leg_balance",
+            "ankle_pumps",
+            "heel_slides",
+            "hip_bridge",
+            "clamshell",
+        ):
+            self.assertNotIn(exercise_id, available)
 
     def test_supports_a_seven_day_preference(self):
         plan = normalize_wellness_plan(
             {
                 "days": [
-                    {"exercise_ids": ["ankle_pumps"]}
+                    {"exercise_ids": ["hip-adduction"]}
                     for _ in range(7)
                 ],
             },
@@ -123,7 +135,7 @@ class WellnessAgentGuardrailTests(unittest.TestCase):
         self.assertNotIn("half-squats", available)
         self.assertNotIn("leg-presses", available)
         self.assertIn("leg-extensions", available)
-        self.assertIn("heel_slides", available)
+        self.assertIn("hip-adduction", available)
 
     def test_recovered_history_caps_duration_and_session_size(self):
         cautious = preferences(
@@ -174,7 +186,7 @@ class WellnessAgentGuardrailTests(unittest.TestCase):
                         {
                             "exercise_ids": [
                                 "leg-extensions",
-                                "heel_slides",
+                                "hip-adduction",
                             ],
                         }
                         for _ in range(3)

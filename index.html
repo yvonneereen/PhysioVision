@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=53" />
+  <link rel="stylesheet" href="style.css?v=54" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -232,14 +232,6 @@
           >
             Start exercises <span aria-hidden="true">→</span>
           </button>
-          <button
-            class="text-link"
-            id="patientCreateWellnessPlan"
-            type="button"
-            data-open="plan-modal"
-          >
-            Create or update my wellness plan
-          </button>
         </div>
       </section>
 
@@ -439,10 +431,6 @@
               Build my recovery plan
               <span aria-hidden="true">↗</span>
             </button>
-            <a class="round-link" href="#practice" aria-label="Try the live exercise guide">
-              <span>Try it live</span>
-              <span class="round-link-icon" aria-hidden="true">↓</span>
-            </a>
           </div>
           <div class="hero-account-entry" aria-label="Account access">
             <span>Already have a patient or physiotherapist account?</span>
@@ -845,6 +833,12 @@
                   <span id="primaryCalibrationLabel">Set up my camera to continue</span>
                   <span aria-hidden="true">→</span>
                 </button>
+                <p
+                  class="camera-setup-status"
+                  id="cameraSetupStatus"
+                  role="alert"
+                  hidden
+                ></p>
                 <small>
                   Face your device and keep a stable chair nearby for support.
                 </small>
@@ -2261,10 +2255,10 @@
   <script src="runtime-config.js"></script>
   <script type="module" src="auth.js?v=23"></script>
   <script type="module" src="ui.js?v=18"></script>
-  <script type="module" src="patient-dashboard.js?v=12"></script>
+  <script type="module" src="patient-dashboard.js?v=14"></script>
   <script type="module" src="therapist.js?v=15"></script>
   <script type="module" src="exercise-library.js?v=15"></script>
-  <script type="module" src="main.js?v=49"></script>
+  <script type="module" src="main.js?v=50"></script>
   <script type="module" src="agent-chat.js?v=13"></script>
   <script type="module" src="care-workflow.js?v=13"></script>
 </body>

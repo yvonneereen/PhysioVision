@@ -1504,6 +1504,24 @@ textarea:focus-visible {
   opacity: 0.62;
 }
 
+.camera-placeholder-actions .camera-setup-status {
+  width: 100%;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 208, 95, 0.7);
+  border-radius: 12px;
+  background: rgba(255, 208, 95, 0.12);
+  color: #fff4cd;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.camera-placeholder-actions .camera-setup-status[hidden] {
+  display: none;
+}
+
 .camera-placeholder-actions small {
   color: rgba(255, 255, 255, 0.62);
   font-size: 12px;

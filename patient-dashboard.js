@@ -18,6 +18,7 @@ import {
   isCurrentPrescription,
 } from "./patient-dashboard-state.js?v=1";
 import { saveProfile } from "./personalization.js?v=6";
+import { EXERCISE_MAP } from "./exercises/registry.js";
 
 const dashboard = document.getElementById("patientDashboard");
 const publicMain = document.getElementById("main-content");
@@ -33,7 +34,6 @@ const planIntro = document.getElementById("patientPlanIntro");
 const planList = document.getElementById("patientPlanList");
 const planStart = document.getElementById("patientPlanStart");
 const primaryStart = document.getElementById("patientStartPrimary");
-const createPlan = document.getElementById("patientCreateWellnessPlan");
 const demoNotice = document.getElementById("patientDemoNotice");
 const dashboardSide = document.getElementById("patientDashboardSide");
 const pathwayModal = document.getElementById("patientPathwayModal");
@@ -206,6 +206,20 @@ function openAiCompanion() {
   document.getElementById("agentChatLauncher")?.click();
 }
 
+function unavailableWellnessExercises(plan) {
+  const exerciseIds = (plan?.days ?? []).flatMap(
+    (day) => day.exercise_ids ?? day.exerciseIds ?? [],
+  );
+  return [...new Set(exerciseIds)].filter((exerciseId) => {
+    const exercise = EXERCISE_MAP[exerciseId];
+    return (
+      !exercise
+      || exercise.comingSoon
+      || exercise.requiresClinicianPlan
+    );
+  });
+}
+
 function startExercise(exerciseId = firstExerciseId) {
   if (!exerciseId) {
     if (primaryAction === "ai") {
@@ -262,7 +276,6 @@ function planRow({ label, title, detail, exerciseId = null, note = "" }) {
 function renderClinicianPlan(prescriptions) {
   const active = prescriptions.filter((item) => isCurrentPrescription(item));
   firstExerciseId = active[0]?.exercise ?? null;
-  createPlan.hidden = true;
   dashboard.classList.remove("wellness-dashboard");
   primaryActions.hidden = false;
   dashboardSide.hidden = false;
@@ -326,7 +339,6 @@ function renderWellnessPlan(profile) {
     profile?.wellness_screening_status ??
     profile?.wellnessScreening?.status;
   const eligible = screeningStatus === "eligible";
-  createPlan.hidden = false;
   dashboard.classList.add("wellness-dashboard");
   primaryActions.hidden = true;
   dashboardSide.hidden = true;
@@ -370,9 +382,6 @@ function renderWellnessPlan(profile) {
     planStart.textContent = needsReview
       ? "Review my safety screen"
       : "Ask AI to create my plan";
-    createPlan.textContent = needsReview
-      ? "Review my wellness safety screen"
-      : "Complete the wellness safety screen";
     return;
   }
 
@@ -392,8 +401,27 @@ function renderWellnessPlan(profile) {
       note:
         "Passing the safety screen alone never assigns exercises.",
     }));
-    planStart.textContent = "Ask AI to draft my plan";
-    createPlan.hidden = true;
+    planStart.textContent = "Create my plan with AI";
+    return;
+  }
+
+  const unavailableExercises = unavailableWellnessExercises(plan);
+  if (unavailableExercises.length) {
+    firstExerciseId = null;
+    primaryAction = "plan";
+    planStatus.textContent = "Plan refresh needed";
+    planStatus.className = "status-pill status-pill-review";
+    planIntro.textContent =
+      "Your saved AI plan contains an exercise that now requires physiotherapist approval.";
+    planList.appendChild(planRow({
+      label: "!",
+      title: "Create a new AI wellness plan",
+      detail:
+        "The camera remains locked for clinician-only movements. A new draft will use only exercises available to your general-wellness pathway.",
+      note:
+        "Your safety-screen result is unchanged; only the incompatible saved plan needs replacing.",
+    }));
+    planStart.textContent = "Create a new AI plan";
     return;
   }
 
@@ -663,7 +691,6 @@ async function loadDashboardData() {
     }));
     planStart.textContent = "Try loading again";
     primaryStart.textContent = "Try loading plan again";
-    createPlan.hidden = true;
   } else {
     renderPlan(currentUser, currentData.prescriptions);
   }

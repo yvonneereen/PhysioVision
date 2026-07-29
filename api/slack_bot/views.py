@@ -181,6 +181,69 @@ if settings.SLACK_BOT_TOKEN and settings.SLACK_SIGNING_SECRET:
                     )
                 return
 
+            # ── Phase 2: conversational AI programme builder ──
+            if "accept" in text and "plan" in text:
+                if not clinician:
+                    _need_link(); return
+                from .services import accept_plan_draft
+                name = _arg_after(text, "plan")
+                if not name:
+                    say("Which patient? e.g. `@Physio Assistant accept plan for Sarah`"); return
+                patient, created, error = accept_plan_draft(clinician, name)
+                if error:
+                    say(error)
+                elif created:
+                    say(
+                        f":white_check_mark: Created {created} prescription(s) for "
+                        f"*{patient.user.first_name}* from the draft."
+                    )
+                else:
+                    say("That draft had no usable exercises — nothing was created.")
+                return
+
+            if "build" in text and "plan" in text:
+                if not clinician:
+                    _need_link(); return
+                from .services import build_plan_draft, build_plan_draft_blocks
+                name = _arg_after(text, "plan")
+                if not name:
+                    say("Which patient? e.g. `@Physio Assistant build a plan for Sarah`"); return
+                # Optional knobs: "3 days", "with a band" / "no equipment".
+                days_match = re.search(r'([234])\s*days?', text)
+                days = int(days_match.group(1)) if days_match else 3
+                equipment = (
+                    "chair_band" if "band" in text
+                    else "none" if "no equipment" in text or "no kit" in text
+                    else "chair"
+                )
+                patient, plan, error = build_plan_draft(
+                    clinician, name, days_per_week=days, equipment=equipment,
+                )
+                if error:
+                    say(error)
+                else:
+                    say(blocks=build_plan_draft_blocks(patient, plan))
+                return
+
+            if "revise" in text:
+                if not clinician:
+                    _need_link(); return
+                from .services import build_plan_draft_blocks, revise_plan_draft
+                m = re.search(
+                    r"revise\s+([a-z][a-z'-]*)\s+(.+)",
+                    re.sub(r'<@[^>]+>', '', text),
+                )
+                if not m:
+                    say("Format: `@Physio Assistant revise [name] [what to change]`"); return
+                patient, plan, error = revise_plan_draft(
+                    clinician, m.group(1).strip(), m.group(2).strip()
+                )
+                if error:
+                    say(error)
+                else:
+                    say(blocks=build_plan_draft_blocks(patient, plan))
+                return
+
             name_match = re.search(
                 r'(?:for|show|book|about)\s+([a-z ]+?)'
                 r'(?:\s+(?:progress|note|summary|message|on|at|tomorrow|today|next|mon|tue|wed|thu|fri|sat|sun)|\s*$)',
@@ -277,7 +340,11 @@ if settings.SLACK_BOT_TOKEN and settings.SLACK_SIGNING_SECRET:
                     "*Actions:*\n"
                     "• `@Physio Assistant send message to [name]` — email the patient an encouragement\n"
                     "• `@Physio Assistant confirm [name]` — confirm their pending consultation\n"
-                    "• `@Physio Assistant assign [exercise] to [name]` — prescribe an exercise\n"
+                    "• `@Physio Assistant assign [exercise] to [name]` — prescribe one exercise\n"
+                    "*AI programme builder:*\n"
+                    "• `@Physio Assistant build a plan for [name]` — draft a full programme with AI\n"
+                    "• `@Physio Assistant revise [name] [change]` — refine the draft\n"
+                    "• `@Physio Assistant accept plan for [name]` — turn the draft into prescriptions\n"
                     "• `@Physio Assistant summary` — whole-clinic overview"
                 )
 

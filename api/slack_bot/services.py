@@ -598,6 +598,152 @@ def assign_exercise(clinician, exercise_query, name_query):
     return patient, (exercise, prescription), None
 
 
+# ── Conversational AI programme builder ───────────────────────
+
+def _plan_preferences(patient, *, days_per_week=3, equipment="chair"):
+    """Seed the wellness agent from the patient's existing profile + a few knobs."""
+    return {
+        "goal": patient.goal or "stay_active",
+        "custom_goal": patient.custom_goal or "",
+        "activity_level": patient.activity_level or "",
+        "focus_side": patient.focus_side or "",
+        "cue_style": patient.cue_style or "",
+        "height_cm": patient.height_cm,
+        "weight_kg": patient.weight_kg,
+        "days_per_week": days_per_week,
+        "minutes_per_session": 10,
+        "equipment": equipment,
+        "planning_notes": "",
+    }
+
+
+def _unique_exercise_ids(plan):
+    ids = []
+    for day in plan.get("days", []):
+        for eid in day.get("exercise_ids", day.get("exerciseIds", [])):
+            if eid not in ids:
+                ids.append(eid)
+    return ids
+
+
+def build_plan_draft(clinician, name_query, *, days_per_week=3, equipment="chair"):
+    """Generate an AI programme draft from the patient's profile and stage it.
+    Returns (patient, plan, error)."""
+    from api.core.models import SlackPlanDraft
+    from api.core.wellness_agent import generate_wellness_plan
+
+    patient = find_patient_by_name(name_query, clinician=clinician)
+    if not patient:
+        return None, None, f"No patient matching '{name_query}' in your roster."
+
+    prefs = _plan_preferences(patient, days_per_week=days_per_week, equipment=equipment)
+    try:
+        plan = generate_wellness_plan(patient.user, prefs)
+    except Exception:
+        logger.exception("Slack plan builder failed for patient %s", patient.id)
+        return patient, None, "The AI planner is unavailable right now — no draft saved."
+
+    SlackPlanDraft.objects.update_or_create(
+        patient=patient,
+        defaults={"clinician": clinician, "plan": plan, "preferences": prefs},
+    )
+    return patient, plan, None
+
+
+def revise_plan_draft(clinician, name_query, instruction):
+    """Regenerate the staged draft with a revision instruction. Returns
+    (patient, plan, error)."""
+    from api.core.models import SlackPlanDraft
+    from api.core.wellness_agent import generate_wellness_plan
+
+    patient = find_patient_by_name(name_query, clinician=clinician)
+    if not patient:
+        return None, None, f"No patient matching '{name_query}' in your roster."
+
+    draft = SlackPlanDraft.objects.filter(patient=patient).first()
+    if not draft:
+        return patient, None, f"No draft for {patient.user.first_name} — start with `build a plan for {patient.user.first_name}`."
+
+    try:
+        plan = generate_wellness_plan(
+            patient.user, draft.preferences,
+            previous_plan=draft.plan, revision=instruction,
+        )
+    except Exception:
+        logger.exception("Slack plan revision failed for patient %s", patient.id)
+        return patient, None, "The AI planner is unavailable right now — the draft is unchanged."
+
+    draft.plan = plan
+    draft.save(update_fields=["plan", "updated_at"])
+    return patient, plan, None
+
+
+def accept_plan_draft(clinician, name_query):
+    """Turn the staged draft into active Prescriptions and clear it. Returns
+    (patient, created_count, error)."""
+    from api.catalogue.models import Exercise, Prescription
+    from api.core.models import SlackPlanDraft
+
+    patient = find_patient_by_name(name_query, clinician=clinician)
+    if not patient:
+        return None, 0, f"No patient matching '{name_query}' in your roster."
+
+    draft = SlackPlanDraft.objects.filter(patient=patient).first()
+    if not draft:
+        return patient, 0, f"No draft for {patient.user.first_name} — build one first with `build a plan for {patient.user.first_name}`."
+
+    ids = _unique_exercise_ids(draft.plan)
+    exercises = {e.id: e for e in Exercise.objects.filter(id__in=ids, is_active=True)}
+    days_per_week = str(draft.preferences.get("days_per_week", 3))
+
+    created = 0
+    for eid in ids:
+        ex = exercises.get(eid)
+        if not ex:
+            continue
+        Prescription.objects.filter(
+            patient=patient, exercise=ex, is_active=True,
+        ).update(is_active=False)
+        Prescription.objects.create(
+            patient=patient, clinician=clinician, exercise=ex,
+            sets=ex.default_sets, reps=ex.default_reps,
+            hold_seconds=ex.default_hold_seconds,
+            days_per_week=days_per_week,
+            valid_from=timezone.localdate(), is_active=True,
+            notes="Drafted via Physio Assistant (AI).",
+        )
+        created += 1
+
+    draft.delete()
+    return patient, created, None
+
+
+def build_plan_draft_blocks(patient, plan):
+    """Render a staged draft: exercises with default dose + accept/revise hints."""
+    from api.catalogue.models import Exercise
+
+    name = _patient_name(patient)
+    ids = _unique_exercise_ids(plan)
+    ex_map = {e.id: e for e in Exercise.objects.filter(id__in=ids)}
+    dpw = plan.get("constraints", {}).get("days_per_week", 3)
+
+    lines = [f":clipboard: *Draft programme — {name}*"]
+    if plan.get("summary"):
+        lines.append(f"_{plan['summary']}_")
+    lines.append("")
+    for eid in ids:
+        ex = ex_map.get(eid)
+        if ex:
+            lines.append(f"  • *{ex.name}* — {ex.default_sets}×{ex.default_reps}, {dpw}×/wk")
+        else:
+            lines.append(f"  • {eid} — _not in your exercise library, will be skipped_")
+    first = patient.user.first_name
+    lines.append(
+        f"\n_Reply_ `revise {first} [change]` _or_ `accept plan for {first}`"
+    )
+    return _section("\n".join(lines))
+
+
 # ── Draft a patient-facing message (draft-only for now) ───────
 
 def generate_patient_message(patient):

@@ -304,6 +304,34 @@ class SlackLinkCode(TimestampedModel):
         return f"SlackLinkCode for {self.clinician.user} (used={bool(self.used_at)})"
 
 
+class SlackPlanDraft(TimestampedModel):
+    """
+    An AI-drafted exercise programme staged by a clinician in Slack, held between
+    `build`/`revise` and `accept`. One live draft per patient; accepting it turns
+    the plan's exercises into active Prescriptions and clears the draft.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    patient = models.OneToOneField(
+        PatientProfile,
+        on_delete=models.CASCADE,
+        related_name="slack_plan_draft",
+    )
+    clinician = models.ForeignKey(
+        ClinicianProfile,
+        on_delete=models.CASCADE,
+        related_name="slack_plan_drafts",
+    )
+    plan = models.JSONField()
+    preferences = models.JSONField()
+
+    class Meta:
+        db_table = "core_slackplandraft"
+        ordering = ["-updated_at"]
+
+    def __str__(self) -> str:
+        return f"SlackPlanDraft for {self.patient.user} by {self.clinician.user}"
+
+
 class CareInvitation(TimestampedModel):
     """
     One-time pairing token created by a platform clinician.

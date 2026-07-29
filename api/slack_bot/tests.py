@@ -231,6 +231,86 @@ class CommandScopingTests(TestCase):
         self.assertIn("No active exercise", error)
 
 
+class PlanBuilderTests(TestCase):
+    """The AI programme builder's accept/mapping logic (no live Gemini call)."""
+
+    def setUp(self):
+        from api.catalogue.models import Exercise
+        from api.core.models import (
+            ClinicianProfile, PatientProfile, User, UserRole,
+        )
+
+        cu = User.objects.create_user(
+            username="pb-dr@c.com", email="pb-dr@c.com", password="pw",
+            role=UserRole.CLINICIAN, first_name="Pat", last_name="Doc",
+        )
+        self.clinician = ClinicianProfile.objects.create(user=cu, license_number="L")
+        pu = User.objects.create_user(
+            username="pb-pat@c.com", email="pb-pat@c.com", password="pw",
+            role=UserRole.PATIENT, first_name="Sarah", last_name="Payne",
+        )
+        self.patient = PatientProfile.objects.create(
+            user=pu, primary_clinician=self.clinician,
+        )
+        for slug, name in (("half-squats", "Half Squats"), ("calf-raises", "Calf Raises")):
+            Exercise.objects.create(
+                id=slug, name=name, category="strengthening",
+                rep_rule="a → b → a", is_active=True,
+                default_sets=3, default_reps=10,
+                tracked_angles_config={}, phases_config=[], cues_config={},
+            )
+
+    def _stage_draft(self):
+        from api.core.models import SlackPlanDraft
+        return SlackPlanDraft.objects.create(
+            patient=self.patient, clinician=self.clinician,
+            plan={
+                "summary": "A gradual knee plan.",
+                "days": [
+                    {"exercise_ids": ["half-squats"]},
+                    {"exercise_ids": ["calf-raises"]},
+                ],
+                "constraints": {"days_per_week": 3},
+            },
+            preferences={"days_per_week": 3},
+        )
+
+    def test_accept_creates_prescriptions_and_clears_draft(self):
+        from api.catalogue.models import Prescription
+        from api.core.models import SlackPlanDraft
+        from .services import accept_plan_draft
+        self._stage_draft()
+        patient, created, error = accept_plan_draft(self.clinician, "sarah")
+        self.assertIsNone(error)
+        self.assertEqual(created, 2)
+        rx = Prescription.objects.filter(patient=self.patient, is_active=True)
+        self.assertEqual(rx.count(), 2)
+        self.assertEqual(rx.first().sets, 3)
+        self.assertFalse(SlackPlanDraft.objects.filter(patient=self.patient).exists())
+
+    def test_accept_without_draft_errors(self):
+        from .services import accept_plan_draft
+        patient, created, error = accept_plan_draft(self.clinician, "sarah")
+        self.assertEqual(created, 0)
+        self.assertIn("No draft", error)
+
+    def test_draft_blocks_render_exercise_names(self):
+        from .services import build_plan_draft_blocks
+        draft = self._stage_draft()
+        text = build_plan_draft_blocks(self.patient, draft.plan)[0]["text"]["text"]
+        self.assertIn("Half Squats", text)
+        self.assertIn("Calf Raises", text)
+
+    @override_settings(GEMINI_API_KEY="")
+    def test_build_without_gemini_fails_gracefully(self):
+        from api.core.models import SlackPlanDraft
+        from .services import build_plan_draft
+        patient, plan, error = build_plan_draft(self.clinician, "sarah")
+        self.assertIsNone(plan)
+        self.assertIn("unavailable", error)
+        self.assertFalse(SlackPlanDraft.objects.filter(patient=self.patient).exists())
+
+
 class OptionalSlackIntegrationTests(TestCase):
     @override_settings(
         SLACK_BOT_TOKEN='',

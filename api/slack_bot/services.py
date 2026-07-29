@@ -366,6 +366,17 @@ def find_patient_by_name(name_query, clinician=None):
     return qs.filter(name_filter).first()
 
 
+def roster_names(clinician):
+    """Full names of the clinician's patients, for the 'pick a patient' hint."""
+    from api.core.models import PatientProfile
+
+    return [
+        _patient_name(p)
+        for p in PatientProfile.objects.filter(primary_clinician=clinician)
+        .select_related("user")
+    ]
+
+
 def find_clinician_by_slack_user(slack_user_id):
     """Resolve the linked clinician for a Slack user id (set via the link flow)."""
     from api.core.models import ClinicianProfile

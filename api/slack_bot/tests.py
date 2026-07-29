@@ -187,6 +187,17 @@ class CommandScopingTests(TestCase):
         self.esc.refresh_from_db()
         self.assertEqual(self.esc.status, "open")
 
+    def test_roster_names_lists_clinician_patients(self):
+        from .services import roster_names
+        self.assertEqual(roster_names(self.clinician), ["Sarah Payne"])
+
+    def test_ask_patient_lists_roster_with_example(self):
+        from .views import _ask_patient
+        captured = []
+        _ask_patient(lambda text=None, **kw: captured.append(text), self.clinician, "confirm")
+        self.assertIn("Sarah Payne", captured[0])
+        self.assertIn("confirm Sarah", captured[0])
+
     def test_confirm_consultation_flips_status(self):
         from api.consultations.models import Consultation, ConsultationStatus
         from .services import confirm_consultation

@@ -21,6 +21,23 @@ def _arg_after(text, keyword):
     return m.group(1).strip() if m else None
 
 
+def _ask_patient(say, clinician, verb):
+    """Prompt for a patient, listing the clinician's roster so they can pick one."""
+    from .services import roster_names
+
+    names = roster_names(clinician)
+    if not names:
+        say("You have no linked patients yet."); return
+    shown = names[:25]
+    listing = "\n".join(f"  • {n}" for n in shown)
+    more = f"\n_…and {len(names) - len(shown)} more_" if len(names) > len(shown) else ""
+    example = shown[0].split()[0]
+    say(
+        f"Which patient? Your patients:\n{listing}{more}\n"
+        f"e.g. `@Physio Assistant {verb} {example}`"
+    )
+
+
 if settings.SLACK_BOT_TOKEN and settings.SLACK_SIGNING_SECRET:
     try:
         from slack_bolt import App
@@ -86,7 +103,7 @@ if settings.SLACK_BOT_TOKEN and settings.SLACK_SIGNING_SECRET:
                 from .services import resolve_patient_escalations
                 name = _arg_after(text, "resolve")
                 if not name:
-                    say("Which patient? e.g. `@Physio Assistant resolve Sarah`"); return
+                    _ask_patient(say, clinician, "resolve"); return
                 patient, count, error = resolve_patient_escalations(clinician, name)
                 if error:
                     say(error)
@@ -115,7 +132,11 @@ if settings.SLACK_BOT_TOKEN and settings.SLACK_SIGNING_SECRET:
                 if keyword in text:
                     name = _arg_after(text, keyword)
                     if not name:
-                        say(f"Which patient? e.g. `@Physio Assistant {keyword} Sarah`"); return
+                        if clinician:
+                            _ask_patient(say, clinician, keyword)
+                        else:
+                            say(f"Which patient? e.g. `@Physio Assistant {keyword} Sarah`")
+                        return
                     from . import services
                     patient = services.find_patient_by_name(name, clinician=clinician)
                     if not patient:
@@ -131,7 +152,7 @@ if settings.SLACK_BOT_TOKEN and settings.SLACK_SIGNING_SECRET:
                 from .services import send_patient_message
                 name = _arg_after(text, "message")
                 if not name:
-                    say("Which patient? e.g. `@Physio Assistant send message to Sarah`"); return
+                    _ask_patient(say, clinician, "send message to"); return
                 patient, body, error = send_patient_message(clinician, name)
                 if error:
                     say(error)
@@ -145,7 +166,7 @@ if settings.SLACK_BOT_TOKEN and settings.SLACK_SIGNING_SECRET:
                 from .services import confirm_consultation
                 name = _arg_after(text, "confirm")
                 if not name:
-                    say("Which patient? e.g. `@Physio Assistant confirm Sarah`"); return
+                    _ask_patient(say, clinician, "confirm"); return
                 consult, error = confirm_consultation(clinician, name)
                 if error:
                     say(error)
@@ -188,7 +209,7 @@ if settings.SLACK_BOT_TOKEN and settings.SLACK_SIGNING_SECRET:
                 from .services import accept_plan_draft
                 name = _arg_after(text, "plan")
                 if not name:
-                    say("Which patient? e.g. `@Physio Assistant accept plan for Sarah`"); return
+                    _ask_patient(say, clinician, "accept plan for"); return
                 patient, created, error = accept_plan_draft(clinician, name)
                 if error:
                     say(error)
@@ -207,7 +228,7 @@ if settings.SLACK_BOT_TOKEN and settings.SLACK_SIGNING_SECRET:
                 from .services import build_plan_draft, build_plan_draft_blocks
                 name = _arg_after(text, "plan")
                 if not name:
-                    say("Which patient? e.g. `@Physio Assistant build a plan for Sarah`"); return
+                    _ask_patient(say, clinician, "build a plan for"); return
                 # Optional knobs: "3 days", "with a band" / "no equipment".
                 days_match = re.search(r'([234])\s*days?', text)
                 days = int(days_match.group(1)) if days_match else 3

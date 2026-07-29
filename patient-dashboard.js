@@ -33,6 +33,7 @@ const planStatus = document.getElementById("patientPlanStatus");
 const planIntro = document.getElementById("patientPlanIntro");
 const planList = document.getElementById("patientPlanList");
 const planStart = document.getElementById("patientPlanStart");
+const planChange = document.getElementById("patientPlanChange");
 const primaryStart = document.getElementById("patientStartPrimary");
 const demoNotice = document.getElementById("patientDemoNotice");
 const dashboardSide = document.getElementById("patientDashboardSide");
@@ -447,11 +448,13 @@ function renderWellnessPlan(profile) {
     }));
   });
   planStart.innerHTML = 'Start wellness exercises <span aria-hidden="true">→</span>';
+  if (planChange) planChange.hidden = false;
   primaryStart.innerHTML = 'Start today’s exercises <span aria-hidden="true">→</span>';
 }
 
 function renderPlan(user, prescriptions) {
   planList.innerHTML = "";
+  if (planChange) planChange.hidden = true;
   const profile = user.profile ?? {};
   const carePath = profile.care_path ?? profile.carePath;
   const pathwayChoice =
@@ -827,6 +830,8 @@ async function finishPathwaySetup(profile, user = currentUser) {
 }
 
 function browserProfileFromApi(profile) {
+  const wellnessPlan = profile.wellness_plan ?? null;
+  const planConstraints = wellnessPlan?.constraints ?? {};
   return {
     ...(currentUser?.profile ?? {}),
     carePath: profile.care_path,
@@ -842,8 +847,17 @@ function browserProfileFromApi(profile) {
       ...(currentUser?.profile?.wellnessScreening ?? {}),
       status: profile.wellness_screening_status,
     },
-    wellnessPlan: profile.wellness_plan ?? null,
+    wellnessPlan,
     wellnessPlanAcceptedAt: profile.wellness_plan_accepted_at ?? null,
+    daysPerWeek:
+      planConstraints.days_per_week
+      ?? planConstraints.daysPerWeek,
+    minutesPerSession:
+      planConstraints.requested_minutes_per_session
+      ?? planConstraints.requestedMinutesPerSession
+      ?? planConstraints.minutes_per_session
+      ?? planConstraints.minutesPerSession,
+    equipment: planConstraints.equipment,
     hasRelevantHistory: Boolean(profile.medical_history),
     medicalHistory: profile.medical_history ?? "",
   };

@@ -161,14 +161,16 @@ const ACTIVITY_API_VALUES = Object.freeze({
     body.classList.add("modal-open");
 
     if (id === "plan-modal") {
+      const savedProfile = loadProfile();
       if (hasSavedProfile()) {
-        const savedProfile = loadProfile();
         fillFormFromProfile(planForm, savedProfile);
         fillWellnessScreening(planForm, savedProfile.wellnessScreening);
       }
       syncCustomGoalField(planForm, planCustomGoalField, planCustomGoalInput);
       syncPlannerMedicalHistoryField();
-      activeWellnessPlan = null;
+      // A replacement draft may use the accepted plan as context. Merely
+      // opening or closing the planner never removes the current plan.
+      activeWellnessPlan = savedProfile.wellnessPlan ?? null;
       activePlanPreferences = null;
       activePlanDraftToken = null;
       if (plannerRequestStatus) plannerRequestStatus.textContent = "";
@@ -571,6 +573,10 @@ const ACTIVITY_API_VALUES = Object.freeze({
           pathwayChoice: profile.pathway_choice,
           wellnessPlan: profile.wellness_plan,
           wellnessPlanAcceptedAt: profile.wellness_plan_accepted_at,
+          daysPerWeek: activePlanPreferences.days_per_week,
+          minutesPerSession: activePlanPreferences.minutes_per_session,
+          equipment: activePlanPreferences.equipment,
+          planningNotes: activePlanPreferences.planning_notes,
           hasRelevantHistory: Boolean(profile.medical_history),
           medicalHistory: profile.medical_history ?? "",
         }, {

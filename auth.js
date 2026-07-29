@@ -538,6 +538,8 @@ async function seedProfileFromApi() {
       walking_aid: "Use a walking aid",
       needs_person: "Need another person nearby",
     };
+    const wellnessPlan = p.wellness_plan ?? null;
+    const planConstraints = wellnessPlan?.constraints ?? {};
     const mapped = {
       name:      `${me.first_name} ${me.last_name}`.trim(),
       goal:      goalLabels[p.goal]             ?? p.goal ?? "",
@@ -548,6 +550,15 @@ async function seedProfileFromApi() {
       cueStyle:  p.cue_style        ?? "gentle",
       carePath:  p.care_path        ?? "wellness",
       pathwayChoice: p.pathway_choice ?? "unselected",
+      wellnessPlan,
+      wellnessPlanAcceptedAt: p.wellness_plan_accepted_at ?? null,
+      daysPerWeek: planConstraints.days_per_week,
+      minutesPerSession:
+        planConstraints.requested_minutes_per_session
+        ?? planConstraints.minutes_per_session,
+      equipment: planConstraints.equipment,
+      hasRelevantHistory: Boolean(p.medical_history),
+      medicalHistory: p.medical_history ?? "",
       wellnessScreening: {
         version: 1,
         status: p.wellness_screening_status ?? "pending",

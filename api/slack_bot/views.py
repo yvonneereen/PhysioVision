@@ -216,13 +216,13 @@ if settings.SLACK_BOT_TOKEN and settings.SLACK_SIGNING_SECRET:
                     else "none" if "no equipment" in text or "no kit" in text
                     else "chair"
                 )
-                patient, plan, error = build_plan_draft(
+                patient, draft, error = build_plan_draft(
                     clinician, name, days_per_week=days, equipment=equipment,
                 )
                 if error:
                     say(error)
                 else:
-                    say(blocks=build_plan_draft_blocks(patient, plan))
+                    say(blocks=build_plan_draft_blocks(draft))
                 return
 
             if "revise" in text:
@@ -235,13 +235,13 @@ if settings.SLACK_BOT_TOKEN and settings.SLACK_SIGNING_SECRET:
                 )
                 if not m:
                     say("Format: `@Physio Assistant revise [name] [what to change]`"); return
-                patient, plan, error = revise_plan_draft(
+                patient, draft, error = revise_plan_draft(
                     clinician, m.group(1).strip(), m.group(2).strip()
                 )
                 if error:
                     say(error)
                 else:
-                    say(blocks=build_plan_draft_blocks(patient, plan))
+                    say(blocks=build_plan_draft_blocks(draft))
                 return
 
             name_match = re.search(

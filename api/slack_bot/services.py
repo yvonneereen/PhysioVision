@@ -600,8 +600,104 @@ def assign_exercise(clinician, exercise_query, name_query):
 
 # ── Conversational AI programme builder ───────────────────────
 
-def _plan_preferences(patient, *, days_per_week=3, equipment="chair"):
-    """Seed the wellness agent from the patient's existing profile + a few knobs."""
+HIGH_PAIN = 7  # peak pain at/above this pulls the dose down and warns the planner
+
+
+def _patient_age(patient):
+    dob = getattr(patient.user, "date_of_birth", None)
+    if not dob:
+        return None
+    today = timezone.localdate()
+    return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+
+
+def _clinical_context(patient):
+    """Snapshot of how the patient is actually doing — feeds the planner prompt
+    and the dose decision. Never raises; missing data just means fewer signals."""
+    from api.core.analytics import adherence_pct, session_quality_trend
+    from api.sessions.models import Session
+
+    recent = list(Session.objects.filter(patient=patient).order_by("-started_at")[:5])
+    pains = [s.pain_level for s in recent if s.pain_level is not None]
+    latest_pain = patient.pain_checkins.order_by("-checked_at").first()
+    pain_loc = ""
+    if latest_pain and latest_pain.pain_level is not None:
+        pains.append(latest_pain.pain_level)
+        pain_loc = latest_pain.location_notes or ""
+    qualities = [s.quality_score for s in recent if s.quality_score is not None]
+
+    return {
+        "age": _patient_age(patient),
+        "max_pain": max(pains) if pains else None,
+        "pain_loc": pain_loc,
+        "avg_quality": round(sum(qualities) / len(qualities)) if qualities else None,
+        "trend": session_quality_trend(patient),
+        "symmetry": sum(s.symmetry_warnings_count for s in recent),
+        "adherence": adherence_pct(patient),
+        "open_flags": list(dict.fromkeys(
+            TRIGGER_LABELS.get(e.trigger_type, e.trigger_type)
+            for e in patient.escalations.filter(status="open")
+        )),
+        "current_rx": [
+            f"{p.exercise.name} {p.sets}×{p.reps}"
+            for p in patient.prescriptions.filter(is_active=True).select_related("exercise")
+        ],
+    }
+
+
+def _clinical_summary_line(ctx):
+    """Short human-readable 'what I looked at' line for the Slack draft."""
+    bits = []
+    if ctx["age"] is not None:
+        bits.append(f"age {ctx['age']}")
+    if ctx["max_pain"] is not None:
+        bits.append(f"peak pain {ctx['max_pain']}/10")
+    if ctx["avg_quality"] is not None:
+        bits.append(f"quality {ctx['avg_quality']}/100 ({ctx['trend']})")
+    if ctx["symmetry"]:
+        bits.append(f"{ctx['symmetry']} symmetry warnings")
+    if ctx["adherence"] is not None:
+        bits.append(f"adherence {ctx['adherence']}%")
+    if ctx["open_flags"]:
+        bits.append("flags: " + ", ".join(ctx["open_flags"]))
+    if ctx["current_rx"]:
+        bits.append("current: " + ", ".join(ctx["current_rx"]))
+    return "; ".join(bits) if bits else "no recent activity on record"
+
+
+def _clinical_notes_text(ctx):
+    """Directive planning notes injected into the agent prompt (user_notes)."""
+    notes = [f"Clinical context — {_clinical_summary_line(ctx)}."]
+    if ctx["max_pain"] is not None and ctx["max_pain"] >= HIGH_PAIN:
+        where = f" around {ctx['pain_loc']}" if ctx["pain_loc"] else ""
+        notes.append(
+            f"Pain is elevated{where}: avoid exercises that heavily load the painful "
+            "area, prefer gentle mobility/stretching, and keep intensity low."
+        )
+    if ctx["trend"] == "declining":
+        notes.append("Movement quality is declining: keep the plan simple and easy to perform well.")
+    if ctx["current_rx"]:
+        notes.append("Complement (do not exactly duplicate) the current programme where sensible.")
+    return " ".join(notes)
+
+
+def _suggested_dose(exercise, ctx):
+    """Adapt sets/reps to the clinical picture; conservative when pain is high or
+    quality is declining, otherwise the exercise's reviewed defaults."""
+    sets = exercise.default_sets or 3
+    reps = exercise.default_reps or 10
+    conservative = (
+        (ctx["max_pain"] is not None and ctx["max_pain"] >= HIGH_PAIN)
+        or ctx["trend"] == "declining"
+    )
+    if conservative:
+        sets = max(1, sets - 1)
+        reps = max(5, round(reps * 0.7))
+    return sets, reps
+
+
+def _plan_preferences(patient, ctx, *, days_per_week=3, equipment="chair"):
+    """Seed the wellness agent from the patient's profile, knobs, and clinical context."""
     return {
         "goal": patient.goal or "stay_active",
         "custom_goal": patient.custom_goal or "",
@@ -610,10 +706,11 @@ def _plan_preferences(patient, *, days_per_week=3, equipment="chair"):
         "cue_style": patient.cue_style or "",
         "height_cm": patient.height_cm,
         "weight_kg": patient.weight_kg,
+        "age": ctx["age"],
         "days_per_week": days_per_week,
         "minutes_per_session": 10,
         "equipment": equipment,
-        "planning_notes": "",
+        "planning_notes": _clinical_notes_text(ctx),
     }
 
 
@@ -626,33 +723,58 @@ def _unique_exercise_ids(plan):
     return ids
 
 
-def build_plan_draft(clinician, name_query, *, days_per_week=3, equipment="chair"):
-    """Generate an AI programme draft from the patient's profile and stage it.
-    Returns (patient, plan, error)."""
+def _dose_map(plan, ctx):
+    """Per-exercise {sets, reps} for the plan's exercises, given the clinical context."""
+    from api.catalogue.models import Exercise
+
+    ids = _unique_exercise_ids(plan)
+    ex_map = {e.id: e for e in Exercise.objects.filter(id__in=ids)}
+    dose = {}
+    for eid in ids:
+        ex = ex_map.get(eid)
+        if ex:
+            sets, reps = _suggested_dose(ex, ctx)
+            dose[eid] = {"sets": sets, "reps": reps}
+    return dose
+
+
+def _stage_draft(patient, clinician, plan, prefs, ctx):
     from api.core.models import SlackPlanDraft
+
+    prefs = dict(prefs)
+    prefs["dose"] = _dose_map(plan, ctx)
+    prefs["clinical_summary"] = _clinical_summary_line(ctx)
+    draft, _ = SlackPlanDraft.objects.update_or_create(
+        patient=patient,
+        defaults={"clinician": clinician, "plan": plan, "preferences": prefs},
+    )
+    return draft
+
+
+def build_plan_draft(clinician, name_query, *, days_per_week=3, equipment="chair"):
+    """Generate a clinically-informed AI programme draft and stage it.
+    Returns (patient, draft, error)."""
     from api.core.wellness_agent import generate_wellness_plan
 
     patient = find_patient_by_name(name_query, clinician=clinician)
     if not patient:
         return None, None, f"No patient matching '{name_query}' in your roster."
 
-    prefs = _plan_preferences(patient, days_per_week=days_per_week, equipment=equipment)
+    ctx = _clinical_context(patient)
+    prefs = _plan_preferences(patient, ctx, days_per_week=days_per_week, equipment=equipment)
     try:
         plan = generate_wellness_plan(patient.user, prefs)
     except Exception:
         logger.exception("Slack plan builder failed for patient %s", patient.id)
         return patient, None, "The AI planner is unavailable right now — no draft saved."
 
-    SlackPlanDraft.objects.update_or_create(
-        patient=patient,
-        defaults={"clinician": clinician, "plan": plan, "preferences": prefs},
-    )
-    return patient, plan, None
+    draft = _stage_draft(patient, clinician, plan, prefs, ctx)
+    return patient, draft, None
 
 
 def revise_plan_draft(clinician, name_query, instruction):
-    """Regenerate the staged draft with a revision instruction. Returns
-    (patient, plan, error)."""
+    """Regenerate the staged draft with a revision, refreshing clinical context.
+    Returns (patient, draft, error)."""
     from api.core.models import SlackPlanDraft
     from api.core.wellness_agent import generate_wellness_plan
 
@@ -664,23 +786,25 @@ def revise_plan_draft(clinician, name_query, instruction):
     if not draft:
         return patient, None, f"No draft for {patient.user.first_name} — start with `build a plan for {patient.user.first_name}`."
 
+    ctx = _clinical_context(patient)
+    prefs = dict(draft.preferences)
+    prefs["planning_notes"] = _clinical_notes_text(ctx)
+    prefs["age"] = ctx["age"]
     try:
         plan = generate_wellness_plan(
-            patient.user, draft.preferences,
-            previous_plan=draft.plan, revision=instruction,
+            patient.user, prefs, previous_plan=draft.plan, revision=instruction,
         )
     except Exception:
         logger.exception("Slack plan revision failed for patient %s", patient.id)
         return patient, None, "The AI planner is unavailable right now — the draft is unchanged."
 
-    draft.plan = plan
-    draft.save(update_fields=["plan", "updated_at"])
-    return patient, plan, None
+    draft = _stage_draft(patient, clinician, plan, prefs, ctx)
+    return patient, draft, None
 
 
 def accept_plan_draft(clinician, name_query):
-    """Turn the staged draft into active Prescriptions and clear it. Returns
-    (patient, created_count, error)."""
+    """Turn the staged draft into active Prescriptions (clinically-adapted dose)
+    and clear it. Returns (patient, created_count, error)."""
     from api.catalogue.models import Exercise, Prescription
     from api.core.models import SlackPlanDraft
 
@@ -694,6 +818,7 @@ def accept_plan_draft(clinician, name_query):
 
     ids = _unique_exercise_ids(draft.plan)
     exercises = {e.id: e for e in Exercise.objects.filter(id__in=ids, is_active=True)}
+    dose = draft.preferences.get("dose", {})
     days_per_week = str(draft.preferences.get("days_per_week", 3))
 
     created = 0
@@ -701,12 +826,13 @@ def accept_plan_draft(clinician, name_query):
         ex = exercises.get(eid)
         if not ex:
             continue
+        d = dose.get(eid, {})
         Prescription.objects.filter(
             patient=patient, exercise=ex, is_active=True,
         ).update(is_active=False)
         Prescription.objects.create(
             patient=patient, clinician=clinician, exercise=ex,
-            sets=ex.default_sets, reps=ex.default_reps,
+            sets=d.get("sets", ex.default_sets), reps=d.get("reps", ex.default_reps),
             hold_seconds=ex.default_hold_seconds,
             days_per_week=days_per_week,
             valid_from=timezone.localdate(), is_active=True,
@@ -718,23 +844,31 @@ def accept_plan_draft(clinician, name_query):
     return patient, created, None
 
 
-def build_plan_draft_blocks(patient, plan):
-    """Render a staged draft: exercises with default dose + accept/revise hints."""
+def build_plan_draft_blocks(draft):
+    """Render a staged draft: what informed it + exercises with adapted dose."""
     from api.catalogue.models import Exercise
 
+    patient = draft.patient
+    plan = draft.plan
+    dose = draft.preferences.get("dose", {})
     name = _patient_name(patient)
     ids = _unique_exercise_ids(plan)
     ex_map = {e.id: e for e in Exercise.objects.filter(id__in=ids)}
     dpw = plan.get("constraints", {}).get("days_per_week", 3)
 
     lines = [f":clipboard: *Draft programme — {name}*"]
+    if draft.preferences.get("clinical_summary"):
+        lines.append(f":microscope: _Considered: {draft.preferences['clinical_summary']}_")
     if plan.get("summary"):
         lines.append(f"_{plan['summary']}_")
     lines.append("")
     for eid in ids:
         ex = ex_map.get(eid)
         if ex:
-            lines.append(f"  • *{ex.name}* — {ex.default_sets}×{ex.default_reps}, {dpw}×/wk")
+            d = dose.get(eid, {})
+            sets = d.get("sets", ex.default_sets)
+            reps = d.get("reps", ex.default_reps)
+            lines.append(f"  • *{ex.name}* — {sets}×{reps}, {dpw}×/wk")
         else:
             lines.append(f"  • {eid} — _not in your exercise library, will be skipped_")
     first = patient.user.first_name

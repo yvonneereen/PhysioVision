@@ -297,16 +297,60 @@ class PlanBuilderTests(TestCase):
     def test_draft_blocks_render_exercise_names(self):
         from .services import build_plan_draft_blocks
         draft = self._stage_draft()
-        text = build_plan_draft_blocks(self.patient, draft.plan)[0]["text"]["text"]
+        text = build_plan_draft_blocks(draft)[0]["text"]["text"]
         self.assertIn("Half Squats", text)
         self.assertIn("Calf Raises", text)
+
+    def test_draft_blocks_show_considered_context_and_dose(self):
+        from api.core.models import SlackPlanDraft
+        from .services import build_plan_draft_blocks
+        draft = SlackPlanDraft.objects.create(
+            patient=self.patient, clinician=self.clinician,
+            plan={"days": [{"exercise_ids": ["half-squats"]}],
+                  "constraints": {"days_per_week": 3}},
+            preferences={
+                "days_per_week": 3,
+                "clinical_summary": "peak pain 8/10; adherence 40%",
+                "dose": {"half-squats": {"sets": 2, "reps": 7}},
+            },
+        )
+        text = build_plan_draft_blocks(draft)[0]["text"]["text"]
+        self.assertIn("Considered", text)
+        self.assertIn("peak pain 8/10", text)
+        self.assertIn("2×7", text)  # adapted, not the 3×10 default
+
+    def test_suggested_dose_is_conservative_under_high_pain(self):
+        from api.catalogue.models import Exercise
+        from .services import _suggested_dose
+        ex = Exercise.objects.get(id="half-squats")
+        normal = _suggested_dose(ex, {"max_pain": 2, "trend": "stable"})
+        painful = _suggested_dose(ex, {"max_pain": 8, "trend": "stable"})
+        declining = _suggested_dose(ex, {"max_pain": None, "trend": "declining"})
+        self.assertEqual(normal, (3, 10))
+        self.assertEqual(painful, (2, 7))
+        self.assertEqual(declining, (2, 7))
+
+    def test_accept_uses_adapted_dose_from_draft(self):
+        from api.catalogue.models import Prescription
+        from api.core.models import SlackPlanDraft
+        from .services import accept_plan_draft
+        SlackPlanDraft.objects.create(
+            patient=self.patient, clinician=self.clinician,
+            plan={"days": [{"exercise_ids": ["half-squats"]}],
+                  "constraints": {"days_per_week": 3}},
+            preferences={"days_per_week": 3,
+                         "dose": {"half-squats": {"sets": 1, "reps": 6}}},
+        )
+        accept_plan_draft(self.clinician, "sarah")
+        rx = Prescription.objects.get(patient=self.patient, is_active=True)
+        self.assertEqual((rx.sets, rx.reps), (1, 6))
 
     @override_settings(GEMINI_API_KEY="")
     def test_build_without_gemini_fails_gracefully(self):
         from api.core.models import SlackPlanDraft
         from .services import build_plan_draft
-        patient, plan, error = build_plan_draft(self.clinician, "sarah")
-        self.assertIsNone(plan)
+        patient, draft, error = build_plan_draft(self.clinician, "sarah")
+        self.assertIsNone(draft)
         self.assertIn("unavailable", error)
         self.assertFalse(SlackPlanDraft.objects.filter(patient=self.patient).exists())
 

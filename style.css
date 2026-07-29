@@ -2332,12 +2332,23 @@ textarea:focus-visible {
 }
 
 /* ── Draft exercise library ─────────────────────────────────────────── */
+.exercise-library-section {
+  scroll-margin-top: 74px;
+  padding: clamp(52px, 7vw, 96px) clamp(20px, 5vw, 76px);
+  color: var(--white);
+  background: var(--ink);
+}
+
 .exercise-library {
   margin-top: 32px;
   padding: clamp(24px, 4vw, 52px);
   border: 1px solid rgba(255, 255, 255, 0.17);
   border-radius: 24px;
   background: var(--ink-deep);
+}
+
+.exercise-library-section .exercise-library {
+  margin-top: 0;
 }
 
 .exercise-library-heading {
@@ -3767,7 +3778,8 @@ details.metrics summary {
   outline: none;
 }
 
-.patient-app-active .desktop-nav {
+.patient-app-active .desktop-nav,
+.patient-practice-active .desktop-nav {
   display: none;
 }
 
@@ -3840,12 +3852,27 @@ details.metrics summary {
   background: rgba(255, 255, 255, 0.12);
 }
 
-.patient-app-active .mobile-nav > a {
+.patient-app-active .mobile-nav > a,
+.patient-practice-active .mobile-nav > a {
   display: none;
 }
 
 .patient-practice-active #main-content > section:not(#practice) {
   display: none;
+}
+
+.patient-practice-active .site-header,
+.patient-practice-active .site-header.is-scrolled {
+  position: sticky;
+  top: 0;
+  min-height: 88px;
+  color: var(--white);
+  background: var(--ink);
+  border-bottom-color: rgba(255, 255, 255, 0.22);
+  box-shadow: 0 8px 24px rgba(17, 44, 46, 0.12);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  animation: none;
 }
 
 .patient-practice-active #practice {

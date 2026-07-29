@@ -69,6 +69,15 @@ let pendingPasswordResetToken = "";
 let loginRequestInProgress = false;
 let logoutRequestInProgress = false;
 
+function publishAuthState(role, user = null) {
+  const detail = { role, user };
+  window.physioVisionAuthState = detail;
+  window.dispatchEvent(new CustomEvent(
+    "physiovision:auth-role",
+    { detail },
+  ));
+}
+
 const authForms = [
   loginForm,
   registerForm,
@@ -506,10 +515,7 @@ async function seedPrescriptionsFromApi() {
 // Pull the profile from the private API into this tab's short-lived cache.
 async function seedProfileFromApi() {
   const me = await getMe();
-  window.dispatchEvent(new CustomEvent(
-    "physiovision:auth-role",
-    { detail: { role: me.role, user: me } }
-  ));
+  publishAuthState(me.role, me);
   if (me.role === "patient" && me.profile) {
     const p = me.profile;
     const goalLabels = {
@@ -583,6 +589,7 @@ async function completeAuthentication() {
   } catch (err) {
     await logout();
     clearUserCachedData();
+    publishAuthState(null);
     throw err;
   }
 }
@@ -596,6 +603,7 @@ if (isLoggedIn()) {
     .catch(() => updateAuthButtons(false));
 } else {
   clearUserCachedData();
+  publishAuthState(null);
 }
 
 async function performLogout() {
@@ -605,10 +613,7 @@ async function performLogout() {
   const revokeToken = logout();
   clearUserCachedData();
   updateAuthButtons(false);
-  window.dispatchEvent(new CustomEvent(
-    "physiovision:auth-role",
-    { detail: { role: null, user: null } }
-  ));
+  publishAuthState(null);
   hideModal();
   window.scrollTo({ top: 0, behavior: "smooth" });
 

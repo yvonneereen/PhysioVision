@@ -185,9 +185,15 @@ let poseLandmarker = null;
 let handLandmarker = null;
 let sessionStartedAt = null;
 let activePrescriptions = loadActivePrescriptions();
-let authenticatedRole = null;
-let authenticatedPatientProfile = null;
-let prescriptionsLoaded = false;
+const initialAuthState = window.physioVisionAuthState ?? null;
+let authenticatedRole = initialAuthState?.role ?? null;
+let authenticatedPatientProfile =
+  authenticatedRole === "patient"
+    ? initialAuthState?.user?.profile ?? null
+    : null;
+let prescriptionsLoaded =
+  authenticatedRole !== "patient" ||
+  window.sessionStorage.getItem("physiovision.prescriptions.v1") !== null;
 let practiceDecision = resolvePracticeAccess({
   loggedIn: isLoggedIn(),
 });
@@ -627,7 +633,9 @@ window.addEventListener("physiovision:auth-role", (event) => {
     authenticatedRole === "patient"
       ? event.detail?.user?.profile ?? null
       : null;
-  prescriptionsLoaded = authenticatedRole !== "patient";
+  prescriptionsLoaded =
+    authenticatedRole !== "patient" ||
+    window.sessionStorage.getItem("physiovision.prescriptions.v1") !== null;
   syncPracticeAccess();
 });
 

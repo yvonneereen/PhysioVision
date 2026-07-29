@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=49" />
+  <link rel="stylesheet" href="style.css?v=51" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -31,6 +31,7 @@
     <nav class="desktop-nav" aria-label="Main navigation">
       <a href="#how-it-works">How it works</a>
       <a href="#practice">Exercise guide</a>
+      <a href="#library">Library</a>
       <a href="#care-team">For care teams</a>
       <a href="#safety">Safety</a>
     </nav>
@@ -93,6 +94,7 @@
   <nav class="mobile-nav" id="mobile-nav" aria-label="Mobile navigation">
     <a href="#how-it-works">How it works</a>
     <a href="#practice">Exercise guide</a>
+    <a href="#library">Library</a>
     <a href="#care-team">For care teams</a>
     <a href="#safety">Safety</a>
     <button
@@ -1063,7 +1065,14 @@
         </aside>
       </div>
       <div class="pose-strip" id="poseStrip" aria-label="Exercise phase guide" style="display:none"></div>
+      </div>
+    </section>
 
+    <section
+      class="exercise-library-section"
+      id="library"
+      aria-labelledby="exerciseLibraryTitle"
+    >
       <div class="exercise-library" aria-labelledby="exerciseLibraryTitle">
         <div class="exercise-library-heading">
           <div>
@@ -1101,7 +1110,6 @@
 
         <p class="exercise-library-count" id="exerciseLibraryCount" aria-live="polite"></p>
         <div class="exercise-library-grid" id="exerciseLibraryGrid"></div>
-      </div>
       </div>
     </section>
 
@@ -2075,12 +2083,12 @@
   </div>
 
   <script src="runtime-config.js"></script>
-  <script type="module" src="auth.js?v=22"></script>
+  <script type="module" src="auth.js?v=23"></script>
   <script type="module" src="ui.js?v=17"></script>
-  <script type="module" src="patient-dashboard.js?v=9"></script>
+  <script type="module" src="patient-dashboard.js?v=10"></script>
   <script type="module" src="therapist.js?v=15"></script>
   <script type="module" src="exercise-library.js?v=15"></script>
-  <script type="module" src="main.js?v=46"></script>
+  <script type="module" src="main.js?v=47"></script>
   <script type="module" src="agent-chat.js?v=13"></script>
   <script type="module" src="care-workflow.js?v=13"></script>
 </body>

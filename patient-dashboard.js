@@ -641,6 +641,10 @@ async function loadDashboardData() {
     currentData.prescriptions = DEMO_CLINICIAN_PLAN.map((item) => ({ ...item }));
   }
 
+  window.sessionStorage.setItem(
+    "physiovision.prescriptions.v1",
+    JSON.stringify(currentData.prescriptions),
+  );
   window.dispatchEvent(new CustomEvent(
     "physiovision:prescriptions-updated",
     { detail: currentData.prescriptions },

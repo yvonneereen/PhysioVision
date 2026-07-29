@@ -1756,22 +1756,334 @@ textarea:focus-visible {
 }
 
 .camera-safety {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.9fr);
   align-items: center;
-  gap: 10px;
-  min-height: 62px;
-  padding: 0 24px;
+  gap: 16px;
+  min-height: 78px;
+  padding: 10px 24px;
   color: rgba(255, 255, 255, 0.5);
   background: #0a2224;
   font-size: 11px;
 }
 
-.camera-safety span {
+.camera-privacy-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.camera-privacy-note > span {
   color: var(--mint);
 }
 
-.camera-safety p {
+.camera-privacy-note p {
   margin: 0;
+}
+
+.fall-readiness {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 11px;
+  border: 1px solid rgba(185, 217, 200, 0.25);
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.fall-readiness-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: #173f3d;
+  background: var(--mint);
+  font-weight: 800;
+}
+
+.fall-readiness strong,
+.fall-readiness small {
+  display: block;
+}
+
+.fall-readiness strong {
+  color: var(--white);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.fall-readiness small {
+  margin-top: 2px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.fall-readiness[data-state="limited"] .fall-readiness-icon {
+  color: #6b4b09;
+  background: #f5d579;
+}
+
+.fall-readiness[data-state="unavailable"] .fall-readiness-icon {
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+body.fall-safety-open {
+  overflow: hidden;
+}
+
+.fall-safety-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 18, 20, 0.92);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.fall-safety-dialog {
+  width: min(820px, 100%);
+  max-height: calc(100vh - 48px);
+  padding: clamp(28px, 5vw, 58px);
+  overflow-y: auto;
+  border: 3px solid #f15a40;
+  border-radius: 24px;
+  color: var(--ink);
+  background: var(--paper);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.38);
+}
+
+.fall-safety-alert-icon {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  margin-bottom: 20px;
+  border-radius: 50%;
+  color: var(--white);
+  background: #d94732;
+  font-size: 34px;
+  font-weight: 800;
+}
+
+.fall-safety-eyebrow {
+  display: block;
+  margin-bottom: 12px;
+  color: #a73223;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.fall-safety-dialog h2 {
+  margin: 0 0 14px;
+  color: var(--ink);
+  font-size: clamp(44px, 7vw, 74px);
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+}
+
+.fall-safety-dialog > p {
+  max-width: 650px;
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(18px, 2.2vw, 23px);
+  line-height: 1.5;
+}
+
+.fall-safety-countdown {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 28px 0;
+  padding: 16px 20px;
+  border-radius: 14px;
+  color: #6e311f;
+  background: #fff0dd;
+}
+
+.fall-safety-countdown strong {
+  min-width: 58px;
+  font-size: 42px;
+  line-height: 1;
+}
+
+.fall-safety-countdown span {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.fall-safety-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.fall-safety-button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 3px 14px;
+  min-height: 116px;
+  padding: 20px;
+  border: 3px solid transparent;
+  border-radius: 18px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.fall-safety-button > span {
+  grid-row: 1 / 3;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.fall-safety-button strong {
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.fall-safety-button small {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.fall-safety-button.is-okay {
+  border-color: #2f8d61;
+  color: #123e2b;
+  background: #dff5e8;
+}
+
+.fall-safety-button.is-okay > span {
+  color: var(--white);
+  background: #2f8d61;
+}
+
+.fall-safety-button.is-help {
+  border-color: #c43d2a;
+  color: #6e2016;
+  background: #ffe1db;
+}
+
+.fall-safety-button.is-help > span {
+  color: var(--white);
+  background: #c43d2a;
+}
+
+.fall-safety-button:focus-visible,
+.fall-safety-voice:focus-visible,
+.fall-safety-finish:focus-visible {
+  outline: 4px solid #f2c14d;
+  outline-offset: 4px;
+}
+
+.fall-safety-voice,
+.fall-safety-finish {
+  min-height: 58px;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.fall-safety-voice {
+  margin-top: 18px;
+  padding: 14px 24px;
+  color: var(--white);
+  background: var(--deep-green);
+}
+
+.fall-safety-voice:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.fall-safety-voice-status {
+  min-height: 24px;
+  margin-top: 12px !important;
+  color: var(--ink) !important;
+  font-size: 14px !important;
+  font-weight: 700;
+}
+
+.fall-safety-prototype-note {
+  margin-top: 12px !important;
+  padding-top: 12px;
+  border-top: 1px solid #d9ddd8;
+  font-size: 13px !important;
+}
+
+.fall-safety-no-alert {
+  display: grid;
+  gap: 6px;
+  margin: 28px 0;
+  padding: 20px;
+  border-left: 5px solid #c43d2a;
+  border-radius: 8px;
+  color: #6e2016;
+  background: #ffe1db;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.fall-safety-finish {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 28px;
+  padding: 16px 24px;
+  color: var(--white);
+  background: var(--deep-green);
+}
+
+.fall-safety-result-safe .fall-safety-alert-icon {
+  background: #2f8d61;
+}
+
+@media (max-width: 760px) {
+  .camera-safety {
+    grid-template-columns: 1fr;
+    padding: 14px 18px;
+  }
+
+  .fall-safety-overlay {
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .fall-safety-dialog {
+    width: 100%;
+    min-height: 100%;
+    max-height: 100vh;
+    padding: 30px 22px;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .fall-safety-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .fall-safety-button {
+    min-height: 104px;
+  }
 }
 
 .panel {

@@ -30,6 +30,11 @@ import {
   PRACTICE_VIEWS,
   resolvePracticeAccess,
 } from "./practice-access.js";
+import {
+  FallMonitor,
+  fallMonitoringReadiness,
+  parseWellbeingResponse,
+} from "./fall-monitoring.js";
 
 let PoseLandmarker;
 let HandLandmarker;
@@ -183,6 +188,26 @@ const patientPracticeWorkspace =
   document.getElementById("patientPracticeWorkspace");
 const clinicianPracticeGate =
   document.getElementById("clinicianPracticeGate");
+const fallReadinessEl = document.getElementById("fallReadiness");
+const fallReadinessTitleEl = document.getElementById("fallReadinessTitle");
+const fallReadinessDetailEl = document.getElementById("fallReadinessDetail");
+const fallSafetyOverlay = document.getElementById("fallSafetyOverlay");
+const fallSafetyQuestion = document.getElementById("fallSafetyQuestion");
+const fallSafetyResult = document.getElementById("fallSafetyResult");
+const fallSafetyCountdown = document.getElementById("fallSafetyCountdown");
+const fallSafetyOkay = document.getElementById("fallSafetyOkay");
+const fallSafetyHelp = document.getElementById("fallSafetyHelp");
+const fallSafetyVoice = document.getElementById("fallSafetyVoice");
+const fallSafetyVoiceStatus = document.getElementById("fallSafetyVoiceStatus");
+const fallSafetyResultTitle = document.getElementById("fallSafetyResultTitle");
+const fallSafetyResultMessage = document.getElementById("fallSafetyResultMessage");
+const fallSafetyResultIcon = document.getElementById("fallSafetyResultIcon");
+const fallSafetyNoAlert = document.getElementById("fallSafetyNoAlert");
+const fallSafetyClose = document.getElementById("fallSafetyClose");
+
+// Keep the full-screen wellbeing dialog outside the camera grid so ancestor
+// overflow rules cannot crop its viewport-sized accessible controls.
+document.body.appendChild(fallSafetyOverlay);
 
 let profile = loadProfile();
 let poseLandmarker = null;
@@ -202,6 +227,12 @@ let practiceDecision = resolvePracticeAccess({
   loggedIn: isLoggedIn(),
 });
 let movementModelsPromise = null;
+const fallMonitor = new FallMonitor();
+let safetyCheckActive = false;
+let fallSafetyTimer = null;
+let fallSafetySecondsRemaining = 30;
+let fallSafetyPreviousFocus = null;
+let activeFallEvent = null;
 const exerciseContent = new Map(
   DRAFT_EXERCISES.map((exercise) => [exercise.id, exercise])
 );
@@ -226,6 +257,175 @@ function loadActivePrescriptions() {
   } catch (_) {
     return new Map();
   }
+}
+
+function renderFallReadiness(exercise = engine?.exercise) {
+  const readiness = fallMonitoringReadiness(exercise);
+  fallReadinessEl.dataset.state = readiness.state;
+  fallReadinessTitleEl.textContent = readiness.title;
+  fallReadinessDetailEl.textContent = readiness.detail;
+  const icon = fallReadinessEl.querySelector(".fall-readiness-icon");
+  if (icon) {
+    icon.textContent = readiness.state === "ready"
+      ? "✓"
+      : readiness.state === "limited"
+        ? "!"
+        : "—";
+  }
+}
+
+function configureFallMonitoring(exercise = engine?.exercise) {
+  fallMonitor.configure(exercise);
+  renderFallReadiness(exercise);
+}
+
+function recordLocalSafetyIncident(response, event = {}) {
+  const storageKey = "physiovision.local-safety-incidents.v1";
+  try {
+    const previous = JSON.parse(window.sessionStorage.getItem(storageKey) ?? "[]");
+    const incidents = Array.isArray(previous) ? previous : [];
+    incidents.push({
+      recordedAt: new Date().toISOString(),
+      exerciseId: engine?.exercise?.id ?? null,
+      monitoringMode: event.mode ?? fallMonitor.mode,
+      response,
+      signals: Array.isArray(event.signals) ? event.signals : [],
+    });
+    window.sessionStorage.setItem(
+      storageKey,
+      JSON.stringify(incidents.slice(-20))
+    );
+  } catch (_) {
+    // A private-browsing storage failure must not block the on-screen check.
+  }
+}
+
+function clearFallSafetyTimer() {
+  window.clearInterval(fallSafetyTimer);
+  fallSafetyTimer = null;
+}
+
+function showFallSafetyResult(response, event = {}) {
+  clearFallSafetyTimer();
+  recordLocalSafetyIncident(response, event);
+  deactivateCameraGuide({
+    showCheckin: false,
+    statusMessage: "Exercise stopped for a safety check",
+  });
+
+  fallSafetyQuestion.classList.add("hidden");
+  fallSafetyResult.classList.remove("hidden");
+  fallSafetyResult.classList.toggle(
+    "fall-safety-result-safe",
+    response === "okay"
+  );
+  fallSafetyNoAlert.classList.toggle("hidden", response === "okay");
+
+  if (response === "okay") {
+    fallSafetyResultIcon.textContent = "✓";
+    fallSafetyResultTitle.textContent = "Thank you. The exercise has stopped.";
+    fallSafetyResultMessage.textContent =
+      "The possible fall was marked as a false alarm. Take a moment before deciding whether to exercise again.";
+  } else if (response === "help") {
+    fallSafetyResultIcon.textContent = "!";
+    fallSafetyResultTitle.textContent = "You said that you need help.";
+    fallSafetyResultMessage.textContent =
+      "Stay where you are if moving may be unsafe. Use your phone or call out to someone nearby.";
+  } else {
+    fallSafetyResultIcon.textContent = "!";
+    fallSafetyResultTitle.textContent = "We did not receive a response.";
+    fallSafetyResultMessage.textContent =
+      "The exercise and camera have stopped. Use your phone or call out to someone nearby if you need help.";
+  }
+
+  voiceGuidance.speak(
+    `${fallSafetyResultTitle.textContent} ${fallSafetyResultMessage.textContent}` +
+      (response === "okay"
+        ? ""
+        : " No emergency alert was sent because emergency contacts are not configured in this version."),
+    {
+      key: `fall-safety-result:${response}`,
+      interrupt: true,
+    }
+  );
+  fallSafetyClose.focus({ preventScroll: true });
+}
+
+function beginFallSafetyCheck(event) {
+  if (safetyCheckActive) return;
+  safetyCheckActive = true;
+  activeFallEvent = event;
+  fallSafetyPreviousFocus = document.activeElement;
+  clearHoldTimer(activeDose(engine.exercise).holdSeconds);
+  resetSpokenCoaching();
+  voiceGuidance.cancel();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  fallSafetyQuestion.classList.remove("hidden");
+  fallSafetyResult.classList.add("hidden");
+  fallSafetyResult.classList.remove("fall-safety-result-safe");
+  fallSafetyNoAlert.classList.add("hidden");
+  fallSafetyVoiceStatus.textContent = voiceGuidance.canListen
+    ? "Use a large button or answer by voice."
+    : "Voice input is unavailable in this browser. Use a large button.";
+  fallSafetyVoice.disabled = !voiceGuidance.canListen;
+  fallSafetySecondsRemaining = 30;
+  fallSafetyCountdown.textContent = String(fallSafetySecondsRemaining);
+  fallSafetyOverlay.classList.remove("hidden");
+  document.body.classList.add("fall-safety-open");
+  fallSafetyOkay.focus({ preventScroll: true });
+
+  voiceGuidance.speak(
+    "We noticed a possible fall and stopped the exercise. Are you okay? Select I’m okay or I need help.",
+    { key: "possible-fall-check", interrupt: true }
+  );
+
+  clearFallSafetyTimer();
+  fallSafetyTimer = window.setInterval(() => {
+    fallSafetySecondsRemaining -= 1;
+    fallSafetyCountdown.textContent = String(
+      Math.max(fallSafetySecondsRemaining, 0)
+    );
+    if (fallSafetySecondsRemaining === 10) {
+      voiceGuidance.speak("Ten seconds left to answer.", {
+        key: "possible-fall-countdown-10",
+      });
+    } else if (fallSafetySecondsRemaining === 5) {
+      voiceGuidance.speak("Five seconds left to answer.", {
+        key: "possible-fall-countdown-5",
+      });
+    } else if (fallSafetySecondsRemaining <= 0) {
+      showFallSafetyResult("no_response", event);
+    }
+  }, 1000);
+}
+
+function closeFallSafetyCheck() {
+  clearFallSafetyTimer();
+  voiceGuidance.cancel();
+  safetyCheckActive = false;
+  fallMonitor.resumeAfterCheck();
+  fallSafetyOverlay.classList.add("hidden");
+  document.body.classList.remove("fall-safety-open");
+  const homeButton = document.querySelector("[data-patient-dashboard]");
+  if (homeButton instanceof HTMLElement) {
+    homeButton.click();
+  } else if (fallSafetyPreviousFocus instanceof HTMLElement) {
+    fallSafetyPreviousFocus.focus({ preventScroll: true });
+  }
+  fallSafetyPreviousFocus = null;
+  activeFallEvent = null;
+}
+
+function processFallMonitoring(landmarks, timestampMs) {
+  if (safetyCheckActive || calibrationSession || handPreviewMode) return null;
+  const event = fallMonitor.update({ landmarks, timestampMs });
+  if (event.type === "candidate") {
+    statusEl.textContent = "Checking an unexpected movement…";
+  } else if (event.type === "possible_fall" && !event.repeated) {
+    beginFallSafetyCheck(event);
+  }
+  return event;
 }
 
 const PRACTICE_GATE_COPY = Object.freeze({
@@ -535,6 +735,7 @@ renderPoseStrip(engine.exercise, engine.stages[0]);
 renderStaticPhaseFlow(engine);
 renderPersonalization();
 renderExerciseImage(engine.exercise);
+configureFallMonitoring(engine.exercise);
 
 exSelect.addEventListener("change", () => {
   flushSession();
@@ -562,6 +763,7 @@ exSelect.addEventListener("change", () => {
   progressLbl.textContent = "Position yourself to start";
   setFeedbackBanner("ready");
   renderPersonalization();
+  configureFallMonitoring(engine.exercise);
 });
 
 sideSelect.addEventListener("change", () => {
@@ -578,6 +780,7 @@ sideSelect.addEventListener("change", () => {
   progressEl.style.width = "0%";
   setFeedbackBanner("ready");
   renderPersonalization();
+  configureFallMonitoring(engine.exercise);
 });
 
 window.addEventListener("physiovision:profile-updated", (event) => {
@@ -608,6 +811,7 @@ window.addEventListener("physiovision:profile-updated", (event) => {
   progressEl.style.width = "0%";
   setFeedbackBanner("ready");
   renderPersonalization();
+  configureFallMonitoring(engine.exercise);
 });
 
 window.addEventListener("physiovision:prescriptions-updated", (event) => {
@@ -895,6 +1099,10 @@ function renderHandPreview(result) {
 
 function renderFrame() {
   if (!running) return;
+  if (safetyCheckActive) {
+    rafId = requestAnimationFrame(renderFrame);
+    return;
+  }
 
   if (video.currentTime !== lastVideoTime) {
     lastVideoTime = video.currentTime;
@@ -980,15 +1188,19 @@ function renderFrame() {
           } else {
             updateFeedbackPanel(angles, frameTimestamp);
             statusEl.textContent = "Tracking your movement";
+            processFallMonitoring(landmarks, frameTimestamp);
           }
         } else {
+          const fallEvent = fallMonitor.notePoseUnavailable(frameTimestamp);
           combinedPoseHistory = [];
           updateCalibrationCapture(null, frameTimestamp);
           const interruptedHold = engine.inHold;
           if (holdInterval) {
             clearHoldTimer(activeDose(engine.exercise).holdSeconds);
           }
-          statusEl.textContent = "Step back so your full body is visible";
+          statusEl.textContent = fallEvent.type === "visibility_lost"
+            ? "I can’t see you — please return to the marked area"
+            : "Step back so your full body is visible";
           setFeedbackBanner(
             "position",
             interruptedHold
@@ -999,7 +1211,9 @@ function renderFrame() {
             "position",
             interruptedHold
               ? "Your hold was reset because tracking was lost. Return to the stretch and keep your full body visible."
-              : "Step back and keep your full body visible.",
+              : fallEvent.type === "visibility_lost"
+                ? "I can’t see you. Please return to the marked area."
+                : "Step back and keep your full body visible.",
             frameTimestamp
           );
         }
@@ -1735,6 +1949,12 @@ async function activateCameraGuide() {
     Object.keys(sessionAngleStats).forEach(k => delete sessionAngleStats[k]);
     sessionSymmetryWarnings = 0;
     resetSpokenCoaching();
+    configureFallMonitoring(engine.exercise);
+    if (fallReadinessEl.dataset.state === "ready") {
+      fallReadinessTitleEl.textContent = "Local possible-fall check ready";
+      fallReadinessDetailEl.textContent =
+        "The camera check is active. No emergency alert is sent in this version.";
+    }
     cameraStage?.classList.add("camera-active");
     if (exerciseUsesHand(engine.exercise)) {
       const combined = engine.exercise.trackingMode === TRACKING_MODES.POSE_AND_HAND;
@@ -1771,7 +1991,10 @@ async function activateCameraGuide() {
   }
 }
 
-function deactivateCameraGuide() {
+function deactivateCameraGuide({
+  showCheckin = true,
+  statusMessage = "Stopped",
+} = {}) {
   running = false;
   voiceGuidance.cancel();
   resetSpokenCoaching();
@@ -1789,11 +2012,12 @@ function deactivateCameraGuide() {
   setupTip.textContent = cameraSetupTip(engine.exercise);
   toggleBtn.innerHTML = 'Start camera guide <span aria-hidden="true">→</span>';
   handTrackingToggle.disabled = !handLandmarker;
-  statusEl.textContent = "Stopped";
+  statusEl.textContent = statusMessage;
   setFeedbackBanner("ready");
+  renderFallReadiness(engine.exercise);
 
   flushSession();
-  showPainCheckin("after");
+  if (showCheckin) showPainCheckin("after");
 }
 
 async function startHandPreview() {
@@ -2062,5 +2286,39 @@ handTrackingToggle.addEventListener("click", async () => {
   if (handPreviewMode) stopHandPreview();
   else await startHandPreview();
 });
+
+fallSafetyOkay.addEventListener("click", () => {
+  showFallSafetyResult("okay", activeFallEvent ?? {});
+});
+
+fallSafetyHelp.addEventListener("click", () => {
+  showFallSafetyResult("help", activeFallEvent ?? {});
+});
+
+fallSafetyVoice.addEventListener("click", () => {
+  if (!safetyCheckActive || fallSafetyQuestion.classList.contains("hidden")) {
+    return;
+  }
+  voiceGuidance.listen({
+    onStatus: (status) => {
+      fallSafetyVoiceStatus.textContent = status;
+    },
+    onError: (message) => {
+      fallSafetyVoiceStatus.textContent = message;
+    },
+    onResult: (transcript) => {
+      const response = parseWellbeingResponse(transcript);
+      fallSafetyVoiceStatus.textContent = `I heard: “${transcript}”`;
+      if (response) {
+        showFallSafetyResult(response, activeFallEvent ?? {});
+      } else {
+        fallSafetyVoiceStatus.textContent =
+          `I heard: “${transcript}”. Please say “I’m okay” or “I need help”, or use a large button.`;
+      }
+    },
+  });
+});
+
+fallSafetyClose.addEventListener("click", closeFallSafetyCheck);
 
 syncPracticeAccess();

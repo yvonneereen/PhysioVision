@@ -886,11 +886,110 @@
           </div>
 
           <div class="camera-safety">
-            <span aria-hidden="true">✦</span>
-            <p>
-              Your camera feed is processed for movement guidance and is not
-              recorded in this prototype.
-            </p>
+            <div class="camera-privacy-note">
+              <span aria-hidden="true">✦</span>
+              <p>
+                Your camera feed is processed for movement guidance and is not
+                recorded in this prototype.
+              </p>
+            </div>
+            <div
+              id="fallReadiness"
+              class="fall-readiness"
+              data-state="ready"
+              role="status"
+              aria-live="polite"
+            >
+              <span class="fall-readiness-icon" aria-hidden="true">✓</span>
+              <div>
+                <strong id="fallReadinessTitle">Local possible-fall check available</strong>
+                <small id="fallReadinessDetail">
+                  It starts with the camera. No emergency alert is sent.
+                </small>
+              </div>
+            </div>
+          </div>
+
+          <div
+            id="fallSafetyOverlay"
+            class="fall-safety-overlay hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="fallSafetyTitle"
+            aria-describedby="fallSafetyMessage"
+          >
+            <section id="fallSafetyQuestion" class="fall-safety-dialog">
+              <div class="fall-safety-alert-icon" aria-hidden="true">!</div>
+              <span class="fall-safety-eyebrow">Possible fall detected</span>
+              <h2 id="fallSafetyTitle">Are you okay?</h2>
+              <p id="fallSafetyMessage">
+                We noticed an unexpected movement and stopped the exercise.
+                This can be a false alarm.
+              </p>
+              <div class="fall-safety-countdown" aria-live="polite">
+                <strong id="fallSafetyCountdown">30</strong>
+                <span>seconds to answer before the exercise stops</span>
+              </div>
+              <div class="fall-safety-actions">
+                <button
+                  id="fallSafetyOkay"
+                  class="fall-safety-button is-okay"
+                  type="button"
+                >
+                  <span aria-hidden="true">✓</span>
+                  <strong>I’m okay</strong>
+                  <small>Cancel this check and stop the exercise</small>
+                </button>
+                <button
+                  id="fallSafetyHelp"
+                  class="fall-safety-button is-help"
+                  type="button"
+                >
+                  <span aria-hidden="true">!</span>
+                  <strong>I need help</strong>
+                  <small>Stop the exercise and show help instructions</small>
+                </button>
+              </div>
+              <button
+                id="fallSafetyVoice"
+                class="fall-safety-voice"
+                type="button"
+              >
+                <span aria-hidden="true">🎙</span> Answer by voice
+              </button>
+              <p
+                id="fallSafetyVoiceStatus"
+                class="fall-safety-voice-status"
+                role="status"
+                aria-live="polite"
+              ></p>
+              <p class="fall-safety-prototype-note">
+                No emergency contact or outside service is alerted in this version.
+              </p>
+            </section>
+
+            <section id="fallSafetyResult" class="fall-safety-dialog hidden">
+              <div id="fallSafetyResultIcon" class="fall-safety-alert-icon" aria-hidden="true">✓</div>
+              <span class="fall-safety-eyebrow">Exercise stopped</span>
+              <h2 id="fallSafetyResultTitle">Your response was recorded.</h2>
+              <p id="fallSafetyResultMessage">
+                Take a moment before deciding whether to exercise again.
+              </p>
+              <div id="fallSafetyNoAlert" class="fall-safety-no-alert hidden">
+                <strong>No emergency alert was sent.</strong>
+                <span>
+                  Emergency contacts are not configured in this version. Use
+                  your phone or call out to someone nearby if you need help.
+                </span>
+              </div>
+              <button
+                id="fallSafetyClose"
+                class="fall-safety-finish"
+                type="button"
+              >
+                Return to my home <span aria-hidden="true">→</span>
+              </button>
+            </section>
           </div>
         </div>
 
@@ -2111,7 +2210,7 @@
   <script type="module" src="patient-dashboard.js?v=10"></script>
   <script type="module" src="therapist.js?v=15"></script>
   <script type="module" src="exercise-library.js?v=15"></script>
-  <script type="module" src="main.js?v=48"></script>
+  <script type="module" src="main.js?v=49"></script>
   <script type="module" src="agent-chat.js?v=13"></script>
   <script type="module" src="care-workflow.js?v=13"></script>
 </body>

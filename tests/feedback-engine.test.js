@@ -105,6 +105,28 @@ const halfSquatBottom = (overrides = {}) =>
 
 {
   const engine = new FeedbackEngine("half-squats", "right");
+  const standing = halfSquatPose({
+    leftKneeForwardRatio: hidden,
+    rightKneeForwardRatio: hidden,
+  });
+  const squat = halfSquatBottom({
+    leftKneeForwardRatio: hidden,
+    rightKneeForwardRatio: hidden,
+  });
+
+  assert.equal(engine.update(standing, 0).trackingReady, true);
+  engine.update(standing, 300);
+  engine.update(squat, 400);
+  engine.update(squat, 700);
+  engine.update(standing, 800);
+  const completed = engine.update(standing, 1100);
+
+  assert.equal(completed.trackingReady, true);
+  assert.equal(completed.repCount, 1);
+}
+
+{
+  const engine = new FeedbackEngine("half-squats", "right");
   engine.update(halfSquatPose({ leftKnee: hidden }));
   const result = engine.update(halfSquatBottom({ leftKnee: hidden }));
 

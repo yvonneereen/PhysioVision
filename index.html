@@ -872,7 +872,7 @@
               <div class="calibration-dialog">
                 <span id="calibrationStepLabel" class="calibration-step-label">Personal calibration</span>
                 <div class="calibration-dots" aria-hidden="true">
-                  <span class="active"></span><span></span><span></span><span></span>
+                  <span class="active"></span><span></span><span></span>
                 </div>
                 <h3 id="calibrationTitle">Fit this exercise to your movement</h3>
                 <p id="calibrationInstructions">
@@ -882,7 +882,7 @@
                 <p id="calibrationStatus" class="calibration-status" role="status"></p>
                 <div class="calibration-actions">
                   <button id="calibrationCancel" class="text-button calibration-cancel" type="button">Cancel</button>
-                  <button id="calibrationAction" class="button button-coral" type="button">Begin</button>
+                  <button id="calibrationAction" class="button button-coral" type="button" hidden>Save personal range</button>
                 </div>
               </div>
             </div>
@@ -1156,10 +1156,24 @@
             </dl>
           </section>
 
-          <button id="toggle" class="button button-coral camera-button" disabled>
-            Start camera guide
-            <span aria-hidden="true">→</span>
-          </button>
+          <div class="camera-session-actions">
+            <button id="toggle" class="button button-coral camera-button" disabled>
+              Start camera guide
+              <span aria-hidden="true">→</span>
+            </button>
+            <button
+              id="finishExercise"
+              class="button finish-exercise-button"
+              type="button"
+              disabled
+            >
+              Finish exercise and check in
+              <span aria-hidden="true">✓</span>
+            </button>
+          </div>
+          <p id="cameraSessionHint" class="camera-session-hint" aria-live="polite">
+            Stopping the camera does not mark an exercise as finished.
+          </p>
 
           <details class="metrics">
             <summary>Technical movement details</summary>
@@ -2267,7 +2281,7 @@
   <script type="module" src="patient-dashboard.js?v=15"></script>
   <script type="module" src="therapist.js?v=15"></script>
   <script type="module" src="exercise-library.js?v=15"></script>
-  <script type="module" src="main.js?v=51"></script>
+  <script type="module" src="main.js?v=52"></script>
   <script type="module" src="agent-chat.js?v=13"></script>
   <script type="module" src="care-workflow.js?v=13"></script>
 </body>

@@ -238,6 +238,30 @@ export function extractCalibrationFrame(exercise, angles, affectedSide) {
   return frame;
 }
 
+/**
+ * Returns true when a complete calibration frame is inside the configured
+ * starting or target position. The live calibration flow uses this to wait
+ * for the person instead of asking them to press another button.
+ */
+export function calibrationFrameMatchesPhase(exercise, frame, captureType) {
+  const config = exercise.calibration;
+  if (!config || !frame || !["start", "target"].includes(captureType)) {
+    return false;
+  }
+
+  const ranges = config.safeRanges?.[captureType] ?? {};
+  for (const [key, range] of Object.entries(ranges)) {
+    if (!conditionMatches(frame[key], range)) return false;
+  }
+
+  const conditions = config.safeConditions?.[captureType] ?? {};
+  for (const [key, condition] of Object.entries(conditions)) {
+    if (!conditionMatches(frame[key], condition)) return false;
+  }
+
+  return true;
+}
+
 export function summariseFrames(frames, keys) {
   if (!frames?.length) throw new Error("No visible movement samples were captured.");
   const summary = {};

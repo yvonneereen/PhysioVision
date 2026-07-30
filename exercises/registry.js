@@ -136,13 +136,12 @@ export const EXERCISES = [
         "leftHip",
         "rightHip",
         "torsoLean",
-        "leftKneeForwardRatio",
-        "rightKneeForwardRatio",
       ],
-      // Only the user's comfortable joint range is personalised. Form-safety
-      // measurements are captured and validated, but their limits stay fixed.
+      // Knee-forward depth is retained as an optional coaching measurement,
+      // but it must not block calibration or repetition recognition. Its
+      // camera-depth estimate is unreliable from a front-facing camera.
       personalizedKeys: ["leftKnee", "rightKnee", "leftHip", "rightHip"],
-      toleranceDegrees: 8,
+      toleranceDegrees: 12,
       safeRanges: {
         start: {
           leftKnee: [145, 180],
@@ -150,8 +149,6 @@ export const EXERCISES = [
           leftHip: [145, 180],
           rightHip: [145, 180],
           torsoLean: [0, 25],
-          leftKneeForwardRatio: [-1, 0.15],
-          rightKneeForwardRatio: [-1, 0.15],
         },
         target: {
           // A shallower comfortable squat can be calibrated, while 90° remains
@@ -161,8 +158,6 @@ export const EXERCISES = [
           leftHip: [90, 150],
           rightHip: [90, 150],
           torsoLean: [0, 40],
-          leftKneeForwardRatio: [-1, 0.15],
-          rightKneeForwardRatio: [-1, 0.15],
         },
       },
       captureErrors: {
@@ -171,8 +166,6 @@ export const EXERCISES = [
         leftHip: "Use a smaller, comfortable movement for this calibration.",
         rightHip: "Use a smaller, comfortable movement for this calibration.",
         torsoLean: "Lift your chest and try the measurement again.",
-        leftKneeForwardRatio: "Move your knees back over your feet, then try again.",
-        rightKneeForwardRatio: "Move your knees back over your feet, then try again.",
       },
     },
     phases: [
@@ -183,8 +176,6 @@ export const EXERCISES = [
         leftHip: [155, 180],
         rightHip: [155, 180],
         torsoLean: [0, 25],
-        leftKneeForwardRatio: [-1, 0.15],
-        rightKneeForwardRatio: [-1, 0.15],
       },
       {
         name: "squat",
@@ -193,8 +184,6 @@ export const EXERCISES = [
         leftHip: [90, 135],
         rightHip: [90, 135],
         torsoLean: [0, 40],
-        leftKneeForwardRatio: [-1, 0.15],
-        rightKneeForwardRatio: [-1, 0.15],
       },
     ],
     repRule: "standing → squat → standing",

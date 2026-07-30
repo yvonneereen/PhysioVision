@@ -7,9 +7,10 @@ import {
   measureHandExerciseFrame,
   measurePoseExerciseFrame,
 } from "./exercise-tracking.js";
-import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=40";
+import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=41";
 import { POSES } from "./poses.js";
 import {
+  calibrationFrameMatchesPhase,
   createCalibration,
   extractCalibrationFrame,
   getCalibration,
@@ -84,6 +85,8 @@ const synchronizedFrameContext = synchronizedFrame.getContext("2d", {
 });
 const statusEl    = document.getElementById("status");
 const toggleBtn   = document.getElementById("toggle");
+const finishExerciseBtn = document.getElementById("finishExercise");
+const cameraSessionHintEl = document.getElementById("cameraSessionHint");
 const fpsEl       = document.getElementById("fps");
 const exSelect    = document.getElementById("exerciseSelect");
 const sideSelect  = document.getElementById("sideSelect");
@@ -215,6 +218,7 @@ let profile = loadProfile();
 let poseLandmarker = null;
 let handLandmarker = null;
 let sessionStartedAt = null;
+let exerciseSessionActive = false;
 let activePrescriptions = loadActivePrescriptions();
 const initialAuthState = window.physioVisionAuthState ?? null;
 let authenticatedRole = initialAuthState?.role ?? null;
@@ -311,7 +315,6 @@ function showFallSafetyResult(response, event = {}) {
   clearFallSafetyTimer();
   recordLocalSafetyIncident(response, event);
   deactivateCameraGuide({
-    showCheckin: false,
     statusMessage: "Exercise stopped for a safety check",
   });
 
@@ -526,8 +529,9 @@ function syncPracticeAccess() {
   if (showPatient) {
     refreshExerciseAccess();
     ensureMovementModels();
-  } else if (running) {
-    deactivateCameraGuide();
+  } else {
+    if (running) deactivateCameraGuide();
+    discardExerciseSession();
     hidePainCheckin();
   }
 }
@@ -649,7 +653,9 @@ let holdRemaining = 0;
 let holdTotal     = 0;
 
 // ── Personal calibration state ───────────────────────────────────────────────
-const CALIBRATION_CAPTURE_MS = 1800;
+const CALIBRATION_CAPTURE_MS = 1200;
+const CALIBRATION_POSITION_STABLE_MS = 500;
+const CALIBRATION_RETURN_STABLE_MS = 350;
 let calibrationSession = null;
 let calibrationDraft = null;
 
@@ -740,7 +746,12 @@ renderExerciseImage(engine.exercise);
 configureFallMonitoring(engine.exercise);
 
 exSelect.addEventListener("change", () => {
-  flushSession();
+  if (running) {
+    deactivateCameraGuide({
+      statusMessage: "Camera paused because the exercise changed",
+    });
+  }
+  discardExerciseSession();
   cancelCalibration();
   engine.changeExercise(
     exSelect.value,
@@ -769,6 +780,12 @@ exSelect.addEventListener("change", () => {
 });
 
 sideSelect.addEventListener("change", () => {
+  if (running) {
+    deactivateCameraGuide({
+      statusMessage: "Camera paused because the focus side changed",
+    });
+  }
+  discardExerciseSession();
   cancelCalibration();
   engine.changeExercise(
     exSelect.value,
@@ -866,15 +883,26 @@ async function createLandmarker() {
   const vision = await FilesetResolver.forVisionTasks(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
   );
-  poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+  const poseOptions = {
     baseOptions: {
       modelAssetPath:
         "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",
-      delegate: "GPU",
     },
     runningMode: "VIDEO",
     numPoses: 1,
-  });
+    minPoseDetectionConfidence: 0.5,
+    minPosePresenceConfidence: 0.5,
+    minTrackingConfidence: 0.5,
+  };
+  try {
+    poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+      ...poseOptions,
+      baseOptions: { ...poseOptions.baseOptions, delegate: "GPU" },
+    });
+  } catch (gpuError) {
+    console.info("GPU pose tracking unavailable; using CPU", gpuError);
+    poseLandmarker = await PoseLandmarker.createFromOptions(vision, poseOptions);
+  }
 
   try {
     const handOptions = {
@@ -1525,7 +1553,6 @@ let calibrationReturnFocus = openCalibrationBtn;
 
 async function openCalibrationFlow(event) {
   const trigger = event.currentTarget;
-  const enterCalibrationDirectly = trigger === openCalibrationPrimary;
   cameraSetupStatus.hidden = true;
   cameraSetupStatus.textContent = "";
   if (!engine.exercise.calibration) {
@@ -1553,19 +1580,16 @@ async function openCalibrationFlow(event) {
   calibrationDraft = null;
   calibrationSession = {
     exerciseId: engine.exercise.id,
-    // The large camera-setup call to action already explains what will happen.
-    // Take that path straight to the first calibration position instead of
-    // making the user press a second, ambiguous "Begin" button. The smaller
-    // recalibration control keeps the introduction because it may be opened
-    // while a camera session is already running.
-    step: enterCalibrationDirectly ? "start" : "intro",
+    step: "start",
     startFrames: null,
     targetCaptures: [],
     capture: null,
   };
   calibrationOverlay.classList.remove("hidden");
   renderCalibrationStep();
-  calibrationAction.focus();
+  beginCalibrationCapture("start");
+  announceCalibrationStage("start");
+  calibrationCancel.focus();
 }
 
 openCalibrationBtn.addEventListener("click", openCalibrationFlow);
@@ -1576,14 +1600,7 @@ calibrationCancel.addEventListener("click", cancelCalibration);
 calibrationAction.addEventListener("click", () => {
   if (!calibrationSession) return;
 
-  if (calibrationSession.step === "intro") {
-    calibrationSession.step = "start";
-    renderCalibrationStep();
-  } else if (calibrationSession.step === "start") {
-    beginCalibrationCapture("start");
-  } else if (calibrationSession.step === "target") {
-    beginCalibrationCapture("target");
-  } else if (calibrationSession.step === "result" && calibrationDraft) {
+  if (calibrationSession.step === "result" && calibrationDraft) {
     saveCalibration(calibrationDraft);
     if (isLoggedIn()) {
       postCalibration({
@@ -1614,35 +1631,39 @@ calibrationAction.addEventListener("click", () => {
 function renderCalibrationStep() {
   if (!calibrationSession) return;
   const dots = [...calibrationOverlay.querySelectorAll(".calibration-dots span")];
-  const stepIndex = { intro: 0, start: 1, target: 2, result: 3 }[
+  const stepIndex = { start: 0, target: 1, result: 2 }[
     calibrationSession.step
   ];
   dots.forEach((dot, index) => dot.classList.toggle("active", index <= stepIndex));
   calibrationStatus.textContent = "";
   calibrationResult.classList.add("hidden");
+  calibrationAction.hidden = true;
   calibrationAction.disabled = false;
 
-  if (calibrationSession.step === "intro") {
-    calibrationStepLabel.textContent = "Personal calibration · about 1 minute";
-    calibrationTitle.textContent = `Fit ${engine.exercise.name} to your movement`;
+  if (calibrationSession.step === "start") {
+    calibrationStepLabel.textContent =
+      "Step 1 · Automatic starting-position check";
+    calibrationTitle.textContent =
+      `Personalize ${engine.exercise.name} detection`;
+    const startInstruction = engine.exercise.calibration.startInstruction
+      ?? `Hold ${engine.exercise.calibration.startPhase.replaceAll("_", " ")} with every required joint visible.`;
     calibrationInstructions.textContent =
-      `We’ll measure your ${engine.exercise.calibration.startPhase.replaceAll("_", " ")} position, then three comfortable ${engine.exercise.calibration.targetPhase.replaceAll("_", " ")} samples. Follow your clinician’s restrictions and stop for pain, dizziness, numbness or unsteadiness.`;
-    calibrationAction.textContent = "Begin";
-  } else if (calibrationSession.step === "start") {
-    calibrationStepLabel.textContent = "Step 1 · Starting position";
-    calibrationTitle.textContent = engine.exercise.calibration.startTitle
-      ?? `Hold ${engine.exercise.calibration.startPhase.replaceAll("_", " ")}`;
-    calibrationInstructions.textContent = engine.exercise.calibration.startInstruction
-      ?? "Keep every required joint visible and hold still while we measure.";
-    calibrationAction.textContent = "Measure starting position";
+      "This short spoken setup measures your comfortable positions so "
+      + "PhysioVision can recognize your movement more accurately. It does "
+      + "not change safety limits. "
+      + `${startInstruction} No extra button is needed—measurement starts `
+      + "automatically when you hold the position.";
   } else if (calibrationSession.step === "target") {
     const nextRep = calibrationSession.targetCaptures.length + 1;
     calibrationStepLabel.textContent = `Step 2 · Comfortable sample ${nextRep} of 3`;
     calibrationTitle.textContent = engine.exercise.calibration.targetTitle
       ?? `Move to ${engine.exercise.calibration.targetPhase.replaceAll("_", " ")}`;
-    calibrationInstructions.textContent = engine.exercise.calibration.targetInstruction
-      ?? "Move only as far as is comfortable, then hold the position.";
-    calibrationAction.textContent = `Measure sample ${nextRep}`;
+    calibrationInstructions.textContent =
+      (
+        engine.exercise.calibration.targetInstruction
+        ?? "Move only as far as is comfortable, then hold the position."
+      )
+      + " Spoken guidance will lead you, and measurement starts automatically.";
   } else {
     calibrationStepLabel.textContent = "Step 3 · Review";
     calibrationTitle.textContent = engine.exercise.calibration.personalizedKeys.length
@@ -1669,49 +1690,133 @@ function renderCalibrationStep() {
     }
     calibrationResult.innerHTML = resultItems.join("");
     calibrationResult.classList.remove("hidden");
+    calibrationAction.hidden = false;
     calibrationAction.textContent = engine.exercise.calibration.personalizedKeys.length
       ? "Save personal range"
       : "Save tracking baseline";
+    calibrationAction.focus();
   }
-  calibrationAction.focus();
 }
 
-function beginCalibrationCapture(type) {
+function beginCalibrationCapture(
+  type,
+  { awaitingReturn = false, retryAfter = 0 } = {}
+) {
   calibrationSession.capture = {
     type,
-    startedAt: performance.now(),
     frames: [],
+    awaitingReturn,
+    phaseDetectedAt: null,
+    measuringStartedAt: null,
+    previousFrame: null,
+    retryAfter,
   };
-  calibrationAction.disabled = true;
-  calibrationStatus.textContent = "Measuring… hold this position";
+  calibrationAction.hidden = true;
+  calibrationStatus.textContent = awaitingReturn
+    ? "Sample saved. Return to your starting position; the next sample will begin automatically."
+    : calibrationWaitingMessage(type);
 }
 
 function updateCalibrationCapture(angles, timestampMs) {
   const capture = calibrationSession?.capture;
   if (!capture) return;
 
-  let capturedUsableFrame = false;
-  if (angles) {
-    const frame = extractCalibrationFrame(
-      engine.exercise,
-      angles,
-      sideSelect.value
-    );
-    if (frame) {
-      capture.frames.push(frame);
-      capturedUsableFrame = true;
-    }
+  if (capture.retryAfter && timestampMs < capture.retryAfter) return;
+  capture.retryAfter = 0;
+
+  const frame = angles
+    ? extractCalibrationFrame(engine.exercise, angles, sideSelect.value)
+    : null;
+  if (!frame) {
+    resetCalibrationPositionTimer(capture);
+    calibrationStatus.textContent =
+      "Keep your full body and every required joint visible. I will measure automatically.";
+    return;
   }
 
+  if (capture.awaitingReturn) {
+    if (!calibrationFrameMatchesPhase(engine.exercise, frame, "start")) {
+      capture.phaseDetectedAt = null;
+      capture.previousFrame = frame;
+      calibrationStatus.textContent =
+        "Return to your comfortable starting position. I will tell you when to move again.";
+      return;
+    }
+    if (!calibrationFrameIsStable(capture.previousFrame, frame)) {
+      capture.phaseDetectedAt = timestampMs;
+      capture.previousFrame = frame;
+      calibrationStatus.textContent =
+        "Starting position found—hold still for a moment.";
+      return;
+    }
+    capture.previousFrame = frame;
+    capture.phaseDetectedAt ??= timestampMs;
+    if (
+      timestampMs - capture.phaseDetectedAt
+      < CALIBRATION_RETURN_STABLE_MS
+    ) {
+      calibrationStatus.textContent =
+        "Starting position found—hold still for a moment.";
+      return;
+    }
+
+    capture.awaitingReturn = false;
+    resetCalibrationPositionTimer(capture);
+    calibrationStatus.textContent = calibrationWaitingMessage("target");
+    announceCalibrationStage("target", { afterReturn: true });
+    return;
+  }
+
+  if (!calibrationFrameMatchesPhase(engine.exercise, frame, capture.type)) {
+    resetCalibrationPositionTimer(capture);
+    calibrationStatus.textContent = calibrationWaitingMessage(capture.type);
+    return;
+  }
+
+  if (!calibrationFrameIsStable(capture.previousFrame, frame)) {
+    capture.frames = [];
+    capture.phaseDetectedAt = timestampMs;
+    capture.measuringStartedAt = null;
+    capture.previousFrame = frame;
+    calibrationStatus.textContent =
+      "Position found—finish moving, then hold still. Measurement will start automatically.";
+    return;
+  }
+
+  capture.previousFrame = frame;
+  capture.phaseDetectedAt ??= timestampMs;
+  if (capture.measuringStartedAt === null) {
+    if (
+      timestampMs - capture.phaseDetectedAt
+      < CALIBRATION_POSITION_STABLE_MS
+    ) {
+      calibrationStatus.textContent =
+        "Position found—hold still. Automatic measurement is about to begin.";
+      return;
+    }
+    capture.measuringStartedAt = timestampMs;
+    capture.frames = [frame];
+    calibrationStatus.textContent =
+      "Measuring automatically… keep holding this comfortable position.";
+    voiceGuidance.speak(
+      "Position found. Hold still while I measure.",
+      {
+        key: `calibration:${engine.exercise.id}:${capture.type}:measuring:${calibrationSession.targetCaptures.length}`,
+        cooldownMs: 2500,
+      }
+    );
+    return;
+  }
+
+  capture.frames.push(frame);
+  const elapsed = timestampMs - capture.measuringStartedAt;
   const remaining = Math.max(
     0,
-    Math.ceil((CALIBRATION_CAPTURE_MS - (timestampMs - capture.startedAt)) / 1000)
+    Math.ceil((CALIBRATION_CAPTURE_MS - elapsed) / 1000)
   );
-  calibrationStatus.textContent = capturedUsableFrame
-    ? `Measuring… ${remaining || "almost done"}`
-    : "Pause — move into the requested phase and keep every required landmark visible";
-
-  if (timestampMs - capture.startedAt < CALIBRATION_CAPTURE_MS) return;
+  calibrationStatus.textContent =
+    `Measuring automatically… ${remaining || "almost done"}`;
+  if (elapsed < CALIBRATION_CAPTURE_MS) return;
   finishCalibrationCapture(capture);
 }
 
@@ -1727,6 +1832,9 @@ function finishCalibrationCapture(capture) {
     if (capture.type === "start") {
       calibrationSession.startFrames = capture.frames;
       calibrationSession.step = "target";
+      renderCalibrationStep();
+      beginCalibrationCapture("target");
+      announceCalibrationStage("target");
     } else {
       calibrationSession.targetCaptures.push(capture.frames);
       if (calibrationSession.targetCaptures.length >= 3) {
@@ -1736,19 +1844,111 @@ function finishCalibrationCapture(capture) {
           targetCaptures: calibrationSession.targetCaptures,
         });
         calibrationSession.step = "result";
+        renderCalibrationStep();
+        voiceGuidance.speak(
+          "Personal movement setup complete. Review and save your range.",
+          {
+            key: `calibration:${engine.exercise.id}:complete`,
+            interrupt: true,
+          }
+        );
+      } else {
+        renderCalibrationStep();
+        beginCalibrationCapture("target", { awaitingReturn: true });
+        const completed = calibrationSession.targetCaptures.length;
+        voiceGuidance.speak(
+          `Sample ${completed} saved. Return to your starting position. I will tell you when to move again.`,
+          {
+            key: `calibration:${engine.exercise.id}:return:${completed}`,
+            interrupt: true,
+          }
+        );
       }
     }
-    renderCalibrationStep();
   } catch (error) {
-    calibrationAction.disabled = false;
-    calibrationStatus.textContent = `${error.message} Try again.`;
+    const retryAfter = performance.now() + 1800;
+    beginCalibrationCapture(capture.type, { retryAfter });
+    calibrationStatus.textContent =
+      `${error.message} I will retry automatically—reposition comfortably and hold still.`;
+    voiceGuidance.speak(
+      `${error.message} Reposition comfortably. I will retry automatically.`,
+      {
+        key: `calibration:${engine.exercise.id}:${capture.type}:retry`,
+        interrupt: true,
+        cooldownMs: 3000,
+      }
+    );
   }
+}
+
+function resetCalibrationPositionTimer(capture) {
+  capture.frames = [];
+  capture.phaseDetectedAt = null;
+  capture.measuringStartedAt = null;
+  capture.previousFrame = null;
+}
+
+function calibrationFrameIsStable(previousFrame, frame) {
+  if (!previousFrame || !frame) return true;
+  return Object.keys(frame).every((key) => {
+    const previous = previousFrame[key];
+    const current = frame[key];
+    if (typeof previous === "string" || typeof current === "string") {
+      return previous === current;
+    }
+    if (!Number.isFinite(previous) || !Number.isFinite(current)) return false;
+    const tolerance = Math.max(
+      Math.abs(previous) <= 2 && Math.abs(current) <= 2 ? 0.025 : 2.5,
+      Math.abs(previous) * 0.015
+    );
+    return Math.abs(current - previous) <= tolerance;
+  });
+}
+
+function calibrationWaitingMessage(type) {
+  const config = engine.exercise.calibration;
+  const phase = type === "start" ? config.startPhase : config.targetPhase;
+  return type === "start"
+    ? `Move into your comfortable ${phase.replaceAll("_", " ")} position and hold still. Measurement starts automatically.`
+    : `Move into a comfortable ${phase.replaceAll("_", " ")} position and hold it. Measurement starts automatically.`;
+}
+
+function announceCalibrationStage(type, { afterReturn = false } = {}) {
+  const config = engine.exercise.calibration;
+  if (type === "start") {
+    const startInstruction = config.startInstruction
+      ?? `Hold your ${config.startPhase.replaceAll("_", " ")} position with your full body visible.`;
+    voiceGuidance.speak(
+      "This short setup personalizes movement detection so I can recognize "
+      + `your exercise more accurately. It does not change safety limits. ${startInstruction} `
+      + "You do not need to press anything. I will measure automatically.",
+      {
+        key: `calibration:${engine.exercise.id}:start`,
+        interrupt: true,
+      }
+    );
+    return;
+  }
+
+  const sample = calibrationSession.targetCaptures.length + 1;
+  const targetInstruction = config.targetInstruction
+    ?? `Move into a comfortable ${config.targetPhase.replaceAll("_", " ")} position.`;
+  voiceGuidance.speak(
+    `${afterReturn ? "Starting position found. " : "Starting position saved. "}`
+    + `${targetInstruction} This is sample ${sample} of 3. Hold the position; `
+    + "I will measure automatically.",
+    {
+      key: `calibration:${engine.exercise.id}:target:${sample}:${afterReturn ? "return" : "first"}`,
+      interrupt: true,
+    }
+  );
 }
 
 function cancelCalibration() {
   const wasActive = Boolean(calibrationSession);
   calibrationSession = null;
   calibrationDraft = null;
+  voiceGuidance.cancel();
   calibrationOverlay?.classList.add("hidden");
   if (wasActive) calibrationReturnFocus?.focus();
 }
@@ -1887,6 +2087,10 @@ function setFeedbackBanner(state, cue = "") {
     symbol.textContent = "✓";
     title.textContent = "Hand tracking ready";
     detail.textContent = "All 21 hand landmarks are visible at a usable size";
+  } else if (state === "finished") {
+    symbol.textContent = "✓";
+    title.textContent = "Exercise finished by you";
+    detail.textContent = "You can now complete or skip the optional check-in";
   } else {
     symbol.textContent = "●";
     title.textContent = "Get into position";
@@ -1972,10 +2176,7 @@ async function activateCameraGuide() {
     running = true;
     lastVideoTime = -1;
     combinedPoseHistory = [];
-    sessionStartedAt = new Date().toISOString();
-    Object.keys(sessionCueCounts).forEach(k => delete sessionCueCounts[k]);
-    Object.keys(sessionAngleStats).forEach(k => delete sessionAngleStats[k]);
-    sessionSymmetryWarnings = 0;
+    beginExerciseSession();
     resetSpokenCoaching();
     configureFallMonitoring(engine.exercise);
     if (fallReadinessEl.dataset.state === "ready") {
@@ -1997,8 +2198,11 @@ async function activateCameraGuide() {
     } else {
       setupTip.textContent = cameraSetupTip(engine.exercise);
     }
-    toggleBtn.innerHTML = 'Stop camera guide <span aria-hidden="true">■</span>';
+    toggleBtn.innerHTML = 'Pause camera guide <span aria-hidden="true">Ⅱ</span>';
     toggleBtn.disabled = false;
+    finishExerciseBtn.disabled = false;
+    cameraSessionHintEl.textContent =
+      "Pausing only stops the camera. Choose “Finish exercise and check in” when you decide you are done.";
     renderFrame();
     const clinicianNote = activeDose(engine.exercise).notes;
     const spokenInstruction = [
@@ -2020,8 +2224,7 @@ async function activateCameraGuide() {
 }
 
 function deactivateCameraGuide({
-  showCheckin = true,
-  statusMessage = "Stopped",
+  statusMessage = "Camera paused — exercise not marked finished",
 } = {}) {
   running = false;
   voiceGuidance.cancel();
@@ -2038,14 +2241,18 @@ function deactivateCameraGuide({
   handFrameGuide.classList.add("hidden");
   handFrameGuide.classList.remove("is-arm-mode");
   setupTip.textContent = cameraSetupTip(engine.exercise);
-  toggleBtn.innerHTML = 'Start camera guide <span aria-hidden="true">→</span>';
+  toggleBtn.innerHTML = exerciseSessionActive
+    ? 'Resume camera guide <span aria-hidden="true">→</span>'
+    : 'Start camera guide <span aria-hidden="true">→</span>';
+  finishExerciseBtn.disabled = !exerciseSessionActive;
+  cameraSessionHintEl.textContent = exerciseSessionActive
+    ? "Your exercise is paused and has not been marked finished. Resume the camera or finish when you are ready."
+    : "Stopping the camera does not mark an exercise as finished.";
   handTrackingToggle.disabled = !handLandmarker;
   statusEl.textContent = statusMessage;
   setFeedbackBanner("ready");
   renderFallReadiness(engine.exercise);
 
-  flushSession();
-  if (showCheckin) showPainCheckin("after");
 }
 
 async function startHandPreview() {
@@ -2102,8 +2309,66 @@ function stopHandPreview() {
   setFeedbackBanner("ready");
 }
 
-function flushSession() {
-  if (!isLoggedIn() || engine.repCount === 0 || !sessionStartedAt) return;
+function clearSessionMeasurements() {
+  Object.keys(sessionCueCounts).forEach(k => delete sessionCueCounts[k]);
+  Object.keys(sessionAngleStats).forEach(k => delete sessionAngleStats[k]);
+  sessionSymmetryWarnings = 0;
+}
+
+function resetExerciseProgressForNewSession() {
+  engine.changeExercise(
+    exSelect.value,
+    sideSelect.value,
+    getCalibration(exSelect.value, sideSelect.value)
+  );
+  smoother.state = {};
+  combinedPoseHistory = [];
+  if (holdInterval) {
+    clearHoldTimer(activeDose(engine.exercise).holdSeconds);
+  }
+  holdTimerSection.classList.add("hidden");
+  progressSection.classList.remove("hidden");
+  repCountEl.textContent = "0";
+  setCompleteBadgeEl?.classList.add("hidden");
+  cueListEl.innerHTML = "";
+  symWarnEl.classList.add("hidden");
+  progressEl.style.width = "0%";
+  progressLbl.textContent = "Position yourself to start";
+  renderPoseStrip(engine.exercise, engine.stages[0]);
+  renderStaticPhaseFlow(engine);
+  resetSpokenCoaching();
+  setFeedbackBanner("ready");
+}
+
+function beginExerciseSession() {
+  if (exerciseSessionActive) return;
+  resetExerciseProgressForNewSession();
+  exerciseSessionActive = true;
+  sessionStartedAt = new Date().toISOString();
+  clearSessionMeasurements();
+}
+
+function discardExerciseSession() {
+  exerciseSessionActive = false;
+  sessionStartedAt = null;
+  clearSessionMeasurements();
+  finishExerciseBtn.disabled = true;
+  cameraSessionHintEl.textContent =
+    "Stopping the camera does not mark an exercise as finished.";
+}
+
+function completeExerciseSession() {
+  const shouldRecord =
+    exerciseSessionActive &&
+    isLoggedIn() &&
+    engine.repCount > 0 &&
+    Boolean(sessionStartedAt);
+
+  if (!shouldRecord) {
+    discardExerciseSession();
+    return;
+  }
+
   const endedAt = new Date().toISOString();
   const ex = engine.exercise;
   const dose = activeDose(ex);
@@ -2136,11 +2401,7 @@ function flushSession() {
     angle_summaries:         angleSummaries,
   }).catch(() => {});
 
-  // Reset for the next exercise
-  sessionStartedAt = new Date().toISOString();
-  Object.keys(sessionCueCounts).forEach(k => delete sessionCueCounts[k]);
-  Object.keys(sessionAngleStats).forEach(k => delete sessionAngleStats[k]);
-  sessionSymmetryWarnings = 0;
+  discardExerciseSession();
 }
 
 // ── Pain check-in ─────────────────────────────────────────────────────────────
@@ -2157,7 +2418,7 @@ let painCheckinState = null;
 function painQuestion(context) {
   return context === "before"
     ? "Before we begin, what is your pain level right now, from zero to ten?"
-    : "Now that you have finished, what is your pain level, from zero to ten?";
+    : "You marked this exercise as finished. What is your pain level now, from zero to ten?";
 }
 
 function recoveryQuestion(context) {
@@ -2306,8 +2567,26 @@ painSkipBtn.addEventListener("click", () => {
 toggleBtn.addEventListener("click", async () => {
   if (running) deactivateCameraGuide();
   else if (!hasPathwayAccess()) return;
+  else if (exerciseSessionActive) await activateCameraGuide();
   else if (isLoggedIn()) showPainCheckin("before", { startAfter: true });
   else await activateCameraGuide();
+});
+
+finishExerciseBtn.addEventListener("click", () => {
+  if (!exerciseSessionActive) return;
+  if (running) {
+    deactivateCameraGuide({
+      statusMessage: "Camera stopped — finishing exercise",
+    });
+  }
+  completeExerciseSession();
+  toggleBtn.innerHTML = 'Start camera guide <span aria-hidden="true">→</span>';
+  finishExerciseBtn.disabled = true;
+  cameraSessionHintEl.textContent =
+    "Exercise marked finished. Complete the optional check-in, or skip it.";
+  statusEl.textContent = "Exercise marked finished";
+  setFeedbackBanner("finished");
+  showPainCheckin("after");
 });
 
 handTrackingToggle.addEventListener("click", async () => {

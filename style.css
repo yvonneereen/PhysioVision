@@ -2509,7 +2509,40 @@ body.fall-safety-open {
 
 .camera-button {
   width: 100%;
+  margin-top: 0;
+}
+
+.camera-session-actions {
+  display: grid;
+  gap: 12px;
   margin-top: 4px;
+}
+
+.finish-exercise-button {
+  width: 100%;
+  border: 2px solid var(--ink);
+  color: var(--ink);
+  background: #fff;
+  box-shadow: none;
+}
+
+.finish-exercise-button:not(:disabled):hover {
+  color: #fff;
+  background: var(--ink);
+}
+
+.finish-exercise-button:disabled {
+  border-color: rgba(25, 56, 58, 0.2);
+  color: rgba(25, 56, 58, 0.46);
+  background: rgba(255, 255, 255, 0.72);
+  cursor: not-allowed;
+}
+
+.camera-session-hint {
+  margin: 9px 2px 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .hand-tracking-card {

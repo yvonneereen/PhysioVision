@@ -1525,6 +1525,7 @@ let calibrationReturnFocus = openCalibrationBtn;
 
 async function openCalibrationFlow(event) {
   const trigger = event.currentTarget;
+  const enterCalibrationDirectly = trigger === openCalibrationPrimary;
   cameraSetupStatus.hidden = true;
   cameraSetupStatus.textContent = "";
   if (!engine.exercise.calibration) {
@@ -1552,7 +1553,12 @@ async function openCalibrationFlow(event) {
   calibrationDraft = null;
   calibrationSession = {
     exerciseId: engine.exercise.id,
-    step: "intro",
+    // The large camera-setup call to action already explains what will happen.
+    // Take that path straight to the first calibration position instead of
+    // making the user press a second, ambiguous "Begin" button. The smaller
+    // recalibration control keeps the introduction because it may be opened
+    // while a camera session is already running.
+    step: enterCalibrationDirectly ? "start" : "intro",
     startFrames: null,
     targetCaptures: [],
     capture: null,
@@ -1884,7 +1890,7 @@ function setFeedbackBanner(state, cue = "") {
   } else {
     symbol.textContent = "●";
     title.textContent = "Get into position";
-    detail.textContent = "Your guidance will appear here";
+    detail.textContent = "Live guidance appears here";
   }
 }
 

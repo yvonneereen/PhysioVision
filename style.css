@@ -2358,6 +2358,7 @@ body.fall-safety-open {
   display: flex;
   align-items: center;
   gap: 13px;
+  min-width: 0;
   min-height: 69px;
   margin-bottom: 18px;
   padding: 11px 14px;
@@ -2365,6 +2366,11 @@ body.fall-safety-open {
   color: #255a3d;
   background: var(--green-light);
   transition: background 0.2s ease, color 0.2s ease;
+}
+
+.feedback-banner > div {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .feedback-banner.needs-adjustment {
@@ -2409,6 +2415,8 @@ body.fall-safety-open {
 .feedback-banner div > span {
   opacity: 0.72;
   font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .phase-flow {
@@ -6062,6 +6070,17 @@ details.metrics summary {
 
   .practice-app {
     grid-template-columns: 1fr;
+    height: auto;
+    overflow: visible;
+  }
+
+  .camera-column {
+    min-height: clamp(420px, 76vh, 680px);
+  }
+
+  .panel {
+    height: auto;
+    overflow: visible;
   }
 
   .stage {

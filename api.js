@@ -199,6 +199,10 @@ export async function requestSlackLinkCode() {
   return request("POST", "/auth/slack/link-code/", {});
 }
 
+export async function disconnectSlack() {
+  return request("DELETE", "/auth/slack/link-code/");
+}
+
 // ── Sessions ──────────────────────────────────────────────────
 
 export async function postSession(session) {
@@ -271,6 +275,10 @@ export async function confirmConsultation(id) {
 
 export async function cancelConsultation(id) {
   return request("POST", `/consultations/${id}/cancel/`);
+}
+
+export async function completeConsultation(id) {
+  return request("POST", `/consultations/${id}/complete/`);
 }
 
 export async function acceptConsultation(id) {

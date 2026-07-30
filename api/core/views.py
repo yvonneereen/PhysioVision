@@ -1139,6 +1139,24 @@ class SlackLinkCodeView(APIView):
             status=status.HTTP_201_CREATED,
         )
 
+    def delete(self, request):
+        """Unlink the clinician's Slack account and retire any pending codes."""
+        if (
+            request.user.role != UserRole.CLINICIAN
+            or not hasattr(request.user, "clinician_profile")
+        ):
+            return Response(
+                {"detail": "A clinician account is required."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        clinician = request.user.clinician_profile
+        clinician.slack_user_id = ""
+        clinician.save(update_fields=["slack_user_id", "updated_at"])
+        SlackLinkCode.objects.filter(
+            clinician=clinician, used_at__isnull=True,
+        ).update(used_at=timezone.now())
+        return Response({"slack_linked": False}, status=status.HTTP_200_OK)
+
 
 class ClinicianPatientsView(APIView):
     permission_classes = [IsAuthenticated]

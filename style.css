@@ -297,6 +297,17 @@ textarea:focus-visible {
   box-shadow: 0 14px 38px rgba(239, 91, 61, 0.32);
 }
 
+.button-resolve {
+  color: #fff;
+  background: var(--green);
+  box-shadow: 0 10px 32px rgba(63, 139, 97, 0.22);
+}
+
+.button-resolve:hover {
+  background: #357a52;
+  box-shadow: 0 14px 38px rgba(63, 139, 97, 0.3);
+}
+
 .button-dark {
   color: var(--white);
   background: var(--ink);
@@ -4149,17 +4160,22 @@ details.metrics summary {
   background: var(--cream);
 }
 
-.patient-plan-marker {
+.patient-plan-row .patient-plan-marker {
   display: grid;
-  min-width: 38px;
-  height: 38px;
-  padding: 0 9px;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
   place-items: center;
   border-radius: 999px;
-  color: var(--green);
-  background: var(--mint-light);
-  font-size: 12px;
-  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(145deg, #4d9d70, var(--green));
+  box-shadow:
+    0 4px 10px rgba(63, 139, 97, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
 }
 
 .patient-plan-row strong,
@@ -5044,6 +5060,7 @@ details.metrics summary {
 }
 .consult-confirmed { background: color-mix(in srgb, var(--mint) 45%, transparent); color: var(--green); }
 .consult-requested { background: color-mix(in srgb, var(--coral) 30%, transparent); color: var(--coral-dark); }
+.consult-completed { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green); }
 .consult-cancelled, .consult-no_show { color: var(--muted); }
 
 @media (max-width: 720px) {

@@ -18,7 +18,7 @@ import {
   saveCalibration,
   validateCalibrationCapture,
 } from "./personalization.js";
-import { postSession, postPainCheckin, postCalibration, isLoggedIn } from "./api.js";
+import { postSession, postPainCheckin, postCalibration, isLoggedIn } from "./api.js?v=22";
 import { DRAFT_EXERCISES } from "./exercises/catalog.js";
 import {
   parsePainLevel,
@@ -1850,6 +1850,16 @@ function stopHandPreview() {
   setFeedbackBanner("ready");
 }
 
+// Derive a 0–100 movement-quality score from how often form cues fired and
+// symmetry warnings triggered, relative to the reps performed. A clean session
+// (no faults) scores 100; each fault-per-rep costs up to 50 points.
+function movementQualityScore(cuesTriggered, symmetryWarnings, reps) {
+  if (!reps) return null;
+  const cueFaults = cuesTriggered.reduce((sum, c) => sum + (c.trigger_count || 0), 0);
+  const faultRate = (cueFaults + (symmetryWarnings || 0)) / reps;
+  return Math.max(0, Math.min(100, Math.round(100 - faultRate * 50)));
+}
+
 function flushSession() {
   if (!isLoggedIn() || engine.repCount === 0 || !sessionStartedAt) return;
   const endedAt = new Date().toISOString();
@@ -1882,6 +1892,7 @@ function flushSession() {
     cues_triggered:          cuesTriggered,
     symmetry_warnings_count: sessionSymmetryWarnings,
     angle_summaries:         angleSummaries,
+    quality_score:           movementQualityScore(cuesTriggered, sessionSymmetryWarnings, engine.repCount),
   }).catch(() => {});
 
   // Reset for the next exercise

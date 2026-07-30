@@ -55,6 +55,21 @@ class ConsultationViewSet(ModelViewSet):
         # Either party may cancel their own consultation.
         return self._set_status(ConsultationStatus.CANCELLED)
 
+    @action(detail=True, methods=['post'])
+    def complete(self, request, pk=None):
+        # Clinician marks a consultation as resolved once the session is done.
+        if request.user.role != UserRole.CLINICIAN:
+            raise PermissionDenied('Only the clinician can resolve a consultation.')
+        consultation = self.get_object()
+        if consultation.status not in (
+            ConsultationStatus.REQUESTED,
+            ConsultationStatus.CONFIRMED,
+        ):
+            raise ValidationError({
+                'detail': 'Only an active consultation can be resolved.'
+            })
+        return self._set_status(ConsultationStatus.COMPLETED)
+
     def perform_create(self, serializer):
         if (
             self.request.user.role != UserRole.PATIENT

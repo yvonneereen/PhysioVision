@@ -12,7 +12,7 @@ import {
   isLoggedIn,
   selectPatientPathway,
   updateConsultation,
-} from "./api.js?v=21";
+} from "./api.js?v=22";
 import {
   analysePatientTrend,
   isCurrentPrescription,

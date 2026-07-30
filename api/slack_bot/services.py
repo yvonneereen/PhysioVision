@@ -101,8 +101,16 @@ def on_escalation_created(sender, instance, created, **kwargs):
         logger.exception("Slack alert failed for escalation %s", instance.id)
 
 
-def _channel():
-    return getattr(settings, 'SLACK_CHANNEL_ID', '#physiovision-alerts')
+def _dm_channel(clinician):
+    """
+    Open (or reuse) a direct-message channel with a linked clinician and return
+    its channel id. Returns None if the clinician hasn't linked Slack.
+    """
+    if not clinician or not getattr(clinician, "slack_user_id", ""):
+        return None
+    client = _get_slack_client()
+    resp = client.conversations_open(users=clinician.slack_user_id)
+    return resp["channel"]["id"]
 
 
 def _patient_name(patient):
@@ -111,17 +119,29 @@ def _patient_name(patient):
 
 def post_in_patient_thread(patient, *, text=None, blocks=None):
     """
-    Post a message into the patient's dedicated thread in the single alerts
-    channel. Lazily creates the parent thread message the first time and stores
-    its timestamp on the profile, so all activity about a patient stays grouped.
+    DM the patient's own physiotherapist a message in a dedicated per-patient
+    thread. There is no shared channel — every clinician gets their own private
+    DM thread. Skips silently if Slack isn't configured or the patient's
+    clinician hasn't linked their Slack account. Lazily creates the parent
+    thread message and re-creates it if the stored timestamp is stale (e.g. the
+    patient was reassigned to a different clinician).
     """
     if not getattr(settings, 'SLACK_BOT_TOKEN', ''):
         return None
 
-    client = _get_slack_client()
-    channel = _channel()
+    from slack_sdk.errors import SlackApiError
 
-    if not patient.slack_thread_ts:
+    channel = _dm_channel(patient.primary_clinician)
+    if not channel:
+        logger.info(
+            "No linked clinician for %s — skipping Slack alert.",
+            _patient_name(patient),
+        )
+        return None
+
+    client = _get_slack_client()
+
+    def _create_parent():
         parent = client.chat_postMessage(
             channel=channel,
             text=f":thread: Patient thread — {_patient_name(patient)}",
@@ -129,12 +149,68 @@ def post_in_patient_thread(patient, *, text=None, blocks=None):
         patient.slack_thread_ts = parent.get("ts", "")
         patient.save(update_fields=["slack_thread_ts", "updated_at"])
 
-    return client.chat_postMessage(
-        channel=channel,
-        thread_ts=patient.slack_thread_ts or None,
-        text=text,
-        blocks=blocks,
-    )
+    if not patient.slack_thread_ts:
+        _create_parent()
+
+    try:
+        return client.chat_postMessage(
+            channel=channel,
+            thread_ts=patient.slack_thread_ts or None,
+            text=text,
+            blocks=blocks,
+        )
+    except SlackApiError:
+        # Stored thread ts is from another channel — start a fresh thread here.
+        _create_parent()
+        return client.chat_postMessage(
+            channel=channel,
+            thread_ts=patient.slack_thread_ts or None,
+            text=text,
+            blocks=blocks,
+        )
+
+
+def _triage_channel():
+    return getattr(settings, 'SLACK_TRIAGE_CHANNEL_ID', '')
+
+
+def _post_to_triage(patient, *, text=None, blocks=None):
+    """
+    Post a standalone alert to the shared triage channel for patients with no
+    linked clinician to DM, so any physio can pick them up. Skips if no triage
+    channel is configured.
+    """
+    channel = _triage_channel()
+    if not channel:
+        logger.info(
+            "No linked clinician and no triage channel — skipping alert for %s.",
+            _patient_name(patient),
+        )
+        return None
+    return _get_slack_client().chat_postMessage(channel=channel, text=text, blocks=blocks)
+
+
+def claim_patient(clinician, patient_id):
+    """
+    Assign an unclaimed patient to the clinician who clicked *Claim* in triage.
+    Resets the Slack thread so future activity starts fresh in the new
+    clinician's DM. Returns (patient, error).
+    """
+    from api.core.models import PatientProfile
+
+    try:
+        patient = PatientProfile.objects.select_related('user', 'primary_clinician').get(id=patient_id)
+    except (PatientProfile.DoesNotExist, ValueError, TypeError):
+        return None, "That patient no longer exists."
+
+    if patient.primary_clinician_id and patient.primary_clinician_id != clinician.id:
+        already = patient.primary_clinician.user.get_full_name() or "another clinician"
+        return None, f"{patient.user.first_name} is already assigned to {already}."
+
+    patient.primary_clinician = clinician
+    patient.slack_thread_ts = ""  # start a fresh thread in the claiming clinician's DM
+    patient.save(update_fields=["primary_clinician", "slack_thread_ts", "updated_at"])
+    return patient, None
 
 
 def _post_escalation_alert(escalation):
@@ -146,32 +222,44 @@ def _post_escalation_alert(escalation):
     trigger    = TRIGGER_LABELS.get(escalation.trigger_type, escalation.trigger_type)
     frontend   = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
 
-    blocks = [
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f":rotating_light: *New escalation — {name}*\n*Trigger:* {trigger}\n{escalation.description}",
-            },
+    section = {
+        "type": "section",
+        "text": {
+            "type": "mrkdwn",
+            "text": f":rotating_light: *New escalation — {name}*\n*Trigger:* {trigger}\n{escalation.description}",
         },
-        {
-            "type": "actions",
-            "elements": [
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "Open dashboard"},
-                    "url": frontend,
-                    "style": "primary",
-                }
-            ],
-        },
-    ]
+    }
+    open_dashboard = {
+        "type": "button",
+        "text": {"type": "plain_text", "text": "Open dashboard"},
+        "url": frontend,
+        "style": "primary",
+    }
+    text = f"New escalation for {name}: {trigger}"
 
-    post_in_patient_thread(
-        patient,
-        blocks=blocks,
-        text=f"New escalation for {name}: {trigger}",
-    )
+    clinician = patient.primary_clinician
+    if clinician and clinician.slack_user_id:
+        # The patient has a linked physiotherapist — DM them privately.
+        post_in_patient_thread(
+            patient,
+            blocks=[section, {"type": "actions", "elements": [open_dashboard]}],
+            text=text,
+        )
+    else:
+        # Unassigned/unlinked — drop it in the shared triage queue with a Claim
+        # button so any physio can take the patient on.
+        claim = {
+            "type": "button",
+            "text": {"type": "plain_text", "text": "Claim patient"},
+            "action_id": "claim_patient",
+            "value": str(patient.id),
+            "style": "primary",
+        }
+        _post_to_triage(
+            patient,
+            blocks=[section, {"type": "actions", "elements": [claim, open_dashboard]}],
+            text=f"Unclaimed — {text}",
+        )
 
 
 # ── Daily digest ──────────────────────────────────────────────
@@ -193,28 +281,25 @@ def refresh_all_escalations():
     return total
 
 
-def send_daily_digest():
+def _digest_lines_for(clinician):
+    """Build the digest text for a single clinician's own roster."""
     from api.consultations.models import Escalation
     from api.core.analytics import adherence_pct
     from api.core.models import PatientProfile
     from api.sessions.models import PainCheckin, Session
 
-    # Detect time-based escalations (missed sessions) before summarising.
-    refresh_all_escalations()
-
-    if not getattr(settings, 'SLACK_BOT_TOKEN', ''):
-        logger.warning("SLACK_BOT_TOKEN not configured — skipping digest")
-        return
-
     yesterday = timezone.now() - timedelta(hours=24)
+    roster = {"patient__primary_clinician": clinician}
 
-    open_escalations   = Escalation.objects.filter(status='open').select_related('patient__user')
-    sessions_yesterday = Session.objects.filter(started_at__gte=yesterday).select_related('patient__user', 'exercise')
-    high_pain          = PainCheckin.objects.filter(checked_at__gte=yesterday, pain_level__gte=7).select_related('patient__user')
+    open_escalations   = Escalation.objects.filter(status='open', **roster).select_related('patient__user')
+    sessions_yesterday = Session.objects.filter(started_at__gte=yesterday, **roster).select_related('patient__user', 'exercise')
+    high_pain          = PainCheckin.objects.filter(checked_at__gte=yesterday, pain_level__gte=7, **roster).select_related('patient__user')
 
     flagged_ids = set(open_escalations.values_list('patient_id', flat=True))
-    all_patients = list(PatientProfile.objects.prefetch_related('sessions', 'prescriptions'))
-    on_track = [p for p in all_patients if p.id not in flagged_ids]
+    my_patients = list(
+        PatientProfile.objects.filter(primary_clinician=clinician).prefetch_related('sessions', 'prescriptions')
+    )
+    on_track = [p for p in my_patients if p.id not in flagged_ids]
 
     lines = [f":sun_with_face: *PhysioVision daily digest — {timezone.now().strftime('%A, %d %B')}*\n"]
 
@@ -245,10 +330,29 @@ def send_daily_digest():
             lines.append(f"  • {_patient_name(p)} — {a}% of prescribed sessions")
 
     lines.append(f"\n:white_check_mark: *{len(on_track)} patient(s) on track* (no open flags).")
+    return "\n".join(lines)
+
+
+def send_daily_digest():
+    from api.core.models import ClinicianProfile
+
+    # Detect time-based escalations (missed sessions) before summarising.
+    refresh_all_escalations()
+
+    if not getattr(settings, 'SLACK_BOT_TOKEN', ''):
+        logger.warning("SLACK_BOT_TOKEN not configured — skipping digest")
+        return
 
     client = _get_slack_client()
-    client.chat_postMessage(channel=_channel(), text="\n".join(lines))
-    logger.info("Daily digest sent")
+    linked = ClinicianProfile.objects.exclude(slack_user_id="")
+    sent = 0
+    for clinician in linked:
+        dm = _dm_channel(clinician)
+        if not dm:
+            continue
+        client.chat_postMessage(channel=dm, text=_digest_lines_for(clinician))
+        sent += 1
+    logger.info("Daily digest sent to %d clinician(s)", sent)
 
 
 # ── On-demand patient summary blocks ─────────────────────────

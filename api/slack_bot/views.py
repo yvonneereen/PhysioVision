@@ -52,8 +52,7 @@ if settings.SLACK_BOT_TOKEN and settings.SLACK_SIGNING_SECRET:
         )
         handler = SlackRequestHandler(slack_app)
 
-        @slack_app.event("app_mention")
-        def handle_mention(event, say):
+        def _dispatch(event, say):
             text = event.get("text", "").lower()
 
             # Account linking: `@Physio Assistant link 483920`. Handled first so the code
@@ -368,6 +367,47 @@ if settings.SLACK_BOT_TOKEN and settings.SLACK_SIGNING_SECRET:
                     "• `@Physio Assistant accept plan for [name]` — turn the draft into prescriptions\n"
                     "• `@Physio Assistant summary` — whole-clinic overview"
                 )
+
+        @slack_app.event("app_mention")
+        def handle_mention(event, say):
+            # Bot @-mentioned in a channel.
+            _dispatch(event, say)
+
+        @slack_app.event("message")
+        def handle_direct_message(event, say):
+            # Private 1:1 DM to the bot — each clinician's own thread, no shared
+            # channel. Channel messages arrive via app_mention instead; ignore
+            # the bot's own posts and non-user events (edits, joins, etc.).
+            if event.get("channel_type") != "im":
+                return
+            if event.get("bot_id") or event.get("subtype"):
+                return
+            _dispatch(event, say)
+
+        @slack_app.action("claim_patient")
+        def handle_claim_patient(ack, body, say):
+            # A physio clicked "Claim" on a triage alert — assign the patient to
+            # them so future alerts DM them privately.
+            ack()
+            from .services import claim_patient, find_clinician_by_slack_user
+
+            slack_user = body.get("user", {}).get("id", "")
+            actions = body.get("actions", [])
+            patient_id = actions[0].get("value") if actions else None
+
+            clinician = find_clinician_by_slack_user(slack_user)
+            if not clinician:
+                say("Link your account first: send `@Physio Assistant link <code>`.")
+                return
+
+            patient, error = claim_patient(clinician, patient_id)
+            if error:
+                say(error)
+                return
+            say(
+                f":white_check_mark: <@{slack_user}> claimed *{patient.user.first_name}* — "
+                "future alerts will come to your DMs."
+            )
 
         @csrf_exempt
         def slack_events(request):

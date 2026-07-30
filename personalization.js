@@ -2,7 +2,7 @@ import {
   isLoggedIn,
   patchMe,
   postWellnessScreening,
-} from "./api.js";
+} from "./api.js?v=22";
 
 const PROFILE_KEY = "physiovision.profile.v1";
 const CALIBRATION_KEY = "physiovision.calibrations.v1";

@@ -246,7 +246,9 @@ AUTH_TOKEN_TTL_HOURS = env.int('AUTH_TOKEN_TTL_HOURS', default=12)
 # Slack Physio Assistant AI
 SLACK_BOT_TOKEN     = env('SLACK_BOT_TOKEN', default='')
 SLACK_SIGNING_SECRET = env('SLACK_SIGNING_SECRET', default='')
-SLACK_CHANNEL_ID    = env('SLACK_CHANNEL_ID', default='#physiovision-alerts')
+# Shared channel for escalations about patients with no linked clinician.
+# The bot must be a member. Leave blank to skip such alerts entirely.
+SLACK_TRIAGE_CHANNEL_ID = env('SLACK_TRIAGE_CHANNEL_ID', default='')
 
 # Frontend base URL (used in Slack deep links)
 FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:4173')

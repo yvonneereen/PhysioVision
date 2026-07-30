@@ -1,10 +1,10 @@
 import {
   getMe, getPatients, isLoggedIn,
   getExercises, getPrescriptions, createPrescription,
-  getConsultations, confirmConsultation, cancelConsultation,
+  getConsultations, confirmConsultation, cancelConsultation, completeConsultation,
   getPatientSessions, getPatientPainCheckins,
-  requestSlackLinkCode,
-} from "./api.js";
+  requestSlackLinkCode, disconnectSlack,
+} from "./api.js?v=22";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = ["January", "February", "March", "April", "May", "June",
@@ -342,6 +342,7 @@ function consultRow(c, withActions) {
   const actions = withActions ? `
     <span class="consult-actions">
       ${c.status === "requested" ? `<button class="button button-coral button-small" data-confirm="${c.id}">Confirm</button>` : ""}
+      ${["requested", "confirmed"].includes(c.status) ? `<button class="button button-small button-resolve" data-complete="${c.id}">Resolve</button>` : ""}
       ${["requested", "confirmed"].includes(c.status) ? `<button class="button button-light button-small" data-cancel="${c.id}">Cancel</button>` : ""}
     </span>` : `<span class="consult-status consult-${c.status}">${c.status}</span>`;
   return `
@@ -367,13 +368,15 @@ function renderConsultations() {
 }
 
 async function handleConsultAction(e) {
-  const confirmId = e.target.getAttribute("data-confirm");
-  const cancelId  = e.target.getAttribute("data-cancel");
-  if (!confirmId && !cancelId) return;
+  const confirmId  = e.target.getAttribute("data-confirm");
+  const cancelId   = e.target.getAttribute("data-cancel");
+  const completeId = e.target.getAttribute("data-complete");
+  if (!confirmId && !cancelId && !completeId) return;
   e.target.disabled = true;
   try {
-    if (confirmId) await confirmConsultation(confirmId);
-    if (cancelId)  await cancelConsultation(cancelId);
+    if (confirmId)  await confirmConsultation(confirmId);
+    if (cancelId)   await cancelConsultation(cancelId);
+    if (completeId) await completeConsultation(completeId);
     state.consultations = await getConsultations().then(unwrap);
     renderConsultations();
     renderOverview(state.patients, state.consultations);
@@ -418,13 +421,17 @@ function renderClinicianInfo(me) {
   if (nameEl)   nameEl.textContent   = name;
   if (avatarEl) avatarEl.textContent = initials(name);
 
+  renderSlackState(Boolean(me.profile?.slack_linked));
+}
+
+function renderSlackState(linked) {
   const btn    = document.getElementById("slack-connect-btn");
   const status = document.getElementById("slack-connect-status");
-  if (btn && me.profile?.slack_linked) {
-    btn.textContent = "Slack connected";
-    btn.disabled = true;
-    if (status) status.textContent = "✓ Your Slack account is linked.";
-  }
+  if (!btn) return;
+  btn.disabled = false;
+  btn.dataset.linked = linked ? "true" : "false";
+  btn.textContent = linked ? "Disconnect Slack" : "Connect Slack";
+  if (status) status.textContent = linked ? "✓ Your Slack account is linked." : "";
 }
 
 async function connectSlack() {
@@ -443,6 +450,20 @@ async function connectSlack() {
     status.textContent = err.message || "Could not generate a code.";
   } finally {
     if (btn) btn.disabled = false;
+  }
+}
+
+async function disconnectSlackAccount() {
+  const btn    = document.getElementById("slack-connect-btn");
+  const status = document.getElementById("slack-connect-status");
+  if (btn) btn.disabled = true;
+  if (status) status.textContent = "Disconnecting…";
+  try {
+    await disconnectSlack();
+    renderSlackState(false);
+  } catch (err) {
+    if (btn) btn.disabled = false;
+    if (status) status.textContent = err.message || "Could not disconnect Slack.";
   }
 }
 
@@ -490,7 +511,12 @@ document.addEventListener("click", (e) => {
   const tabBtn = e.target.closest("[data-tab]");
   if (tabBtn) { switchTab(tabBtn.getAttribute("data-tab")); return; }
 
-  if (e.target.closest("#slack-connect-btn")) { connectSlack(); return; }
+  const slackBtn = e.target.closest("#slack-connect-btn");
+  if (slackBtn) {
+    if (slackBtn.dataset.linked === "true") disconnectSlackAccount();
+    else connectSlack();
+    return;
+  }
 
   const row = e.target.closest("[data-patient-id]");
   if (row && !e.target.closest(".status-pill")) {

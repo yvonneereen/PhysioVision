@@ -88,28 +88,31 @@ export class VoiceGuidance {
     } catch (_) {
       // Voice still works when storage is blocked.
     }
+    this.renderToggle();
     return this.enabled;
+  }
+
+  renderToggle() {
+    const button = this.toggleButton;
+    if (!button) return;
+
+    const active = this.enabled && this.canSpeak;
+    button.setAttribute("aria-pressed", String(active));
+    button.innerHTML = active
+      ? '<span aria-hidden="true">◖))</span> Voice on'
+      : '<span aria-hidden="true">◖×</span> Voice off';
+    button.title = this.canSpeak
+      ? "Turn spoken guidance on or off"
+      : "Spoken guidance is unavailable in this browser";
+    button.disabled = !this.canSpeak;
   }
 
   attachToggle(button) {
     if (!button) return;
-
-    const render = () => {
-      const active = this.enabled && this.canSpeak;
-      button.setAttribute("aria-pressed", String(active));
-      button.innerHTML = active
-        ? '<span aria-hidden="true">◖))</span> Voice on'
-        : '<span aria-hidden="true">◖×</span> Voice off';
-      button.title = this.canSpeak
-        ? "Turn spoken guidance on or off"
-        : "Spoken guidance is unavailable in this browser";
-      button.disabled = !this.canSpeak;
-    };
-
-    render();
+    this.toggleButton = button;
+    this.renderToggle();
     button.addEventListener("click", () => {
       this.setEnabled(!this.enabled);
-      render();
     });
   }
 

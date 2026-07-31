@@ -181,6 +181,10 @@ const handTrackingReadout   = document.getElementById("handTrackingReadout");
 const handModelStatus       = document.getElementById("handModelStatus");
 const handGuideText         = handFrameGuide?.querySelector(":scope > span");
 const soundToggle           = document.getElementById("soundToggle");
+const voiceSetupOverlay     = document.getElementById("voiceSetupOverlay");
+const voiceSetupHandsFree   = document.getElementById("voiceSetupHandsFree");
+const voiceSetupButtons     = document.getElementById("voiceSetupButtons");
+const voiceSetupStatus      = document.getElementById("voiceSetupStatus");
 const publicPracticePreview = document.getElementById("publicPracticePreview");
 const patientPracticeGate   = document.getElementById("patientPracticeGate");
 const patientPracticeGateTitle =
@@ -239,11 +243,91 @@ let fallSafetyTimer = null;
 let fallSafetySecondsRemaining = 30;
 let fallSafetyPreviousFocus = null;
 let activeFallEvent = null;
+let handsFreeVoiceEnabled = false;
+let voiceModeChosenThisSession = false;
+let voiceModeChoicePromise = null;
+let resolveVoiceModeChoice = null;
+let preExerciseCheckinCompleted = false;
 const exerciseContent = new Map(
   DRAFT_EXERCISES.map((exercise) => [exercise.id, exercise])
 );
 
 voiceGuidance.attachToggle(soundToggle);
+
+function finishVoiceModeChoice(handsFree) {
+  handsFreeVoiceEnabled = Boolean(handsFree);
+  voiceModeChosenThisSession = true;
+  voiceGuidance.setEnabled(handsFreeVoiceEnabled);
+  voiceSetupOverlay.classList.add("hidden");
+  voiceSetupHandsFree.disabled = false;
+  voiceSetupButtons.disabled = false;
+  voiceSetupStatus.textContent = "";
+  const resolve = resolveVoiceModeChoice;
+  resolveVoiceModeChoice = null;
+  voiceModeChoicePromise = null;
+  resolve?.(true);
+}
+
+function ensureVoiceModeChosen() {
+  if (voiceModeChosenThisSession) return Promise.resolve(true);
+  if (voiceModeChoicePromise) return voiceModeChoicePromise;
+
+  voiceSetupOverlay.classList.remove("hidden");
+  voiceSetupHandsFree.disabled =
+    !voiceGuidance.canSpeak || !voiceGuidance.canListen;
+  voiceSetupStatus.textContent = voiceSetupHandsFree.disabled
+    ? (
+      "Hands-free voice is unavailable in this browser. "
+      + "Choose on-screen buttons to continue."
+    )
+    : (
+      "Choose once before setup. No AI speech or microphone listening "
+      + "starts until you select an option."
+    );
+  (voiceSetupHandsFree.disabled
+    ? voiceSetupButtons
+    : voiceSetupHandsFree
+  ).focus({ preventScroll: true });
+
+  voiceModeChoicePromise = new Promise((resolve) => {
+    resolveVoiceModeChoice = resolve;
+  });
+  return voiceModeChoicePromise;
+}
+
+voiceSetupHandsFree.addEventListener("click", async () => {
+  if (!voiceGuidance.canSpeak || !voiceGuidance.canListen) return;
+
+  voiceSetupHandsFree.disabled = true;
+  voiceSetupButtons.disabled = true;
+  voiceSetupStatus.textContent = "Checking microphone permission…";
+
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error("Microphone access is unavailable in this browser.");
+    }
+    const permissionStream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+    });
+    permissionStream.getTracks().forEach((track) => track.stop());
+    finishVoiceModeChoice(true);
+  } catch (_) {
+    voiceSetupHandsFree.disabled = false;
+    voiceSetupButtons.disabled = false;
+    voiceSetupStatus.textContent =
+      "Microphone access was not allowed. Allow it and try again, "
+      + "or choose on-screen buttons.";
+    voiceSetupButtons.focus({ preventScroll: true });
+  }
+});
+
+voiceSetupButtons.addEventListener("click", () => {
+  finishVoiceModeChoice(false);
+});
+
+soundToggle?.addEventListener("click", () => {
+  if (!voiceGuidance.enabled) handsFreeVoiceEnabled = false;
+});
 
 function loadActivePrescriptions() {
   try {
@@ -356,6 +440,31 @@ function showFallSafetyResult(response, event = {}) {
   fallSafetyClose.focus({ preventScroll: true });
 }
 
+function startFallSafetyVoiceListening() {
+  if (!safetyCheckActive || fallSafetyQuestion.classList.contains("hidden")) {
+    return false;
+  }
+  return voiceGuidance.listen({
+    onStatus: (status) => {
+      fallSafetyVoiceStatus.textContent = status;
+    },
+    onError: (message) => {
+      fallSafetyVoiceStatus.textContent =
+        `${message} You can also use one of the two large buttons.`;
+    },
+    onResult: (transcript) => {
+      const response = parseWellbeingResponse(transcript);
+      fallSafetyVoiceStatus.textContent = `I heard: “${transcript}”`;
+      if (response) {
+        showFallSafetyResult(response, activeFallEvent ?? {});
+      } else {
+        fallSafetyVoiceStatus.textContent =
+          `I heard: “${transcript}”. Please say “I’m okay” or “I need help”, or use a large button.`;
+      }
+    },
+  });
+}
+
 function beginFallSafetyCheck(event) {
   if (safetyCheckActive) return;
   safetyCheckActive = true;
@@ -370,8 +479,10 @@ function beginFallSafetyCheck(event) {
   fallSafetyResult.classList.add("hidden");
   fallSafetyResult.classList.remove("fall-safety-result-safe");
   fallSafetyNoAlert.classList.add("hidden");
-  fallSafetyVoiceStatus.textContent = voiceGuidance.canListen
-    ? "Use a large button or answer by voice."
+  fallSafetyVoiceStatus.textContent = handsFreeVoiceEnabled
+    ? "Hands-free voice is on. Listening will start after the question."
+    : voiceGuidance.canListen
+      ? "Use a large button, or choose Answer by voice as a fallback."
     : "Voice input is unavailable in this browser. Use a large button.";
   fallSafetyVoice.disabled = !voiceGuidance.canListen;
   fallSafetySecondsRemaining = 30;
@@ -380,10 +491,23 @@ function beginFallSafetyCheck(event) {
   document.body.classList.add("fall-safety-open");
   fallSafetyOkay.focus({ preventScroll: true });
 
-  voiceGuidance.speak(
+  const spoken = voiceGuidance.speak(
     "We noticed a possible fall and stopped the exercise. Are you okay? Select I’m okay or I need help.",
-    { key: "possible-fall-check", interrupt: true }
+    {
+      key: "possible-fall-check",
+      interrupt: true,
+      onEnd: () => {
+        if (handsFreeVoiceEnabled && safetyCheckActive) {
+          startFallSafetyVoiceListening();
+        }
+      },
+    }
   );
+  if (!spoken && handsFreeVoiceEnabled) {
+    window.setTimeout(() => {
+      if (safetyCheckActive) startFallSafetyVoiceListening();
+    }, 200);
+  }
 
   clearFallSafetyTimer();
   fallSafetyTimer = window.setInterval(() => {
@@ -751,6 +875,7 @@ exSelect.addEventListener("change", () => {
       statusMessage: "Camera paused because the exercise changed",
     });
   }
+  preExerciseCheckinCompleted = false;
   discardExerciseSession();
   cancelCalibration();
   engine.changeExercise(
@@ -785,6 +910,7 @@ sideSelect.addEventListener("change", () => {
       statusMessage: "Camera paused because the focus side changed",
     });
   }
+  preExerciseCheckinCompleted = false;
   discardExerciseSession();
   cancelCalibration();
   engine.changeExercise(
@@ -1553,6 +1679,18 @@ let calibrationReturnFocus = openCalibrationBtn;
 
 async function openCalibrationFlow(event) {
   const trigger = event.currentTarget;
+  if (!(await ensureVoiceModeChosen())) return;
+  if (isLoggedIn() && !exerciseSessionActive && !preExerciseCheckinCompleted) {
+    showPainCheckin("before", {
+      continuation: "calibration",
+      calibrationTrigger: trigger,
+    });
+    return;
+  }
+  await startCalibrationFlow(trigger);
+}
+
+async function startCalibrationFlow(trigger) {
   cameraSetupStatus.hidden = true;
   cameraSetupStatus.textContent = "";
   if (!engine.exercise.calibration) {
@@ -2159,6 +2297,7 @@ function hasPathwayAccess() {
 
 async function activateCameraGuide() {
   if (running) return true;
+  if (!(await ensureVoiceModeChosen())) return false;
   if (!hasPathwayAccess()) return false;
   if (exerciseUsesHand(engine.exercise) && !handLandmarker) {
     statusEl.textContent = "The hand-tracking model is unavailable";
@@ -2427,15 +2566,79 @@ function recoveryQuestion(context) {
     : "Compared with before this exercise, do you feel better, about the same, worse, or are you not sure?";
 }
 
-function showPainCheckin(context = "after", { startAfter = false } = {}) {
+function continueAfterPainCheckin(completed) {
+  if (completed.continuation === "calibration") {
+    startCalibrationFlow(completed.calibrationTrigger);
+  } else if (completed.continuation === "camera" || completed.startAfter) {
+    activateCameraGuide();
+  }
+}
+
+function startPainVoiceListening({ expectedStage = null } = {}) {
+  if (
+    !painCheckinState ||
+    (expectedStage && painCheckinState.stage !== expectedStage)
+  ) {
+    return false;
+  }
+
+  return voiceGuidance.listen({
+    onStatus: (status) => {
+      voiceCheckinStatusEl.textContent = status;
+    },
+    onError: (message) => {
+      voiceCheckinStatusEl.textContent =
+        `${message} You can also use the large on-screen choices.`;
+    },
+    onResult: (transcript) => {
+      voiceCheckinStatusEl.textContent = `I heard: “${transcript}”`;
+      if (painCheckinState?.stage === "pain") {
+        acceptPainLevel(parsePainLevel(transcript));
+      } else {
+        acceptRecoveryStatus(parseRecoveryStatus(transcript));
+      }
+    },
+  });
+}
+
+function speakPainPrompt(question, key, expectedStage) {
+  const beginListening = () => {
+    if (
+      handsFreeVoiceEnabled &&
+      painCheckinState?.stage === expectedStage
+    ) {
+      startPainVoiceListening({ expectedStage });
+    }
+  };
+  const spoken = voiceGuidance.speak(question, {
+    key,
+    interrupt: true,
+    onEnd: beginListening,
+  });
+  if (!spoken && handsFreeVoiceEnabled) {
+    window.setTimeout(beginListening, 200);
+  }
+}
+
+function showPainCheckin(context = "after", {
+  startAfter = false,
+  continuation = "",
+  calibrationTrigger = null,
+} = {}) {
   if (!isLoggedIn()) {
-    if (startAfter) activateCameraGuide();
+    continueAfterPainCheckin({
+      startAfter,
+      continuation,
+      calibrationTrigger,
+    });
     return;
   }
 
   painCheckinState = {
     context,
     startAfter,
+    continuation,
+    calibrationTrigger,
     stage: "pain",
     painLevel: null,
     recoveryStatus: "",
@@ -2446,17 +2649,23 @@ function showPainCheckin(context = "after", { startAfter = false } = {}) {
     `${escapeHtml(painQuestion(context))} <span>(0 = none, 10 = severe)</span>`;
   painLevelChoicesEl.classList.remove("hidden");
   recoveryChoicesEl.classList.add("hidden");
-  voiceCheckinStatusEl.textContent = voiceGuidance.canListen
-    ? "You can choose a number or answer by voice."
+  voiceCheckinStatusEl.textContent = handsFreeVoiceEnabled
+    ? (
+      "Hands-free voice is on. Listen to the question, then say "
+      + "a number from zero to ten."
+    )
+    : voiceGuidance.canListen
+      ? "Choose a number, or use Answer by voice as a fallback."
     : "Voice input is unavailable in this browser. Choose a button.";
   painVoiceInputBtn.disabled = !voiceGuidance.canListen;
   painCheckinEl.classList.remove("hidden");
-  if (startAfter) toggleBtn.disabled = true;
+  if (startAfter || continuation) toggleBtn.disabled = true;
 
-  voiceGuidance.speak(painQuestion(context), {
-    key: `checkin:${context}:pain`,
-    interrupt: true,
-  });
+  speakPainPrompt(
+    painQuestion(context),
+    `checkin:${context}:pain`,
+    "pain"
+  );
 }
 
 function hidePainCheckin() {
@@ -2477,13 +2686,16 @@ function beginRecoveryQuestion() {
   painLevelChoicesEl.classList.add("hidden");
   recoveryChoicesEl.classList.remove("hidden");
   painCheckinTitleEl.textContent = recoveryQuestion(painCheckinState.context);
-  voiceCheckinStatusEl.textContent = voiceGuidance.canListen
-    ? "Choose an answer or say better, same, worse, or not sure."
+  voiceCheckinStatusEl.textContent = handsFreeVoiceEnabled
+    ? "Listening will start after the question. Say better, same, worse, or not sure."
+    : voiceGuidance.canListen
+      ? "Choose an answer, or use Answer by voice as a fallback."
     : "Choose the answer that fits best.";
-  voiceGuidance.speak(recoveryQuestion(painCheckinState.context), {
-    key: `checkin:${painCheckinState.context}:recovery`,
-    interrupt: true,
-  });
+  speakPainPrompt(
+    recoveryQuestion(painCheckinState.context),
+    `checkin:${painCheckinState.context}:recovery`,
+    "recovery"
+  );
 }
 
 function finishPainCheckin() {
@@ -2497,8 +2709,11 @@ function finishPainCheckin() {
     checked_at: new Date().toISOString(),
   }).catch(() => {});
 
+  if (completed.context === "before") {
+    preExerciseCheckinCompleted = true;
+  }
   hidePainCheckin();
-  if (completed.startAfter) activateCameraGuide();
+  continueAfterPainCheckin(completed);
 }
 
 function acceptPainLevel(level) {
@@ -2539,36 +2754,26 @@ painCheckinEl.querySelectorAll("[data-recovery]").forEach((btn) => {
 });
 
 painVoiceInputBtn.addEventListener("click", () => {
-  if (!painCheckinState) return;
-  voiceGuidance.listen({
-    onStatus: (status) => {
-      voiceCheckinStatusEl.textContent = status;
-    },
-    onError: (message) => {
-      voiceCheckinStatusEl.textContent = message;
-    },
-    onResult: (transcript) => {
-      voiceCheckinStatusEl.textContent = `I heard: “${transcript}”`;
-      if (painCheckinState?.stage === "pain") {
-        acceptPainLevel(parsePainLevel(transcript));
-      } else {
-        acceptRecoveryStatus(parseRecoveryStatus(transcript));
-      }
-    },
-  });
+  startPainVoiceListening();
 });
 
 painSkipBtn.addEventListener("click", () => {
-  const startAfter = painCheckinState?.startAfter;
+  const completed = painCheckinState ? { ...painCheckinState } : null;
+  if (completed?.context === "before") {
+    preExerciseCheckinCompleted = true;
+  }
   hidePainCheckin();
-  if (startAfter) activateCameraGuide();
+  if (completed) continueAfterPainCheckin(completed);
 });
 
 toggleBtn.addEventListener("click", async () => {
   if (running) deactivateCameraGuide();
   else if (!hasPathwayAccess()) return;
   else if (exerciseSessionActive) await activateCameraGuide();
-  else if (isLoggedIn()) showPainCheckin("before", { startAfter: true });
+  else if (isLoggedIn()) {
+    if (!(await ensureVoiceModeChosen())) return;
+    showPainCheckin("before", { continuation: "camera" });
+  }
   else await activateCameraGuide();
 });
 
@@ -2582,6 +2787,7 @@ finishExerciseBtn.addEventListener("click", () => {
   completeExerciseSession();
   toggleBtn.innerHTML = 'Start camera guide <span aria-hidden="true">→</span>';
   finishExerciseBtn.disabled = true;
+  preExerciseCheckinCompleted = false;
   cameraSessionHintEl.textContent =
     "Exercise marked finished. Complete the optional check-in, or skip it.";
   statusEl.textContent = "Exercise marked finished";
@@ -2603,27 +2809,7 @@ fallSafetyHelp.addEventListener("click", () => {
 });
 
 fallSafetyVoice.addEventListener("click", () => {
-  if (!safetyCheckActive || fallSafetyQuestion.classList.contains("hidden")) {
-    return;
-  }
-  voiceGuidance.listen({
-    onStatus: (status) => {
-      fallSafetyVoiceStatus.textContent = status;
-    },
-    onError: (message) => {
-      fallSafetyVoiceStatus.textContent = message;
-    },
-    onResult: (transcript) => {
-      const response = parseWellbeingResponse(transcript);
-      fallSafetyVoiceStatus.textContent = `I heard: “${transcript}”`;
-      if (response) {
-        showFallSafetyResult(response, activeFallEvent ?? {});
-      } else {
-        fallSafetyVoiceStatus.textContent =
-          `I heard: “${transcript}”. Please say “I’m okay” or “I need help”, or use a large button.`;
-      }
-    },
-  });
+  startFallSafetyVoiceListening();
 });
 
 fallSafetyClose.addEventListener("click", closeFallSafetyCheck);

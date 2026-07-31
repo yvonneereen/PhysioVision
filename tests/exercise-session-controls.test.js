@@ -54,4 +54,81 @@ assert.match(
   "the after-exercise check-in should follow explicit completion"
 );
 
+const voiceChoiceStart = source.indexOf(
+  'voiceSetupHandsFree.addEventListener("click"'
+);
+const voiceChoiceEnd = source.indexOf(
+  'voiceSetupButtons.addEventListener("click"',
+  voiceChoiceStart
+);
+assert.notEqual(
+  voiceChoiceStart,
+  -1,
+  "the exercise flow should offer hands-free voice before setup"
+);
+const voiceChoiceSource = source.slice(voiceChoiceStart, voiceChoiceEnd);
+assert.match(
+  voiceChoiceSource,
+  /getUserMedia\(\{\s*audio:\s*true,\s*\}\)/,
+  "hands-free mode should request microphone permission while the user is near the device"
+);
+assert.match(
+  voiceChoiceSource,
+  /finishVoiceModeChoice\(true\)/,
+  "successful microphone setup should enable hands-free responses"
+);
+
+const calibrationFlowStart = source.indexOf(
+  "async function openCalibrationFlow("
+);
+const calibrationFlowEnd = source.indexOf(
+  "async function startCalibrationFlow(",
+  calibrationFlowStart
+);
+assert.notEqual(
+  calibrationFlowStart,
+  -1,
+  "the camera setup entry point should exist"
+);
+const calibrationFlowSource = source.slice(
+  calibrationFlowStart,
+  calibrationFlowEnd
+);
+const voiceChoicePosition = calibrationFlowSource.indexOf(
+  "ensureVoiceModeChosen()"
+);
+const preCheckPosition = calibrationFlowSource.indexOf(
+  'showPainCheckin("before"'
+);
+const calibrationPosition = calibrationFlowSource.indexOf(
+  "startCalibrationFlow(trigger)"
+);
+assert.ok(
+  voiceChoicePosition >= 0 &&
+    preCheckPosition > voiceChoicePosition &&
+    calibrationPosition > preCheckPosition,
+  "voice choice and the pre-exercise pain check should happen before calibration"
+);
+
+const speakPainSource = functionSource(
+  "speakPainPrompt",
+  "showPainCheckin"
+);
+assert.match(
+  speakPainSource,
+  /onEnd:\s*beginListening/,
+  "hands-free listening should begin automatically after the spoken question"
+);
+assert.match(
+  speakPainSource,
+  /handsFreeVoiceEnabled/,
+  "automatic listening should only run when the user selected hands-free mode"
+);
+
+assert.match(
+  source,
+  /painVoiceInputBtn\.addEventListener\("click",[\s\S]*?startPainVoiceListening/,
+  "the manual voice button should remain available as a fallback"
+);
+
 console.log("exercise session control tests passed");

@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=55" />
+  <link rel="stylesheet" href="style.css?v=56" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -638,7 +638,7 @@
         <span aria-hidden="true">←</span> Back to my home
       </button>
       <div class="section-kicker section-kicker-light">
-        <span>02</span>
+        <span aria-hidden="true"></span>
         <span>Live exercise guide</span>
       </div>
 
@@ -884,6 +884,57 @@
                   <button id="calibrationCancel" class="text-button calibration-cancel" type="button">Cancel</button>
                   <button id="calibrationAction" class="button button-coral" type="button" hidden>Save personal range</button>
                 </div>
+              </div>
+            </div>
+            <div
+              id="voiceSetupOverlay"
+              class="voice-setup-overlay hidden"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="voiceSetupTitle"
+              aria-describedby="voiceSetupDescription"
+            >
+              <div class="voice-setup-dialog">
+                <span class="voice-setup-eyebrow">Before movement begins</span>
+                <h3 id="voiceSetupTitle">How would you like to answer?</h3>
+                <p id="voiceSetupDescription">
+                  Choose now, while you are still near your device. No AI
+                  guidance will speak until you make this choice.
+                </p>
+                <div class="voice-setup-options">
+                  <button
+                    id="voiceSetupHandsFree"
+                    class="voice-setup-option is-hands-free"
+                    type="button"
+                  >
+                    <span class="voice-setup-icon" aria-hidden="true">🎙</span>
+                    <span>
+                      <strong>Use hands-free voice</strong>
+                      <small>
+                        Hear each question, then answer aloud automatically
+                        without returning to press a button.
+                      </small>
+                    </span>
+                  </button>
+                  <button
+                    id="voiceSetupButtons"
+                    class="voice-setup-option"
+                    type="button"
+                  >
+                    <span class="voice-setup-icon" aria-hidden="true">○</span>
+                    <span>
+                      <strong>Use on-screen buttons</strong>
+                      <small>
+                        Keep spoken guidance and microphone listening off.
+                      </small>
+                    </span>
+                  </button>
+                </div>
+                <p id="voiceSetupStatus" class="voice-setup-status" role="alert"></p>
+                <small class="voice-setup-privacy">
+                  Hands-free mode asks for microphone permission. Voice
+                  recognition may be processed by your browser provider.
+                </small>
               </div>
             </div>
           </div>
@@ -2281,7 +2332,7 @@
   <script type="module" src="patient-dashboard.js?v=15"></script>
   <script type="module" src="therapist.js?v=15"></script>
   <script type="module" src="exercise-library.js?v=15"></script>
-  <script type="module" src="main.js?v=52"></script>
+  <script type="module" src="main.js?v=53"></script>
   <script type="module" src="agent-chat.js?v=13"></script>
   <script type="module" src="care-workflow.js?v=13"></script>
 </body>

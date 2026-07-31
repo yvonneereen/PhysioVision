@@ -829,9 +829,10 @@
                 <span class="guide-leg guide-leg-right"></span>
               </div>
               <div class="camera-placeholder-actions">
-                <p>
+                <p id="primaryCameraInstruction">
                   <strong>Stand where your full body fits</strong>
-                  Press the large button below to begin your camera setup.
+                  Press Start camera guide below. We’ll ask about your pain
+                  level before turning on the camera.
                 </p>
                 <button
                   class="button button-coral camera-setup-button"
@@ -839,7 +840,7 @@
                   type="button"
                   disabled
                 >
-                  <span id="primaryCalibrationLabel">Set up my camera to continue</span>
+                  <span id="primaryCalibrationLabel">Start camera guide</span>
                   <span aria-hidden="true">→</span>
                 </button>
                 <p
@@ -1208,8 +1209,12 @@
           </section>
 
           <div class="camera-session-actions">
-            <button id="toggle" class="button button-coral camera-button" disabled>
-              Start camera guide
+            <button
+              id="toggle"
+              class="button button-coral camera-button hidden"
+              disabled
+            >
+              Pause camera guide
               <span aria-hidden="true">→</span>
             </button>
             <button

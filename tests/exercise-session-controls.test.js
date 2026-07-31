@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 const source = fs.readFileSync(new URL("../main.js", import.meta.url), "utf8");
+const markup = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 
 function functionSource(name, nextName) {
   const start = source.indexOf(`function ${name}(`);
@@ -108,6 +109,58 @@ assert.ok(
     preCheckPosition > voiceChoicePosition &&
     calibrationPosition > preCheckPosition,
   "voice choice and the pre-exercise pain check should happen before calibration"
+);
+
+assert.match(
+  markup,
+  /id="primaryCalibrationLabel">Start camera guide<\/span>/,
+  "the central camera action should be labelled Start camera guide"
+);
+const secondaryCameraButtonStart = markup.lastIndexOf(
+  "<button",
+  markup.indexOf('id="toggle"')
+);
+const secondaryCameraButtonEnd =
+  markup.indexOf("</button>", secondaryCameraButtonStart) +
+  "</button>".length;
+const secondaryCameraButton = markup.slice(
+  secondaryCameraButtonStart,
+  secondaryCameraButtonEnd
+);
+assert.match(
+  secondaryCameraButton,
+  /class="[^"]*\bhidden\b[^"]*"/,
+  "the secondary camera control should be hidden before the camera starts"
+);
+assert.doesNotMatch(
+  secondaryCameraButton,
+  />\s*Start camera guide/,
+  "the secondary camera control must not duplicate the central start action"
+);
+assert.match(
+  source,
+  /toggleBtn\.classList\.remove\("hidden"\)[\s\S]*?Pause camera guide/,
+  "the secondary control should appear only as a pause action while the camera is running"
+);
+
+const toggleHandlerStart = source.indexOf(
+  'toggleBtn.addEventListener("click"'
+);
+const toggleHandlerEnd = source.indexOf(
+  'finishExerciseBtn.addEventListener("click"',
+  toggleHandlerStart
+);
+assert.notEqual(toggleHandlerStart, -1, "the pause handler should exist");
+const toggleHandlerSource = source.slice(toggleHandlerStart, toggleHandlerEnd);
+assert.match(
+  toggleHandlerSource,
+  /if \(running\) deactivateCameraGuide\(\)/,
+  "the secondary camera control should pause an active guide"
+);
+assert.doesNotMatch(
+  toggleHandlerSource,
+  /showPainCheckin|(?:^|[^\w])activateCameraGuide/,
+  "the secondary camera control must not provide another way to start the guide"
 );
 
 const speakPainSource = functionSource(

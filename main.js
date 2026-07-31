@@ -164,6 +164,8 @@ const openCalibrationPrimary =
   document.getElementById("openCalibrationPrimary");
 const primaryCalibrationLabel =
   document.getElementById("primaryCalibrationLabel");
+const primaryCameraInstruction =
+  document.getElementById("primaryCameraInstruction");
 const cameraSetupStatus =
   document.getElementById("cameraSetupStatus");
 const calibrationOverlay    = document.getElementById("calibrationOverlay");
@@ -1607,19 +1609,18 @@ function renderPersonalization() {
       engine.exercise.calibration
     )} · safety limits unchanged`;
     openCalibrationBtn.textContent = "Recalibrate";
-    primaryCalibrationLabel.textContent = "Update my camera setup";
   } else if (supportsCalibration) {
     calibrationBadge.textContent = "Standard range";
     calibrationDetail.textContent =
       `Calibrate ${engine.exercise.name} to your movement.`;
     openCalibrationBtn.textContent = "Calibrate";
-    primaryCalibrationLabel.textContent = "Set up my camera to continue";
   } else {
     calibrationBadge.textContent = "Standard range";
     calibrationDetail.textContent = "Personal calibration is unavailable for this exercise.";
     openCalibrationBtn.textContent = "Unavailable";
-    primaryCalibrationLabel.textContent = "Camera setup unavailable";
   }
+
+  renderPrimaryCameraAction({ supportsCalibration });
 
   const requiredModelsReady = Boolean(
     poseLandmarker && (!exerciseUsesHand(engine.exercise) || handLandmarker)
@@ -1627,6 +1628,32 @@ function renderPersonalization() {
   openCalibrationBtn.disabled = !requiredModelsReady || !supportsCalibration;
   openCalibrationPrimary.disabled =
     !requiredModelsReady || !supportsCalibration;
+}
+
+function renderPrimaryCameraAction({
+  supportsCalibration = Boolean(engine.exercise.calibration),
+} = {}) {
+  if (!supportsCalibration) {
+    primaryCalibrationLabel.textContent = "Camera guide unavailable";
+    primaryCameraInstruction.innerHTML =
+      "<strong>Camera guide unavailable</strong>"
+      + "Choose another exercise to use camera guidance.";
+    return;
+  }
+
+  if (exerciseSessionActive && !running) {
+    primaryCalibrationLabel.textContent = "Resume camera guide";
+    primaryCameraInstruction.innerHTML =
+      "<strong>Your camera guide is paused</strong>"
+      + "Press Resume camera guide when you are ready to continue.";
+    return;
+  }
+
+  primaryCalibrationLabel.textContent = "Start camera guide";
+  primaryCameraInstruction.innerHTML =
+    "<strong>Stand where your full body fits</strong>"
+    + "Press Start camera guide below. We’ll ask about your pain level "
+    + "before turning on the camera.";
 }
 
 function calibrationSummary(calibration, config) {
@@ -1680,6 +1707,10 @@ let calibrationReturnFocus = openCalibrationBtn;
 async function openCalibrationFlow(event) {
   const trigger = event.currentTarget;
   if (!(await ensureVoiceModeChosen())) return;
+  if (trigger === openCalibrationPrimary && exerciseSessionActive) {
+    await activateCameraGuide();
+    return;
+  }
   if (isLoggedIn() && !exerciseSessionActive && !preExerciseCheckinCompleted) {
     showPainCheckin("before", {
       continuation: "calibration",
@@ -2337,6 +2368,7 @@ async function activateCameraGuide() {
     } else {
       setupTip.textContent = cameraSetupTip(engine.exercise);
     }
+    toggleBtn.classList.remove("hidden");
     toggleBtn.innerHTML = 'Pause camera guide <span aria-hidden="true">Ⅱ</span>';
     toggleBtn.disabled = false;
     finishExerciseBtn.disabled = false;
@@ -2356,6 +2388,7 @@ async function activateCameraGuide() {
     return true;
   } catch (err) {
     statusEl.textContent = `Camera error: ${err.message}`;
+    toggleBtn.classList.add("hidden");
     toggleBtn.disabled = false;
     handTrackingToggle.disabled = !handLandmarker;
     return false;
@@ -2380,9 +2413,9 @@ function deactivateCameraGuide({
   handFrameGuide.classList.add("hidden");
   handFrameGuide.classList.remove("is-arm-mode");
   setupTip.textContent = cameraSetupTip(engine.exercise);
-  toggleBtn.innerHTML = exerciseSessionActive
-    ? 'Resume camera guide <span aria-hidden="true">→</span>'
-    : 'Start camera guide <span aria-hidden="true">→</span>';
+  toggleBtn.innerHTML = 'Pause camera guide <span aria-hidden="true">Ⅱ</span>';
+  toggleBtn.classList.add("hidden");
+  renderPrimaryCameraAction();
   finishExerciseBtn.disabled = !exerciseSessionActive;
   cameraSessionHintEl.textContent = exerciseSessionActive
     ? "Your exercise is paused and has not been marked finished. Resume the camera or finish when you are ready."
@@ -2443,6 +2476,7 @@ function stopHandPreview() {
   setupTip.textContent = "Phone at chest height · 2–3 m away · Full body visible";
   handTrackingToggle.textContent = "Check hand tracking";
   handTrackingToggle.disabled = false;
+  toggleBtn.classList.add("hidden");
   toggleBtn.disabled = false;
   statusEl.textContent = "Movement guide ready";
   setFeedbackBanner("ready");
@@ -2494,6 +2528,7 @@ function discardExerciseSession() {
   finishExerciseBtn.disabled = true;
   cameraSessionHintEl.textContent =
     "Stopping the camera does not mark an exercise as finished.";
+  renderPrimaryCameraAction();
 }
 
 function completeExerciseSession() {
@@ -2766,15 +2801,8 @@ painSkipBtn.addEventListener("click", () => {
   if (completed) continueAfterPainCheckin(completed);
 });
 
-toggleBtn.addEventListener("click", async () => {
+toggleBtn.addEventListener("click", () => {
   if (running) deactivateCameraGuide();
-  else if (!hasPathwayAccess()) return;
-  else if (exerciseSessionActive) await activateCameraGuide();
-  else if (isLoggedIn()) {
-    if (!(await ensureVoiceModeChosen())) return;
-    showPainCheckin("before", { continuation: "camera" });
-  }
-  else await activateCameraGuide();
 });
 
 finishExerciseBtn.addEventListener("click", () => {
@@ -2785,9 +2813,11 @@ finishExerciseBtn.addEventListener("click", () => {
     });
   }
   completeExerciseSession();
-  toggleBtn.innerHTML = 'Start camera guide <span aria-hidden="true">→</span>';
+  toggleBtn.classList.add("hidden");
+  toggleBtn.innerHTML = 'Pause camera guide <span aria-hidden="true">Ⅱ</span>';
   finishExerciseBtn.disabled = true;
   preExerciseCheckinCompleted = false;
+  renderPrimaryCameraAction();
   cameraSessionHintEl.textContent =
     "Exercise marked finished. Complete the optional check-in, or skip it.";
   statusEl.textContent = "Exercise marked finished";

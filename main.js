@@ -19,9 +19,14 @@ import {
   saveCalibration,
   validateCalibrationCapture,
 } from "./personalization.js";
+import {
+  buildCalibrationSafetyContext,
+  evaluateCalibrationReuse,
+} from "./calibration-policy.js";
 import { postSession, postPainCheckin, postCalibration, isLoggedIn } from "./api.js";
 import { DRAFT_EXERCISES } from "./exercises/catalog.js";
 import {
+  parseConfirmationResponse,
   parsePainLevel,
   parseRecoveryStatus,
   voiceGuidance,
@@ -250,6 +255,7 @@ let voiceModeChosenThisSession = false;
 let voiceModeChoicePromise = null;
 let resolveVoiceModeChoice = null;
 let preExerciseCheckinCompleted = false;
+let confirmedPreExercisePain = null;
 const exerciseContent = new Map(
   DRAFT_EXERCISES.map((exercise) => [exercise.id, exercise])
 );
@@ -328,7 +334,10 @@ voiceSetupButtons.addEventListener("click", () => {
 });
 
 soundToggle?.addEventListener("click", () => {
-  if (!voiceGuidance.enabled) handsFreeVoiceEnabled = false;
+  if (!voiceGuidance.enabled) {
+    handsFreeVoiceEnabled = false;
+    if (painCheckinState) updatePainCheckinPresentation();
+  }
 });
 
 function loadActivePrescriptions() {
@@ -706,6 +715,7 @@ function activeDose(exercise = engine?.exercise) {
     daysPerWeek: prescription.days_per_week,
     notes: prescription.notes,
     clinicianName: prescription.clinician_name,
+    updatedAt: prescription.updated_at ?? prescription.updatedAt ?? null,
   };
 }
 
@@ -715,6 +725,11 @@ let sessionSymmetryWarnings = 0;
 const sessionAngleStats = {}; // {angleName: {min, max, sum, count}}
 let spokenCoachingCandidate = null;
 let spokenRepCount = 0;
+let completedSetCount = 0;
+let completedSessionReps = 0;
+let pendingSetStartCheck = null;
+let sessionAllSetsComplete = false;
+let lastFeedbackResult = null;
 
 function exerciseSpokenInstruction(exercise) {
   const reviewedContent = exerciseContent.get(exercise.id);
@@ -782,6 +797,8 @@ let holdTotal     = 0;
 const CALIBRATION_CAPTURE_MS = 1200;
 const CALIBRATION_POSITION_STABLE_MS = 500;
 const CALIBRATION_RETURN_STABLE_MS = 350;
+const SESSION_POSITION_CAPTURE_MS = 1700;
+const SET_POSITION_STABLE_MS = 750;
 let calibrationSession = null;
 let calibrationDraft = null;
 
@@ -878,6 +895,7 @@ exSelect.addEventListener("change", () => {
     });
   }
   preExerciseCheckinCompleted = false;
+  confirmedPreExercisePain = null;
   discardExerciseSession();
   cancelCalibration();
   engine.changeExercise(
@@ -913,6 +931,7 @@ sideSelect.addEventListener("change", () => {
     });
   }
   preExerciseCheckinCompleted = false;
+  confirmedPreExercisePain = null;
   discardExerciseSession();
   cancelCalibration();
   engine.changeExercise(
@@ -932,6 +951,8 @@ sideSelect.addEventListener("change", () => {
 
 window.addEventListener("physiovision:profile-updated", (event) => {
   cancelCalibration();
+  preExerciseCheckinCompleted = false;
+  confirmedPreExercisePain = null;
   profile = event.detail;
   if (authenticatedRole === "patient") {
     authenticatedPatientProfile = event.detail;
@@ -962,6 +983,8 @@ window.addEventListener("physiovision:profile-updated", (event) => {
 });
 
 window.addEventListener("physiovision:prescriptions-updated", (event) => {
+  preExerciseCheckinCompleted = false;
+  confirmedPreExercisePain = null;
   const prescriptions = Array.isArray(event.detail) ? event.detail : [];
   window.sessionStorage.setItem(
     "physiovision.prescriptions.v1",
@@ -1286,6 +1309,8 @@ function renderFrame() {
         if (calibrationSession) {
           updateCalibrationCapture(measurements, frameTimestamp);
           statusEl.textContent = "Personal calibration in progress";
+        } else if (pendingSetStartCheck) {
+          updateSetStartingPositionCheck(measurements, frameTimestamp);
         } else {
           const feedback = updateFeedbackPanel(measurements, frameTimestamp);
           statusEl.textContent = feedback.trackingReady
@@ -1314,6 +1339,8 @@ function renderFrame() {
         if (calibrationSession) {
           updateCalibrationCapture(measurements, frameTimestamp);
           statusEl.textContent = "Personal calibration in progress";
+        } else if (pendingSetStartCheck) {
+          updateSetStartingPositionCheck(measurements, frameTimestamp);
         } else {
           const feedback = updateFeedbackPanel(measurements, frameTimestamp);
           statusEl.textContent = feedback.trackingReady
@@ -1343,6 +1370,9 @@ function renderFrame() {
           if (calibrationSession) {
             updateCalibrationCapture(angles, frameTimestamp);
             statusEl.textContent = "Personal calibration in progress";
+          } else if (pendingSetStartCheck) {
+            updateSetStartingPositionCheck(angles, frameTimestamp);
+            processFallMonitoring(landmarks, frameTimestamp);
           } else {
             updateFeedbackPanel(angles, frameTimestamp);
             statusEl.textContent = "Tracking your movement";
@@ -1352,6 +1382,7 @@ function renderFrame() {
           const fallEvent = fallMonitor.notePoseUnavailable(frameTimestamp);
           combinedPoseHistory = [];
           updateCalibrationCapture(null, frameTimestamp);
+          updateSetStartingPositionCheck(null, frameTimestamp);
           const interruptedHold = engine.inHold;
           if (holdInterval) {
             clearHoldTimer(activeDose(engine.exercise).holdSeconds);
@@ -1392,7 +1423,126 @@ function renderFrame() {
 
 const angleDebugEl = document.getElementById("angleDebug");
 
+function plannedSetCount(exercise = engine?.exercise) {
+  const sets = Number(activeDose(exercise).sets);
+  return Number.isFinite(sets) && sets > 0 ? Math.floor(sets) : 1;
+}
+
+function updateSetStartingPositionCheck(measurements, timestampMs) {
+  if (!pendingSetStartCheck) return false;
+  const frame = measurements
+    ? extractCalibrationFrame(engine.exercise, measurements, sideSelect.value)
+    : null;
+  const matchesStart = frame && calibrationFrameMatchesPhase(
+    engine.exercise,
+    frame,
+    "start"
+  );
+
+  if (
+    !matchesStart ||
+    !calibrationFrameIsStable(pendingSetStartCheck.previousFrame, frame)
+  ) {
+    pendingSetStartCheck.stableSince = null;
+    pendingSetStartCheck.previousFrame = frame;
+    statusEl.textContent = `Return to the starting position for set ${pendingSetStartCheck.setNumber}`;
+    setFeedbackBanner(
+      "position",
+      `Hold the starting position so set ${pendingSetStartCheck.setNumber} can begin automatically`
+    );
+    return false;
+  }
+
+  pendingSetStartCheck.previousFrame = frame;
+  if (pendingSetStartCheck.stableSince === null) {
+    pendingSetStartCheck.stableSince = timestampMs;
+  }
+  if (
+    timestampMs - pendingSetStartCheck.stableSince < SET_POSITION_STABLE_MS
+  ) {
+    statusEl.textContent = "Starting position found — hold still";
+    setFeedbackBanner("position", "Hold still for a moment");
+    return false;
+  }
+
+  const setNumber = pendingSetStartCheck.setNumber;
+  pendingSetStartCheck = null;
+  statusEl.textContent = `Set ${setNumber} starting position confirmed — begin`;
+  setFeedbackBanner("good", `Set ${setNumber} is ready. Begin when comfortable.`);
+  voiceGuidance.speak(
+    `Starting position confirmed. Begin set ${setNumber} when you are comfortable.`,
+    {
+      key: `set:${engine.exercise.id}:${setNumber}:ready`,
+      interrupt: true,
+    }
+  );
+  return true;
+}
+
+function handleCompletedSet(feedback) {
+  const setNumber = completedSetCount + 1;
+  completedSessionReps += feedback.repCount;
+  completedSetCount = setNumber;
+
+  if (setNumber >= plannedSetCount(feedback.exercise)) {
+    sessionAllSetsComplete = true;
+    lastFeedbackResult = feedback;
+    statusEl.textContent = `All ${setNumber} planned sets complete`;
+    setFeedbackBanner(
+      "good",
+      "All planned sets are complete. Choose Finish exercise when you are ready."
+    );
+    voiceGuidance.speak(
+      "All planned sets are complete. Choose Finish exercise when you are ready.",
+      {
+        key: `sets:${engine.exercise.id}:complete`,
+        interrupt: true,
+      }
+    );
+    return;
+  }
+
+  engine.changeExercise(
+    exSelect.value,
+    sideSelect.value,
+    getCalibration(exSelect.value, sideSelect.value)
+  );
+  smoother.state = {};
+  combinedPoseHistory = [];
+  if (holdInterval) {
+    clearHoldTimer(activeDose(engine.exercise).holdSeconds);
+  }
+  lastFeedbackResult = null;
+  pendingSetStartCheck = {
+    setNumber: setNumber + 1,
+    stableSince: null,
+    previousFrame: null,
+  };
+  repCountEl.textContent = "0";
+  setCompleteBadgeEl?.classList.add("hidden");
+  progressEl.style.width = "0%";
+  progressLbl.textContent = "Return to your starting position";
+  renderPoseStrip(engine.exercise, engine.stages[0]);
+  renderStaticPhaseFlow(engine);
+  resetSpokenCoaching();
+  statusEl.textContent = `Set ${setNumber} complete — checking the next starting position`;
+  setFeedbackBanner(
+    "position",
+    `Return to the starting position for set ${setNumber + 1}`
+  );
+  voiceGuidance.speak(
+    `Set ${setNumber} complete. Return to your starting position for an automatic check before set ${setNumber + 1}.`,
+    {
+      key: `set:${engine.exercise.id}:${setNumber}:complete`,
+      interrupt: true,
+    }
+  );
+}
+
 function updateFeedbackPanel(angles, timestampMs) {
+  if (sessionAllSetsComplete && lastFeedbackResult) {
+    return lastFeedbackResult;
+  }
   const fb = engine.update(angles, timestampMs);
 
   // ── Debug logging (remove before release) ────────────────────────────────
@@ -1549,6 +1699,10 @@ function updateFeedbackPanel(angles, timestampMs) {
     symWarnEl.classList.add("hidden");
   }
 
+  lastFeedbackResult = fb;
+  if (setComplete && !sessionAllSetsComplete) {
+    handleCompletedSet(fb);
+  }
   return fb;
 }
 
@@ -1721,7 +1875,10 @@ async function openCalibrationFlow(event) {
   await startCalibrationFlow(trigger);
 }
 
-async function startCalibrationFlow(trigger) {
+async function startCalibrationFlow(
+  trigger,
+  { forceFull = trigger === openCalibrationBtn } = {}
+) {
   cameraSetupStatus.hidden = true;
   cameraSetupStatus.textContent = "";
   if (!engine.exercise.calibration) {
@@ -1730,7 +1887,38 @@ async function startCalibrationFlow(trigger) {
     cameraSetupStatus.hidden = false;
     return;
   }
-  if (!running && !(await activateCameraGuide())) {
+
+  const safetyContext = buildCalibrationSafetyContext({
+    profile,
+    dose: activeDose(engine.exercise),
+    painLevel: confirmedPreExercisePain,
+  });
+  const savedCalibration = getCalibration(
+    engine.exercise.id,
+    sideSelect.value
+  );
+  const reuseDecision = evaluateCalibrationReuse(
+    savedCalibration,
+    safetyContext
+  );
+  if (reuseDecision.action === "professional-review") {
+    const message =
+      "Your safety information has changed. Please get professional review before using this saved movement setup.";
+    cameraSetupStatus.textContent = message;
+    cameraSetupStatus.hidden = false;
+    statusEl.textContent = "Professional review recommended before exercise";
+    setFeedbackBanner("tracking", message);
+    voiceGuidance.speak(message, {
+      key: `calibration:${engine.exercise.id}:professional-review`,
+      interrupt: true,
+    });
+    return;
+  }
+
+  const calibrationMode = forceFull
+    ? "full-calibration"
+    : reuseDecision.action;
+  if (!running && !(await activateCameraGuide({ announceInstruction: false }))) {
     cameraSetupStatus.textContent = engine.exercise.requiresClinicianPlan
       && profile.carePath !== "clinician"
       ? (
@@ -1749,6 +1937,9 @@ async function startCalibrationFlow(trigger) {
   calibrationDraft = null;
   calibrationSession = {
     exerciseId: engine.exercise.id,
+    mode: calibrationMode,
+    savedCalibration,
+    safetyContext,
     step: "start",
     startFrames: null,
     targetCaptures: [],
@@ -1756,7 +1947,11 @@ async function startCalibrationFlow(trigger) {
   };
   calibrationOverlay.classList.remove("hidden");
   renderCalibrationStep();
-  beginCalibrationCapture("start");
+  beginCalibrationCapture("start", {
+    durationMs: calibrationMode === "position-check"
+      ? SESSION_POSITION_CAPTURE_MS
+      : CALIBRATION_CAPTURE_MS,
+  });
   announceCalibrationStage("start");
   calibrationCancel.focus();
 }
@@ -1764,7 +1959,16 @@ async function startCalibrationFlow(trigger) {
 openCalibrationBtn.addEventListener("click", openCalibrationFlow);
 openCalibrationPrimary.addEventListener("click", openCalibrationFlow);
 
-calibrationCancel.addEventListener("click", cancelCalibration);
+calibrationCancel.addEventListener("click", () => {
+  const setupWasActive = Boolean(calibrationSession);
+  cancelCalibration();
+  if (setupWasActive && running) {
+    deactivateCameraGuide({
+      statusMessage: "Camera setup cancelled — exercise not started",
+    });
+    discardExerciseSession();
+  }
+});
 
 calibrationAction.addEventListener("click", () => {
   if (!calibrationSession) return;
@@ -1788,12 +1992,14 @@ calibrationAction.addEventListener("click", () => {
       calibrationDraft
     );
     smoother.state = {};
+    combinedPoseHistory = [];
     renderPersonalization();
     setFeedbackBanner("ready");
     cancelCalibration();
     statusEl.textContent = engine.exercise.calibration.personalizedKeys.length
       ? "Personal range saved — movement guide ready"
       : "Personal tracking baseline saved — movement guide ready";
+    announceExerciseInstruction("Personal movement setup saved.");
   }
 });
 
@@ -1810,18 +2016,28 @@ function renderCalibrationStep() {
   calibrationAction.disabled = false;
 
   if (calibrationSession.step === "start") {
-    calibrationStepLabel.textContent =
-      "Step 1 · Automatic starting-position check";
-    calibrationTitle.textContent =
-      `Personalize ${engine.exercise.name} detection`;
+    const isPositionCheck = calibrationSession.mode === "position-check";
+    calibrationStepLabel.textContent = isPositionCheck
+      ? "Automatic session position check"
+      : "Step 1 · Automatic starting-position check";
+    calibrationTitle.textContent = isPositionCheck
+      ? "Confirm your starting position"
+      : `Personalize ${engine.exercise.name} detection`;
     const startInstruction = engine.exercise.calibration.startInstruction
       ?? `Hold ${engine.exercise.calibration.startPhase.replaceAll("_", " ")} with every required joint visible.`;
-    calibrationInstructions.textContent =
-      "This short spoken setup measures your comfortable positions so "
-      + "PhysioVision can recognize your movement more accurately. It does "
-      + "not change safety limits. "
-      + `${startInstruction} No extra button is needed—measurement starts `
-      + "automatically when you hold the position.";
+    calibrationInstructions.textContent = isPositionCheck
+      ? (
+        "Your saved personalized movement range will be reused. This quick "
+        + "2–3 second check confirms that you are visible and in the correct "
+        + `starting position. ${startInstruction} Measurement starts automatically.`
+      )
+      : (
+        "This short spoken setup measures your comfortable positions so "
+        + "PhysioVision can recognize your movement more accurately. It does "
+        + "not change safety limits. "
+        + `${startInstruction} No extra button is needed—measurement starts `
+        + "automatically when you hold the position."
+      );
   } else if (calibrationSession.step === "target") {
     const nextRep = calibrationSession.targetCaptures.length + 1;
     calibrationStepLabel.textContent = `Step 2 · Comfortable sample ${nextRep} of 3`;
@@ -1869,10 +2085,15 @@ function renderCalibrationStep() {
 
 function beginCalibrationCapture(
   type,
-  { awaitingReturn = false, retryAfter = 0 } = {}
+  {
+    awaitingReturn = false,
+    retryAfter = 0,
+    durationMs = CALIBRATION_CAPTURE_MS,
+  } = {}
 ) {
   calibrationSession.capture = {
     type,
+    durationMs,
     frames: [],
     awaitingReturn,
     phaseDetectedAt: null,
@@ -1979,13 +2200,14 @@ function updateCalibrationCapture(angles, timestampMs) {
 
   capture.frames.push(frame);
   const elapsed = timestampMs - capture.measuringStartedAt;
+  const captureDurationMs = capture.durationMs ?? CALIBRATION_CAPTURE_MS;
   const remaining = Math.max(
     0,
-    Math.ceil((CALIBRATION_CAPTURE_MS - elapsed) / 1000)
+    Math.ceil((captureDurationMs - elapsed) / 1000)
   );
   calibrationStatus.textContent =
     `Measuring automatically… ${remaining || "almost done"}`;
-  if (elapsed < CALIBRATION_CAPTURE_MS) return;
+  if (elapsed < captureDurationMs) return;
   finishCalibrationCapture(capture);
 }
 
@@ -1999,6 +2221,30 @@ function finishCalibrationCapture(capture) {
     );
 
     if (capture.type === "start") {
+      if (calibrationSession.mode === "position-check") {
+        const checkedCalibration = {
+          ...calibrationSession.savedCalibration,
+          safetyContext: calibrationSession.safetyContext,
+          lastPositionCheckedAt: new Date().toISOString(),
+        };
+        saveCalibration(checkedCalibration);
+        engine.changeExercise(
+          exSelect.value,
+          sideSelect.value,
+          checkedCalibration
+        );
+        smoother.state = {};
+        combinedPoseHistory = [];
+        cancelCalibration();
+        statusEl.textContent =
+          "Starting position confirmed — movement guide ready";
+        setFeedbackBanner(
+          "good",
+          "Starting position confirmed. Begin when you are comfortable."
+        );
+        announceExerciseInstruction("Starting position confirmed.");
+        return;
+      }
       calibrationSession.startFrames = capture.frames;
       calibrationSession.step = "target";
       renderCalibrationStep();
@@ -2012,6 +2258,8 @@ function finishCalibrationCapture(capture) {
           startFrames: calibrationSession.startFrames,
           targetCaptures: calibrationSession.targetCaptures,
         });
+        calibrationDraft.safetyContext = calibrationSession.safetyContext;
+        calibrationDraft.lastPositionCheckedAt = new Date().toISOString();
         calibrationSession.step = "result";
         renderCalibrationStep();
         voiceGuidance.speak(
@@ -2036,7 +2284,10 @@ function finishCalibrationCapture(capture) {
     }
   } catch (error) {
     const retryAfter = performance.now() + 1800;
-    beginCalibrationCapture(capture.type, { retryAfter });
+    beginCalibrationCapture(capture.type, {
+      retryAfter,
+      durationMs: capture.durationMs,
+    });
     calibrationStatus.textContent =
       `${error.message} I will retry automatically—reposition comfortably and hold still.`;
     voiceGuidance.speak(
@@ -2087,10 +2338,18 @@ function announceCalibrationStage(type, { afterReturn = false } = {}) {
   if (type === "start") {
     const startInstruction = config.startInstruction
       ?? `Hold your ${config.startPhase.replaceAll("_", " ")} position with your full body visible.`;
+    const introduction = calibrationSession.mode === "position-check"
+      ? (
+        "I will reuse your saved personalized movement range. This quick "
+        + "position check confirms your starting position before the session. "
+      )
+      : (
+        "This short setup personalizes movement detection so I can recognize "
+        + "your exercise more accurately. It does not change safety limits. "
+      );
     voiceGuidance.speak(
-      "This short setup personalizes movement detection so I can recognize "
-      + `your exercise more accurately. It does not change safety limits. ${startInstruction} `
-      + "You do not need to press anything. I will measure automatically.",
+      introduction
+      + `${startInstruction} You do not need to press anything. I will measure automatically.`,
       {
         key: `calibration:${engine.exercise.id}:start`,
         interrupt: true,
@@ -2326,7 +2585,21 @@ function hasPathwayAccess() {
   return true;
 }
 
-async function activateCameraGuide() {
+function announceExerciseInstruction(prefix = "") {
+  const clinicianNote = activeDose(engine.exercise).notes;
+  const spokenInstruction = [
+    prefix,
+    exerciseSpokenInstruction(engine.exercise),
+    clinicianNote ? `Your clinician's instruction is: ${clinicianNote}` : "",
+  ].filter(Boolean).join(" ");
+  voiceGuidance.speak(spokenInstruction, {
+    key: `instruction:${engine.exercise.id}`,
+    cooldownMs: 3000,
+    interrupt: true,
+  });
+}
+
+async function activateCameraGuide({ announceInstruction = true } = {}) {
   if (running) return true;
   if (!(await ensureVoiceModeChosen())) return false;
   if (!hasPathwayAccess()) return false;
@@ -2375,16 +2648,7 @@ async function activateCameraGuide() {
     cameraSessionHintEl.textContent =
       "Pausing only stops the camera. Choose “Finish exercise and check in” when you decide you are done.";
     renderFrame();
-    const clinicianNote = activeDose(engine.exercise).notes;
-    const spokenInstruction = [
-      exerciseSpokenInstruction(engine.exercise),
-      clinicianNote ? `Your clinician's instruction is: ${clinicianNote}` : "",
-    ].filter(Boolean).join(" ");
-    voiceGuidance.speak(spokenInstruction, {
-      key: `instruction:${engine.exercise.id}`,
-      cooldownMs: 3000,
-      interrupt: true,
-    });
+    if (announceInstruction) announceExerciseInstruction();
     return true;
   } catch (err) {
     statusEl.textContent = `Camera error: ${err.message}`;
@@ -2488,7 +2752,16 @@ function clearSessionMeasurements() {
   sessionSymmetryWarnings = 0;
 }
 
+function resetSetProgress() {
+  completedSetCount = 0;
+  completedSessionReps = 0;
+  pendingSetStartCheck = null;
+  sessionAllSetsComplete = false;
+  lastFeedbackResult = null;
+}
+
 function resetExerciseProgressForNewSession() {
+  resetSetProgress();
   engine.changeExercise(
     exSelect.value,
     sideSelect.value,
@@ -2524,6 +2797,7 @@ function beginExerciseSession() {
 function discardExerciseSession() {
   exerciseSessionActive = false;
   sessionStartedAt = null;
+  resetSetProgress();
   clearSessionMeasurements();
   finishExerciseBtn.disabled = true;
   cameraSessionHintEl.textContent =
@@ -2532,10 +2806,18 @@ function discardExerciseSession() {
 }
 
 function completeExerciseSession() {
+  const currentSetReps = sessionAllSetsComplete ? 0 : engine.repCount;
+  const totalRepsCompleted = completedSessionReps + currentSetReps;
+  const partialSetCompleted =
+    !sessionAllSetsComplete && currentSetReps > 0 ? 1 : 0;
+  const totalSetsCompleted = Math.min(
+    plannedSetCount(),
+    completedSetCount + partialSetCompleted
+  );
   const shouldRecord =
     exerciseSessionActive &&
     isLoggedIn() &&
-    engine.repCount > 0 &&
+    totalRepsCompleted > 0 &&
     Boolean(sessionStartedAt);
 
   if (!shouldRecord) {
@@ -2565,9 +2847,9 @@ function completeExerciseSession() {
     prescription:            dose.id ?? null,
     started_at:              sessionStartedAt,
     ended_at:                endedAt,
-    sets_completed:          1,
-    reps_completed:          engine.repCount,
-    reps_target:             dose.reps ?? engine.repCount,
+    sets_completed:          totalSetsCompleted,
+    reps_completed:          totalRepsCompleted,
+    reps_target:             dose.reps ?? totalRepsCompleted,
     sets_target:             dose.sets ?? 1,
     affected_side:           profile.focusSide ?? "right",
     cues_triggered:          cuesTriggered,
@@ -2584,6 +2866,8 @@ const painSkipBtn   = document.getElementById("painSkip");
 const painCheckinContextEl = document.getElementById("painCheckinContext");
 const painCheckinTitleEl = document.getElementById("painCheckinTitle");
 const painLevelChoicesEl = document.getElementById("painLevelChoices");
+const painConfirmationEl = document.getElementById("painConfirmation");
+const painConfirmationSummaryEl = document.getElementById("painConfirmationSummary");
 const recoveryChoicesEl = document.getElementById("recoveryChoices");
 const voiceCheckinStatusEl = document.getElementById("voiceCheckinStatus");
 const painVoiceInputBtn = document.getElementById("painVoiceInput");
@@ -2599,6 +2883,19 @@ function recoveryQuestion(context) {
   return context === "before"
     ? "Compared with your previous session, is your recovery better, about the same, worse, or are you not sure?"
     : "Compared with before this exercise, do you feel better, about the same, worse, or are you not sure?";
+}
+
+function painConfirmationQuestion(level) {
+  return `I heard pain level ${level} out of ten. Is that correct?`;
+}
+
+function updatePainCheckinPresentation() {
+  painCheckinEl.classList.toggle(
+    "hands-free-checkin",
+    handsFreeVoiceEnabled
+  );
+  painVoiceInputBtn.classList.toggle("hidden", handsFreeVoiceEnabled);
+  painVoiceInputBtn.disabled = !voiceGuidance.canListen;
 }
 
 function continueAfterPainCheckin(completed) {
@@ -2622,6 +2919,9 @@ function startPainVoiceListening({ expectedStage = null } = {}) {
       voiceCheckinStatusEl.textContent = status;
     },
     onError: (message) => {
+      if (handsFreeVoiceEnabled) {
+        painCheckinEl.classList.remove("hands-free-checkin");
+      }
       voiceCheckinStatusEl.textContent =
         `${message} You can also use the large on-screen choices.`;
     },
@@ -2629,6 +2929,8 @@ function startPainVoiceListening({ expectedStage = null } = {}) {
       voiceCheckinStatusEl.textContent = `I heard: “${transcript}”`;
       if (painCheckinState?.stage === "pain") {
         acceptPainLevel(parsePainLevel(transcript));
+      } else if (painCheckinState?.stage === "confirm-pain") {
+        acceptPainConfirmation(parseConfirmationResponse(transcript));
       } else {
         acceptRecoveryStatus(parseRecoveryStatus(transcript));
       }
@@ -2683,7 +2985,9 @@ function showPainCheckin(context = "after", {
   painCheckinTitleEl.innerHTML =
     `${escapeHtml(painQuestion(context))} <span>(0 = none, 10 = severe)</span>`;
   painLevelChoicesEl.classList.remove("hidden");
+  painConfirmationEl.classList.add("hidden");
   recoveryChoicesEl.classList.add("hidden");
+  painSkipBtn.classList.remove("hidden");
   voiceCheckinStatusEl.textContent = handsFreeVoiceEnabled
     ? (
       "Hands-free voice is on. Listen to the question, then say "
@@ -2692,7 +2996,7 @@ function showPainCheckin(context = "after", {
     : voiceGuidance.canListen
       ? "Choose a number, or use Answer by voice as a fallback."
     : "Voice input is unavailable in this browser. Choose a button.";
-  painVoiceInputBtn.disabled = !voiceGuidance.canListen;
+  updatePainCheckinPresentation();
   painCheckinEl.classList.remove("hidden");
   if (startAfter || continuation) toggleBtn.disabled = true;
 
@@ -2706,6 +3010,7 @@ function showPainCheckin(context = "after", {
 function hidePainCheckin() {
   voiceGuidance.cancel();
   painCheckinEl.classList.add("hidden");
+  painCheckinEl.classList.remove("hands-free-checkin");
   voiceCheckinStatusEl.textContent = "";
   painCheckinState = null;
   toggleBtn.disabled = false;
@@ -2717,9 +3022,13 @@ function shouldAskRecovery() {
 
 function beginRecoveryQuestion() {
   if (!painCheckinState) return;
+  voiceGuidance.cancel();
   painCheckinState.stage = "recovery";
   painLevelChoicesEl.classList.add("hidden");
+  painConfirmationEl.classList.add("hidden");
   recoveryChoicesEl.classList.remove("hidden");
+  painSkipBtn.classList.remove("hidden");
+  updatePainCheckinPresentation();
   painCheckinTitleEl.textContent = recoveryQuestion(painCheckinState.context);
   voiceCheckinStatusEl.textContent = handsFreeVoiceEnabled
     ? "Listening will start after the question. Say better, same, worse, or not sure."
@@ -2746,6 +3055,7 @@ function finishPainCheckin() {
 
   if (completed.context === "before") {
     preExerciseCheckinCompleted = true;
+    confirmedPreExercisePain = completed.painLevel;
   }
   hidePainCheckin();
   continueAfterPainCheckin(completed);
@@ -2758,7 +3068,68 @@ function acceptPainLevel(level) {
     return;
   }
   painCheckinState.painLevel = level;
-  voiceCheckinStatusEl.textContent = `Pain level ${level} recorded.`;
+  beginPainConfirmation();
+}
+
+function beginPainConfirmation() {
+  if (!painCheckinState || !Number.isInteger(painCheckinState.painLevel)) return;
+  voiceGuidance.cancel();
+  painCheckinState.stage = "confirm-pain";
+  painLevelChoicesEl.classList.add("hidden");
+  recoveryChoicesEl.classList.add("hidden");
+  painConfirmationEl.classList.remove("hidden");
+  painSkipBtn.classList.add("hidden");
+  updatePainCheckinPresentation();
+
+  const level = painCheckinState.painLevel;
+  const question = painConfirmationQuestion(level);
+  painCheckinTitleEl.textContent = "Please confirm your pain level";
+  painConfirmationSummaryEl.textContent = `Pain level ${level} out of 10`;
+  voiceCheckinStatusEl.textContent = handsFreeVoiceEnabled
+    ? "Listening will start after the confirmation question. Say yes or change."
+    : voiceGuidance.canListen
+      ? "Select Yes, continue or Change my answer. Voice input is also available."
+      : "Select Yes, continue or Change my answer.";
+  speakPainPrompt(
+    question,
+    `checkin:${painCheckinState.context}:pain-confirmation:${level}`,
+    "confirm-pain"
+  );
+}
+
+function returnToPainQuestion() {
+  if (!painCheckinState) return;
+  voiceGuidance.cancel();
+  painCheckinState.stage = "pain";
+  painCheckinState.painLevel = null;
+  painCheckinTitleEl.innerHTML =
+    `${escapeHtml(painQuestion(painCheckinState.context))} <span>(0 = none, 10 = severe)</span>`;
+  painLevelChoicesEl.classList.remove("hidden");
+  painConfirmationEl.classList.add("hidden");
+  recoveryChoicesEl.classList.add("hidden");
+  painSkipBtn.classList.remove("hidden");
+  updatePainCheckinPresentation();
+  voiceCheckinStatusEl.textContent = handsFreeVoiceEnabled
+    ? "Please say your pain level again, from zero to ten."
+    : "Choose a different number.";
+  speakPainPrompt(
+    painQuestion(painCheckinState.context),
+    `checkin:${painCheckinState.context}:pain:retry`,
+    "pain"
+  );
+}
+
+function acceptPainConfirmation(response) {
+  if (!painCheckinState || painCheckinState.stage !== "confirm-pain") return;
+  if (response === "change") {
+    returnToPainQuestion();
+    return;
+  }
+  if (response !== "confirm") {
+    voiceCheckinStatusEl.textContent =
+      "Please say yes or change, or use one of the confirmation buttons.";
+    return;
+  }
   if (shouldAskRecovery()) beginRecoveryQuestion();
   else finishPainCheckin();
 }
@@ -2788,6 +3159,12 @@ painCheckinEl.querySelectorAll("[data-recovery]").forEach((btn) => {
   });
 });
 
+painCheckinEl.querySelectorAll("[data-pain-confirmation]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    acceptPainConfirmation(btn.dataset.painConfirmation);
+  });
+});
+
 painVoiceInputBtn.addEventListener("click", () => {
   startPainVoiceListening();
 });
@@ -2796,6 +3173,7 @@ painSkipBtn.addEventListener("click", () => {
   const completed = painCheckinState ? { ...painCheckinState } : null;
   if (completed?.context === "before") {
     preExerciseCheckinCompleted = true;
+    confirmedPreExercisePain = null;
   }
   hidePainCheckin();
   if (completed) continueAfterPainCheckin(completed);
@@ -2817,6 +3195,7 @@ finishExerciseBtn.addEventListener("click", () => {
   toggleBtn.innerHTML = 'Pause camera guide <span aria-hidden="true">Ⅱ</span>';
   finishExerciseBtn.disabled = true;
   preExerciseCheckinCompleted = false;
+  confirmedPreExercisePain = null;
   renderPrimaryCameraAction();
   cameraSessionHintEl.textContent =
     "Exercise marked finished. Complete the optional check-in, or skip it.";

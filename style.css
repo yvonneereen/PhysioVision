@@ -6713,6 +6713,7 @@ details.metrics summary {
   gap: 0.75rem;
 }
 .pain-checkin.hidden { display: none; }
+.pain-checkin.hands-free-checkin { display: none; }
 .pain-checkin-context {
   color: var(--green);
   font-size: 0.72rem;
@@ -6750,6 +6751,7 @@ details.metrics summary {
   border-color: #4caf80;
 }
 .pain-checkin-buttons button:focus-visible,
+.pain-confirmation-actions button:focus-visible,
 .recovery-choices button:focus-visible,
 .voice-answer-button:focus-visible {
   outline: 3px solid rgba(22, 101, 82, 0.28);
@@ -6760,6 +6762,38 @@ details.metrics summary {
 .pain-checkin-buttons button[data-pain="10"] {
   border-color: #e8a0a0;
   color: #c0392b;
+}
+.pain-confirmation.hidden { display: none; }
+.pain-confirmation {
+  padding: 0.9rem;
+  border: 1px solid #b8d9ca;
+  border-radius: 12px;
+  background: #e5f3ed;
+}
+.pain-confirmation p {
+  margin: 0 0 0.7rem;
+  color: var(--ink);
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+.pain-confirmation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+.pain-confirmation-actions button {
+  min-height: 44px;
+  padding: 0.65rem 1rem;
+  border: 1.5px solid var(--green);
+  border-radius: 999px;
+  color: var(--green);
+  background: #fff;
+  font: 700 0.84rem/1.2 var(--font-body);
+  cursor: pointer;
+}
+.pain-confirmation-actions button:first-child {
+  color: #fff;
+  background: var(--green);
 }
 .recovery-choices.hidden { display: none; }
 .recovery-choices p {

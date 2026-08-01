@@ -184,4 +184,66 @@ assert.match(
   "the manual voice button should remain available as a fallback"
 );
 
+assert.match(
+  markup,
+  /id="painConfirmation"[\s\S]*?data-pain-confirmation="confirm"[\s\S]*?data-pain-confirmation="change"/,
+  "the pain check-in should show explicit confirm and change actions"
+);
+
+const acceptPainSource = functionSource(
+  "acceptPainLevel",
+  "beginPainConfirmation"
+);
+assert.match(
+  acceptPainSource,
+  /beginPainConfirmation\(\)/,
+  "choosing a pain level should open confirmation before continuing"
+);
+assert.doesNotMatch(
+  acceptPainSource,
+  /beginRecoveryQuestion|finishPainCheckin/,
+  "choosing a pain level must not automatically advance the check-in"
+);
+
+const acceptConfirmationSource = functionSource(
+  "acceptPainConfirmation",
+  "acceptRecoveryStatus"
+);
+assert.match(
+  acceptConfirmationSource,
+  /response === "change"[\s\S]*?returnToPainQuestion/,
+  "patients should be able to correct a pain level"
+);
+assert.match(
+  acceptConfirmationSource,
+  /response !== "confirm"[\s\S]*?return/,
+  "an unclear spoken answer must not advance the check-in"
+);
+assert.match(
+  acceptConfirmationSource,
+  /if \(shouldAskRecovery\(\)\) beginRecoveryQuestion\(\);[\s\S]*?else finishPainCheckin\(\)/,
+  "only a confirmed pain level should advance the check-in"
+);
+
+const voiceVisibilitySource = functionSource(
+  "updatePainCheckinPresentation",
+  "continueAfterPainCheckin"
+);
+assert.match(
+  voiceVisibilitySource,
+  /classList\.toggle\([\s\S]*?"hands-free-checkin"[\s\S]*?handsFreeVoiceEnabled/,
+  "hands-free mode should hide the repeated on-screen pain card"
+);
+assert.match(
+  voiceVisibilitySource,
+  /classList\.toggle\("hidden", handsFreeVoiceEnabled\)/,
+  "hands-free mode should hide the redundant Answer by voice button"
+);
+
+assert.match(
+  source,
+  /onError:[\s\S]*?classList\.remove\("hands-free-checkin"\)[\s\S]*?large on-screen choices/,
+  "the on-screen check-in should reappear if hands-free recognition fails"
+);
+
 console.log("exercise session control tests passed");

@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=56" />
+  <link rel="stylesheet" href="style.css?v=57" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -1155,6 +1155,22 @@
               <button type="button" data-pain="8">8</button>
               <button type="button" data-pain="9">9</button>
               <button type="button" data-pain="10">10</button>
+            </div>
+            <div
+              id="painConfirmation"
+              class="pain-confirmation hidden"
+              role="group"
+              aria-labelledby="painConfirmationSummary"
+            >
+              <p id="painConfirmationSummary">Pain level 0 out of 10</p>
+              <div class="pain-confirmation-actions">
+                <button type="button" data-pain-confirmation="confirm">
+                  Yes, continue
+                </button>
+                <button type="button" data-pain-confirmation="change">
+                  Change my answer
+                </button>
+              </div>
             </div>
             <div id="recoveryChoices" class="recovery-choices hidden">
               <p>Compared with your previous session, how is your recovery?</p>
@@ -2337,7 +2353,7 @@
   <script type="module" src="patient-dashboard.js?v=15"></script>
   <script type="module" src="therapist.js?v=15"></script>
   <script type="module" src="exercise-library.js?v=15"></script>
-  <script type="module" src="main.js?v=53"></script>
+  <script type="module" src="main.js?v=54"></script>
   <script type="module" src="agent-chat.js?v=13"></script>
   <script type="module" src="care-workflow.js?v=13"></script>
 </body>

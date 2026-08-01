@@ -48,6 +48,22 @@ export function parseRecoveryStatus(transcript) {
   return null;
 }
 
+export function parseConfirmationResponse(transcript) {
+  const text = String(transcript ?? "").trim().toLowerCase();
+  if (
+    /\b(change|incorrect|wrong|try again|start again|go back)\b/.test(text) ||
+    /^(no|nope)\b/.test(text)
+  ) {
+    return "change";
+  }
+  if (
+    /\b(yes|correct|confirm|continue|that's right|that is right|right answer)\b/.test(text)
+  ) {
+    return "confirm";
+  }
+  return null;
+}
+
 function readStoredPreference(browserWindow) {
   try {
     return browserWindow.localStorage.getItem(VOICE_PREFERENCE_KEY) !== "false";

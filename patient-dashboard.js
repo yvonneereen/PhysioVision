@@ -15,8 +15,9 @@ import {
 } from "./api.js?v=21";
 import {
   analysePatientTrend,
+  findUpcomingConsultation,
   isCurrentPrescription,
-} from "./patient-dashboard-state.js?v=1";
+} from "./patient-dashboard-state.js?v=2";
 import { saveProfile } from "./personalization.js?v=6";
 import { EXERCISE_MAP } from "./exercises/registry.js";
 
@@ -61,6 +62,12 @@ const trendAlert = document.getElementById("patientTrendAlert");
 const trendAlertTitle = document.getElementById("patientTrendAlertTitle");
 const trendAlertMessage = document.getElementById("patientTrendAlertMessage");
 const trendAlertGuidance = document.getElementById("patientTrendAlertGuidance");
+const trendRequestButton = document.getElementById(
+  "patientTrendRequestPhysiotherapist",
+);
+const trendRequestStatus = document.getElementById(
+  "patientTrendRequestStatus",
+);
 const consultationCard = document.getElementById("patientConsultationCard");
 const upcomingConsultation = document.getElementById("patientUpcomingConsultation");
 const pendingConsultsEl = document.getElementById("patientPendingConsults");
@@ -70,6 +77,7 @@ const bookingDate = document.getElementById("bookingDate");
 const bookingStatus = document.getElementById("bookingStatus");
 const bookingClinicianName = document.getElementById("bookingClinicianName");
 const bookingClinicianAvatar = document.getElementById("bookingClinicianAvatar");
+const bookingNotes = document.getElementById("bookingNotes");
 const toast = document.getElementById("toast");
 const toastMessage = document.getElementById("toastMessage");
 
@@ -527,38 +535,56 @@ function renderTrend(data) {
     trendAlertMessage.textContent = trend.message;
     trendAlertGuidance.textContent = isPhysiotherapistPath
       ? (
-        "This is a trend prompt, not a diagnosis. Use your consultation "
-        + "card if you want your physiotherapist to review it."
+        "This is a trend prompt, not a diagnosis. Send a consultation "
+        + "request if you want your physiotherapist to review this pattern."
       )
       : (
-        "This is a trend prompt, not a diagnosis. PhysioVision has not "
-        + "connected you to a physiotherapist; contact an independent "
-        + "qualified healthcare professional if symptoms persist or worsen."
+        "This is a trend prompt, not a diagnosis. You can request an "
+        + "available PhysioVision physiotherapist; the request is not "
+        + "confirmed until it is accepted."
       );
+    renderTrendConsultationAction(data.consultations);
   }
 }
 
+function describeConsultation(consultation) {
+  const status = consultation.status === "confirmed"
+    ? "Confirmed"
+    : "Requested";
+  return `${status}: ${formatDate(consultation.scheduled_at, {
+    hour: "numeric",
+    minute: "2-digit",
+  })} with ${consultation.clinician_name || "the PhysioVision care team"}.`;
+}
+
+function renderTrendConsultationAction(consultations) {
+  if (!trendRequestButton || !trendRequestStatus) return;
+  const next = findUpcomingConsultation(consultations);
+
+  if (next) {
+    trendRequestButton.disabled = true;
+    trendRequestButton.textContent = next.status === "confirmed"
+      ? "Physiotherapist confirmed"
+      : "Review already requested";
+    trendRequestStatus.textContent = describeConsultation(next);
+    return;
+  }
+
+  trendRequestButton.disabled = false;
+  trendRequestButton.innerHTML =
+    'Request a physiotherapist <span aria-hidden="true">→</span>';
+  trendRequestStatus.textContent =
+    "Choose a preferred time. The request must be accepted before it is confirmed.";
+}
+
 function renderUpcomingConsultation(consultations) {
-  const now = new Date();
-  const next = consultations
-    .filter((item) => (
-      ["requested", "confirmed"].includes(item.status) &&
-      new Date(item.scheduled_at) >= now
-    ))
-    .sort(
-      (a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at),
-    )[0];
+  const next = findUpcomingConsultation(consultations);
 
   if (!next) {
     upcomingConsultation.textContent = "No consultation currently scheduled.";
     return;
   }
-  const status = next.status === "confirmed" ? "Confirmed" : "Requested";
-  upcomingConsultation.textContent =
-    `${status}: ${formatDate(next.scheduled_at, {
-      hour: "numeric",
-      minute: "2-digit",
-    })} with ${next.clinician_name || "the PhysioVision care team"}.`;
+  upcomingConsultation.textContent = describeConsultation(next);
 }
 
 // Consultations the clinician suggested, awaiting this patient's response.
@@ -917,6 +943,18 @@ bookingForm?.addEventListener("submit", async (event) => {
   } finally {
     submit.disabled = false;
   }
+});
+
+trendRequestButton?.addEventListener("click", () => {
+  if (bookingNotes && !bookingNotes.value.trim()) {
+    bookingNotes.value =
+      "I would like a physiotherapist to review my recent pain or recovery trend shown by PhysioVision.";
+  }
+  if (bookingStatus) {
+    bookingStatus.textContent =
+      "Choose a preferred time, then send the request for review.";
+  }
+  prepareBookingDate();
 });
 
 document

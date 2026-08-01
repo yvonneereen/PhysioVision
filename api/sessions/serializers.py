@@ -57,7 +57,7 @@ class PainCheckinSerializer(serializers.ModelSerializer):
         model  = PainCheckin
         fields = [
             'id', 'session', 'pain_level', 'timing', 'recovery_status',
-            'location_notes', 'checked_at',
+            'location_notes', 'safety_follow_up', 'requires_review', 'checked_at',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']

@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=58" />
+  <link rel="stylesheet" href="style.css?v=59" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -191,6 +191,24 @@
         <small id="patientTrendAlertGuidance">
           This is a trend prompt, not a diagnosis. You decide whether to request
           a consultation.
+        </small>
+      </div>
+      <div class="patient-trend-alert-actions">
+        <button
+          class="button button-coral patient-trend-request"
+          id="patientTrendRequestPhysiotherapist"
+          type="button"
+          data-open="booking-modal"
+        >
+          Request a physiotherapist <span aria-hidden="true">→</span>
+        </button>
+        <small
+          id="patientTrendRequestStatus"
+          role="status"
+          aria-live="polite"
+        >
+          Choose a preferred time. The request must be accepted before it is
+          confirmed.
         </small>
       </div>
     </section>
@@ -1196,6 +1214,20 @@
                 <button type="button" data-recovery="worse">Worse</button>
                 <button type="button" data-recovery="unsure">Not sure</button>
               </div>
+            </div>
+            <div
+              id="painSafetyInterview"
+              class="pain-safety-interview hidden"
+              role="group"
+              aria-labelledby="painSafetyQuestion"
+            >
+              <div id="painSafetyReassurance" class="pain-safety-reassurance">
+                <strong id="painSafetyHeading">Let’s make sure you are safe</strong>
+                <p id="painSafetyMessage"></p>
+              </div>
+              <p id="painSafetyQuestion" class="pain-safety-question"></p>
+              <p id="painSafetyHelp" class="pain-safety-help"></p>
+              <div id="painSafetyChoices" class="pain-safety-choices"></div>
             </div>
             <p id="voiceCheckinStatus" class="voice-checkin-status" role="status" aria-live="polite"></p>
             <div class="pain-checkin-actions">
@@ -2366,10 +2398,10 @@
   <script src="runtime-config.js"></script>
   <script type="module" src="auth.js?v=24"></script>
   <script type="module" src="ui.js?v=19"></script>
-  <script type="module" src="patient-dashboard.js?v=15"></script>
+  <script type="module" src="patient-dashboard.js?v=16"></script>
   <script type="module" src="therapist.js?v=15"></script>
   <script type="module" src="exercise-library.js?v=15"></script>
-  <script type="module" src="main.js?v=56"></script>
+  <script type="module" src="main.js?v=57"></script>
   <script type="module" src="agent-chat.js?v=13"></script>
   <script type="module" src="care-workflow.js?v=13"></script>
 </body>

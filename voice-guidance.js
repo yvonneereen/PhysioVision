@@ -25,6 +25,15 @@ const NUMBER_WORDS = Object.freeze({
   ten: 10,
 });
 
+function normalizeSpeech(transcript) {
+  return String(transcript ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[’]/g, "'")
+    .replace(/[^a-z0-9'\s]/g, " ")
+    .replace(/\s+/g, " ");
+}
+
 export function parsePainLevel(transcript) {
   const text = String(transcript ?? "").trim().toLowerCase();
   const digitMatch = text.match(/(?:^|\D)(10|[0-9])(?:\D|$)/);
@@ -68,6 +77,127 @@ export function parseConfirmationResponse(transcript) {
     return "confirm";
   }
   return null;
+}
+
+export function parsePainSafetyResponse(stage, transcript) {
+  const normalized = normalizeSpeech(transcript);
+  if (!normalized) return "";
+
+  const includesAny = (...phrases) =>
+    phrases.some((phrase) => normalized.includes(phrase));
+
+  if (stage === "urgent") {
+    if (
+      includesAny(
+        "not sure",
+        "unsure",
+        "i don't know",
+        "i do not know",
+        "maybe"
+      )
+    ) {
+      return "unsure";
+    }
+    if (
+      /^(no|none|nope)(\b|$)/.test(normalized) ||
+      includesAny(
+        "none of these",
+        "i am okay",
+        "i'm okay",
+        "i feel okay",
+        "no symptoms"
+      )
+    ) {
+      return "no";
+    }
+    if (
+      includesAny(
+        "yes",
+        "chest",
+        "shortness of breath",
+        "cannot breathe",
+        "can't breathe",
+        "dizzy",
+        "dizziness",
+        "faint",
+        "weakness",
+        "numb",
+        "fell",
+        "fallen",
+        "fall"
+      )
+    ) {
+      return "yes";
+    }
+    return "";
+  }
+
+  if (stage === "location") {
+    if (includesAny("knee", "knees")) return "knee";
+    if (includesAny("hip", "hips")) return "hip";
+    if (includesAny("ankle", "ankles", "foot", "feet")) return "ankle";
+    if (includesAny("back", "spine")) return "back";
+    if (includesAny("shoulder", "shoulders", "arm", "arms")) return "shoulder";
+    if (includesAny("other", "somewhere else")) return "other";
+    return "";
+  }
+
+  if (stage === "side") {
+    if (includesAny("both", "either side", "both sides")) return "both";
+    if (includesAny("left")) return "left";
+    if (includesAny("right")) return "right";
+    if (includesAny("not sure", "unsure", "i don't know", "i do not know")) {
+      return "unsure";
+    }
+    return "";
+  }
+
+  if (stage === "familiarity") {
+    if (includesAny("usual", "familiar", "same pain", "stronger")) {
+      return "usual-stronger";
+    }
+    if (includesAny("different", "not the same")) return "different";
+    if (includesAny("new", "never felt")) return "new";
+    if (includesAny("not sure", "unsure", "i don't know", "i do not know")) {
+      return "unsure";
+    }
+    return "";
+  }
+
+  if (stage === "timing") {
+    if (includesAny("before", "already hurting")) return "before";
+    if (includesAny("during", "while exercising", "while moving")) return "during";
+    if (includesAny("after", "when i finished", "when I finished")) return "after";
+    if (includesAny("not sure", "unsure", "i don't know", "i do not know")) {
+      return "unsure";
+    }
+    return "";
+  }
+
+  if (stage === "rest") {
+    return parseRecoveryStatus(normalized);
+  }
+
+  if (stage === "mobility") {
+    if (
+      includesAny(
+        "no i need help",
+        "cannot move",
+        "can't move",
+        "need help",
+        "unable"
+      )
+    ) {
+      return "help";
+    }
+    if (includesAny("someone nearby", "need someone", "with assistance")) {
+      return "nearby";
+    }
+    if (includesAny("yes", "safely", "i can move", "i am safe")) return "safe";
+    return "";
+  }
+
+  return "";
 }
 
 function voiceScore(voice, requestedLanguage) {

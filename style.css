@@ -4689,6 +4689,24 @@ details.metrics summary {
   margin: 0;
 }
 
+.patient-trend-alert-actions {
+  display: flex;
+  width: min(100%, 310px);
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.patient-trend-alert-actions .button {
+  justify-content: space-between;
+  white-space: nowrap;
+}
+
+.patient-trend-alert-actions small {
+  margin: 0;
+  line-height: 1.4;
+}
+
 .patient-trend-alert h2 {
   margin: 3px 0 5px;
   font-size: clamp(20px, 2.4vw, 30px);
@@ -5250,8 +5268,9 @@ details.metrics summary {
     grid-template-columns: auto minmax(0, 1fr);
   }
 
-  .patient-trend-alert .button {
+  .patient-trend-alert-actions {
     grid-column: 1 / -1;
+    width: 100%;
   }
 
   .patient-metric-grid,
@@ -6788,7 +6807,7 @@ details.metrics summary {
   gap: 0.75rem;
 }
 .pain-checkin.hidden { display: none; }
-.pain-checkin.hands-free-checkin { display: none; }
+.pain-checkin.hands-free-checkin:not(.safety-interview-active) { display: none; }
 .pain-checkin-context {
   color: var(--green);
   font-size: 0.72rem;
@@ -6891,6 +6910,72 @@ details.metrics summary {
   font: 700 0.82rem/1.2 var(--font-body);
   cursor: pointer;
 }
+.pain-safety-interview.hidden { display: none; }
+.pain-safety-interview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.pain-safety-reassurance {
+  padding: 0.95rem 1rem;
+  border-left: 4px solid #ef9f36;
+  border-radius: 8px;
+  background: #fff4d9;
+  color: var(--ink);
+}
+.pain-safety-reassurance strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 1rem;
+}
+.pain-safety-reassurance p,
+.pain-safety-question,
+.pain-safety-help {
+  margin: 0;
+}
+.pain-safety-question {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.45;
+}
+.pain-safety-help {
+  color: #52655d;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+.pain-safety-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+.pain-safety-choices button {
+  min-height: 52px;
+  padding: 0.75rem 0.9rem;
+  border: 1.5px solid #b9cec4;
+  border-radius: 10px;
+  color: var(--ink);
+  background: #fff;
+  font: 750 0.86rem/1.25 var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+.pain-safety-choices button:hover,
+.pain-safety-choices button:focus-visible {
+  border-color: var(--green);
+  background: #e8f4ef;
+  outline: 3px solid rgba(22, 101, 82, 0.22);
+  outline-offset: 2px;
+}
+.pain-safety-interview.is-urgent .pain-safety-reassurance {
+  border-left-color: #d44836;
+  background: #ffe9e4;
+}
+.pain-safety-interview.is-outcome .pain-safety-choices button:first-child {
+  color: #fff;
+  border-color: var(--green);
+  background: var(--green);
+}
 .voice-checkin-status {
   min-height: 1.25rem;
   margin: 0;
@@ -6913,6 +6998,11 @@ details.metrics summary {
 .voice-answer-button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+@media (max-width: 620px) {
+  .pain-safety-choices {
+    grid-template-columns: 1fr;
+  }
 }
 .pain-safety-note {
   color: #68766f;

@@ -195,6 +195,11 @@ assert.match(
   /id="recordedPain"[\s\S]*?id="recordedPainMessage"[\s\S]*?id="recordedPainValue"/,
   "the right-side exercise panel should show the confirmed pain level"
 );
+assert.match(
+  markup,
+  /id="painSafetyInterview"[\s\S]*?id="painSafetyQuestion"[\s\S]*?id="painSafetyChoices"/,
+  "the pain check-in should provide a step-by-step safety follow-up"
+);
 
 const acceptPainSource = functionSource(
   "acceptPainLevel",
@@ -227,13 +232,13 @@ assert.match(
 );
 assert.match(
   acceptConfirmationSource,
-  /if \(shouldAskRecovery\(\)\) beginRecoveryQuestion\(\);[\s\S]*?else finishPainCheckin\(\)/,
-  "only a confirmed pain level should advance the check-in"
+  /if \(requiresPainSafetyInterview\(\)\) beginPainSafetyInterview\(\);[\s\S]*?else if \(shouldAskRecovery\(\)\) beginRecoveryQuestion\(\);[\s\S]*?else finishPainCheckin\(\)/,
+  "a confirmed concerning pain level should enter the safety interview"
 );
 
 const finishPainSource = functionSource(
   "finishPainCheckin",
-  "acceptPainLevel"
+  "requiresPainSafetyInterview"
 );
 assert.match(
   finishPainSource,
@@ -272,8 +277,58 @@ assert.match(
 );
 assert.match(
   voiceVisibilitySource,
-  /classList\.toggle\("hidden", handsFreeVoiceEnabled\)/,
+  /classList\.toggle\([\s\S]*?"hidden"[\s\S]*?handsFreeVoiceEnabled && !safetyActive[\s\S]*?safetyOutcome/,
   "hands-free mode should hide the redundant Answer by voice button"
+);
+
+const safetyThresholdSource = functionSource(
+  "requiresPainSafetyInterview",
+  "createPainSafetyAnswers"
+);
+assert.match(
+  safetyThresholdSource,
+  /level >= 7/,
+  "a severe pain score should trigger the safety follow-up"
+);
+assert.match(
+  safetyThresholdSource,
+  /level - confirmedPreExercisePain[\s\S]*?increase >= 2/,
+  "a two-point increase from the pre-exercise score should trigger the safety follow-up"
+);
+
+const beginSafetySource = functionSource(
+  "beginPainSafetyInterview",
+  "determinePainSafetyOutcome"
+);
+assert.match(
+  beginSafetySource,
+  /deactivateCameraGuide\(\{/,
+  "the camera guide should pause before asking safety questions"
+);
+assert.match(
+  beginSafetySource,
+  /startAfter = false[\s\S]*?continuation = ""/,
+  "a concerning pain report must cancel automatic exercise continuation"
+);
+
+const finishSafetySource = functionSource(
+  "finishPainSafetyInterview",
+  "acceptPainLevel"
+);
+assert.match(
+  finishSafetySource,
+  /safety_follow_up:[\s\S]*?requires_review:/,
+  "the completed safety interview should be stored with its review flag"
+);
+assert.doesNotMatch(
+  finishSafetySource,
+  /activateCameraGuide|continueAfterPainCheckin/,
+  "finishing a safety interview must not resume the exercise automatically"
+);
+assert.match(
+  finishSafetySource,
+  /not automatically notified/,
+  "a therapist report must not falsely claim that a notification was sent"
 );
 
 assert.match(

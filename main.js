@@ -28,6 +28,7 @@ import { DRAFT_EXERCISES } from "./exercises/catalog.js";
 import {
   parseConfirmationResponse,
   parsePainLevel,
+  parsePainSafetyResponse,
   parseRecoveryStatus,
   voiceGuidance,
 } from "./voice-guidance.js";
@@ -2873,6 +2874,13 @@ const painLevelChoicesEl = document.getElementById("painLevelChoices");
 const painConfirmationEl = document.getElementById("painConfirmation");
 const painConfirmationSummaryEl = document.getElementById("painConfirmationSummary");
 const recoveryChoicesEl = document.getElementById("recoveryChoices");
+const painSafetyInterviewEl = document.getElementById("painSafetyInterview");
+const painSafetyReassuranceEl = document.getElementById("painSafetyReassurance");
+const painSafetyHeadingEl = document.getElementById("painSafetyHeading");
+const painSafetyMessageEl = document.getElementById("painSafetyMessage");
+const painSafetyQuestionEl = document.getElementById("painSafetyQuestion");
+const painSafetyHelpEl = document.getElementById("painSafetyHelp");
+const painSafetyChoicesEl = document.getElementById("painSafetyChoices");
 const voiceCheckinStatusEl = document.getElementById("voiceCheckinStatus");
 const painVoiceInputBtn = document.getElementById("painVoiceInput");
 const recordedPainEl = document.getElementById("recordedPain");
@@ -2897,12 +2905,120 @@ function painConfirmationQuestion(level) {
   return `I heard pain level ${level} out of ten. Is that correct?`;
 }
 
+const PAIN_SAFETY_REASSURANCE =
+  "Thank you. Please stop moving and rest somewhere safe. "
+  + "We will proceed only after I have confirmed that you are well enough.";
+
+const PAIN_SAFETY_STEPS = Object.freeze({
+  urgent: {
+    question:
+      "Are you experiencing chest pressure, unusual shortness of breath, "
+      + "dizziness or faintness, sudden weakness or numbness, or have you fallen?",
+    help: "Choose Yes if any one of these applies. If you are not sure, choose Not sure.",
+    choices: [
+      ["no", "No, none of these"],
+      ["yes", "Yes"],
+      ["unsure", "Not sure"],
+    ],
+    field: "urgentSymptoms",
+    next: "location",
+  },
+  location: {
+    question: "Where are you feeling the pain?",
+    help: "Choose the area that best matches what you feel now.",
+    choices: [
+      ["knee", "Knee"],
+      ["hip", "Hip"],
+      ["ankle", "Ankle or foot"],
+      ["back", "Back"],
+      ["shoulder", "Shoulder or arm"],
+      ["other", "Other area"],
+    ],
+    field: "painLocation",
+    next: "side",
+  },
+  side: {
+    question: "Which side is affected?",
+    help: "Choose Not sure if the pain is central or difficult to locate.",
+    choices: [
+      ["left", "Left side"],
+      ["right", "Right side"],
+      ["both", "Both sides"],
+      ["unsure", "Not sure"],
+    ],
+    field: "painSide",
+    next: "familiarity",
+  },
+  familiarity: {
+    question:
+      "Is this new pain, your usual pain becoming stronger, or something different "
+      + "from what you normally feel?",
+    help: "This does not diagnose the pain. It helps record what changed.",
+    choices: [
+      ["new", "New pain"],
+      ["usual-stronger", "Usual pain, but stronger"],
+      ["different", "Something different"],
+      ["unsure", "Not sure"],
+    ],
+    field: "painFamiliarity",
+    next: "timing",
+  },
+  timing: {
+    question: "When did the pain increase?",
+    help:
+      "PhysioVision will record the current exercise, set, and repetition automatically.",
+    choices: [
+      ["before", "Before I started"],
+      ["during", "During this exercise"],
+      ["after", "Immediately after"],
+      ["unsure", "Not sure"],
+    ],
+    field: "onsetTiming",
+    next: "rest",
+  },
+  rest: {
+    question:
+      "Now that you have stopped and rested briefly, is the pain getting better, "
+      + "staying the same, or getting worse?",
+    help: "Stay resting while you answer.",
+    choices: [
+      ["better", "Getting better"],
+      ["same", "Staying the same"],
+      ["worse", "Getting worse"],
+      ["unsure", "Not sure"],
+    ],
+    field: "restTrend",
+    next: "mobility",
+  },
+  mobility: {
+    question: "Can you sit, stand, or move to a safe position without assistance?",
+    help: "Do not test a movement that feels unsafe just to answer this question.",
+    choices: [
+      ["safe", "Yes, safely"],
+      ["nearby", "I need someone nearby"],
+      ["help", "No, I need help"],
+    ],
+    field: "safeMovement",
+    next: "outcome",
+  },
+});
+
+function isPainSafetyStage(stage = painCheckinState?.stage) {
+  return typeof stage === "string" && stage.startsWith("safety-");
+}
+
 function updatePainCheckinPresentation() {
+  const safetyActive = isPainSafetyStage();
+  const safetyOutcome = painCheckinState?.stage === "safety-outcome";
   painCheckinEl.classList.toggle(
     "hands-free-checkin",
-    handsFreeVoiceEnabled
+    handsFreeVoiceEnabled && !safetyActive
   );
-  painVoiceInputBtn.classList.toggle("hidden", handsFreeVoiceEnabled);
+  painCheckinEl.classList.toggle("safety-interview-active", safetyActive);
+  painVoiceInputBtn.classList.toggle(
+    "hidden",
+    (handsFreeVoiceEnabled && !safetyActive) || safetyOutcome
+  );
   painVoiceInputBtn.disabled = !voiceGuidance.canListen;
 }
 
@@ -2987,6 +3103,11 @@ function startPainVoiceListening({ expectedStage = null } = {}) {
         acceptPainLevel(parsePainLevel(transcript));
       } else if (painCheckinState?.stage === "confirm-pain") {
         acceptPainConfirmation(parseConfirmationResponse(transcript));
+      } else if (isPainSafetyStage()) {
+        const stage = painCheckinState.stage.replace("safety-", "");
+        if (stage !== "outcome") {
+          acceptPainSafetyResponse(parsePainSafetyResponse(stage, transcript));
+        }
       } else {
         acceptRecoveryStatus(parseRecoveryStatus(transcript));
       }
@@ -3037,6 +3158,7 @@ function showPainCheckin(context = "after", {
     stage: "pain",
     painLevel: null,
     recoveryStatus: "",
+    safetyAnswers: null,
   };
   painCheckinContextEl.textContent =
     context === "before" ? "Before exercise" : "After exercise";
@@ -3045,6 +3167,7 @@ function showPainCheckin(context = "after", {
   painLevelChoicesEl.classList.remove("hidden");
   painConfirmationEl.classList.add("hidden");
   recoveryChoicesEl.classList.add("hidden");
+  painSafetyInterviewEl.classList.add("hidden");
   painSkipBtn.classList.remove("hidden");
   voiceCheckinStatusEl.textContent = handsFreeVoiceEnabled
     ? (
@@ -3068,7 +3191,11 @@ function showPainCheckin(context = "after", {
 function hidePainCheckin() {
   voiceGuidance.cancel();
   painCheckinEl.classList.add("hidden");
-  painCheckinEl.classList.remove("hands-free-checkin");
+  painCheckinEl.classList.remove(
+    "hands-free-checkin",
+    "safety-interview-active"
+  );
+  painSafetyInterviewEl.classList.add("hidden");
   voiceCheckinStatusEl.textContent = "";
   painCheckinState = null;
   toggleBtn.disabled = false;
@@ -3085,6 +3212,7 @@ function beginRecoveryQuestion() {
   painLevelChoicesEl.classList.add("hidden");
   painConfirmationEl.classList.add("hidden");
   recoveryChoicesEl.classList.remove("hidden");
+  painSafetyInterviewEl.classList.add("hidden");
   painSkipBtn.classList.remove("hidden");
   updatePainCheckinPresentation();
   painCheckinTitleEl.textContent = recoveryQuestion(painCheckinState.context);
@@ -3119,6 +3247,247 @@ function finishPainCheckin() {
   acknowledgeRecordedPain(completed);
 }
 
+function requiresPainSafetyInterview() {
+  const level = painCheckinState?.painLevel;
+  const increase =
+    painCheckinState?.context === "after" &&
+    Number.isInteger(confirmedPreExercisePain)
+      ? level - confirmedPreExercisePain
+      : 0;
+  return Number.isInteger(level) && (level >= 7 || increase >= 2);
+}
+
+function createPainSafetyAnswers() {
+  return {
+    urgentSymptoms: "",
+    painLocation: "",
+    painSide: "",
+    painFamiliarity: "",
+    onsetTiming: "",
+    restTrend: "",
+    safeMovement: "",
+    outcome: "",
+    reportForPhysiotherapist: false,
+    exerciseId: engine.exercise?.id ?? "",
+    exerciseName: engine.exercise?.name ?? "",
+    repsCompleted: completedSessionReps + (engine.repCount ?? 0),
+    setNumber: completedSetCount + 1,
+  };
+}
+
+function painSafetyStageName() {
+  return isPainSafetyStage()
+    ? painCheckinState.stage.replace("safety-", "")
+    : "";
+}
+
+function renderPainSafetyStage(stageName, { announceReassurance = false } = {}) {
+  if (!painCheckinState || !PAIN_SAFETY_STEPS[stageName]) return;
+  const step = PAIN_SAFETY_STEPS[stageName];
+  painCheckinState.stage = `safety-${stageName}`;
+  painLevelChoicesEl.classList.add("hidden");
+  painConfirmationEl.classList.add("hidden");
+  recoveryChoicesEl.classList.add("hidden");
+  painSafetyInterviewEl.classList.remove("hidden", "is-urgent", "is-outcome");
+  painSkipBtn.classList.add("hidden");
+  painCheckinTitleEl.textContent = "Let’s check that you are safe";
+  painSafetyHeadingEl.textContent = "Please stay resting";
+  painSafetyMessageEl.textContent = PAIN_SAFETY_REASSURANCE;
+  painSafetyQuestionEl.textContent = step.question;
+  painSafetyHelpEl.textContent = step.help;
+  painSafetyChoicesEl.replaceChildren();
+  step.choices.forEach(([value, label]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "pain-safety-choice";
+    button.dataset.painSafetyResponse = value;
+    button.textContent = label;
+    painSafetyChoicesEl.appendChild(button);
+  });
+  voiceCheckinStatusEl.textContent = voiceGuidance.canListen
+    ? "You can answer by voice after the question, or choose a large button."
+    : "Choose the answer that fits best.";
+  updatePainCheckinPresentation();
+  const spokenPrompt = announceReassurance
+    ? `${PAIN_SAFETY_REASSURANCE} ${step.question}`
+    : step.question;
+  speakPainPrompt(
+    spokenPrompt,
+    `checkin:${painCheckinState.context}:safety:${stageName}`,
+    `safety-${stageName}`
+  );
+}
+
+function beginPainSafetyInterview() {
+  if (!painCheckinState) return;
+  voiceGuidance.cancel();
+  if (running) {
+    deactivateCameraGuide({
+      statusMessage: "Camera paused for a pain safety check",
+    });
+  }
+  painCheckinState.startAfter = false;
+  painCheckinState.continuation = "";
+  painCheckinState.calibrationTrigger = null;
+  painCheckinState.safetyAnswers = createPainSafetyAnswers();
+  renderPainSafetyStage("urgent", { announceReassurance: true });
+}
+
+function determinePainSafetyOutcome() {
+  const answers = painCheckinState?.safetyAnswers ?? {};
+  if (answers.urgentSymptoms !== "no" || answers.safeMovement === "help") {
+    return "urgent";
+  }
+  if (
+    painCheckinState.painLevel >= 7 ||
+    answers.restTrend !== "better" ||
+    answers.safeMovement !== "safe"
+  ) {
+    return "professional";
+  }
+  return "monitor";
+}
+
+function renderPainSafetyOutcome(forcedOutcome = "") {
+  if (!painCheckinState?.safetyAnswers) return;
+  voiceGuidance.cancel();
+  const outcome = forcedOutcome || determinePainSafetyOutcome();
+  painCheckinState.safetyAnswers.outcome = outcome;
+  painCheckinState.stage = "safety-outcome";
+  painSafetyInterviewEl.classList.remove("hidden");
+  painSafetyInterviewEl.classList.add("is-outcome");
+  painSafetyInterviewEl.classList.toggle("is-urgent", outcome === "urgent");
+  painSafetyChoicesEl.replaceChildren();
+
+  let heading = "End this exercise for today";
+  let message =
+    "Your pain increase has been recorded. Rest and monitor how you feel before doing more exercise.";
+  let help =
+    "Do not restart this exercise today. This guidance is not a diagnosis.";
+  if (outcome === "urgent") {
+    heading = "Stop exercising and get help now";
+    message =
+      "Do not continue exercising. If these symptoms are severe, new, or worsening, call local emergency services now.";
+    help =
+      "PhysioVision has not contacted an emergency service or another person. Ask someone nearby for help if you can do so safely.";
+  } else if (outcome === "professional") {
+    heading = "Pause today’s programme and seek professional advice";
+    message =
+      "Your pain is substantial, has not improved after resting, or you may need help moving safely.";
+    help =
+      "Please stop today’s exercise and consider contacting a qualified healthcare professional. This is not a diagnosis.";
+  }
+
+  painCheckinTitleEl.textContent = "Your safety check is complete";
+  painSafetyHeadingEl.textContent = heading;
+  painSafetyMessageEl.textContent = message;
+  painSafetyQuestionEl.textContent = "What happens next";
+  painSafetyHelpEl.textContent = profile.carePath === "clinician"
+    ? `${help} You may also save this report for your physiotherapist to review. This does not notify them or change your prescribed plan.`
+    : help;
+
+  if (profile.carePath === "clinician") {
+    const reportButton = document.createElement("button");
+    reportButton.type = "button";
+    reportButton.className = "pain-safety-choice is-primary";
+    reportButton.dataset.painSafetyAction = "save-report";
+    reportButton.textContent = "Save for my physiotherapist to review";
+    painSafetyChoicesEl.appendChild(reportButton);
+  }
+  const finishButton = document.createElement("button");
+  finishButton.type = "button";
+  finishButton.className = "pain-safety-choice";
+  finishButton.dataset.painSafetyAction = "finish";
+  finishButton.textContent = profile.carePath === "clinician"
+    ? "Finish without saving a review report"
+    : "Finish safety check";
+  painSafetyChoicesEl.appendChild(finishButton);
+
+  voiceCheckinStatusEl.textContent =
+    "The camera remains paused. Choose an option below when you are ready.";
+  updatePainCheckinPresentation();
+  voiceGuidance.speak(`${heading}. ${message} ${help}`, {
+    key: `checkin:${painCheckinState.context}:safety-outcome:${outcome}`,
+    interrupt: true,
+  });
+}
+
+function acceptPainSafetyResponse(response) {
+  const stageName = painSafetyStageName();
+  const step = PAIN_SAFETY_STEPS[stageName];
+  if (!painCheckinState?.safetyAnswers || !step) return;
+  const allowed = step.choices.map(([value]) => value);
+  if (!allowed.includes(response)) {
+    voiceCheckinStatusEl.textContent =
+      "I could not match that answer. Please try again or choose a large button.";
+    return;
+  }
+  painCheckinState.safetyAnswers[step.field] = response;
+  if (stageName === "urgent" && response !== "no") {
+    renderPainSafetyOutcome("urgent");
+    return;
+  }
+  if (step.next === "outcome") {
+    renderPainSafetyOutcome();
+    return;
+  }
+  renderPainSafetyStage(step.next);
+}
+
+function finishPainSafetyInterview({ reportForPhysiotherapist = false } = {}) {
+  if (!painCheckinState?.safetyAnswers) return;
+  const completed = {
+    ...painCheckinState,
+    safetyAnswers: {
+      ...painCheckinState.safetyAnswers,
+      reportForPhysiotherapist,
+    },
+  };
+  const answers = completed.safetyAnswers;
+  postPainCheckin({
+    pain_level: completed.painLevel,
+    timing: completed.context,
+    recovery_status: answers.restTrend || completed.recoveryStatus,
+    location_notes: [answers.painSide, answers.painLocation]
+      .filter(Boolean)
+      .join(" "),
+    safety_follow_up: {
+      urgent_symptoms: answers.urgentSymptoms,
+      pain_location: answers.painLocation,
+      pain_side: answers.painSide,
+      pain_familiarity: answers.painFamiliarity,
+      onset_timing: answers.onsetTiming,
+      rest_trend: answers.restTrend,
+      safe_movement: answers.safeMovement,
+      outcome: answers.outcome,
+      report_for_physiotherapist: reportForPhysiotherapist,
+      exercise_id: answers.exerciseId,
+      exercise_name: answers.exerciseName,
+      reps_completed: answers.repsCompleted,
+      set_number: answers.setNumber,
+    },
+    requires_review:
+      answers.outcome !== "monitor" || reportForPhysiotherapist,
+    checked_at: new Date().toISOString(),
+  }).catch(() => {});
+
+  preExerciseCheckinCompleted = false;
+  confirmedPreExercisePain = null;
+  hidePainCheckin();
+  renderRecordedPain(completed);
+  statusEl.textContent = "Exercise paused after pain safety check";
+  cameraSessionHintEl.textContent =
+    "The exercise was not marked finished, but it should not be restarted today.";
+  setFeedbackBanner("tracking", "Rest and follow the safety guidance recorded in your check-in");
+  const savedMessage = reportForPhysiotherapist
+    ? "Your pain and safety answers were saved for your physiotherapist to review. They were not automatically notified."
+    : "Your pain and safety answers were recorded. The camera remains paused.";
+  voiceGuidance.speak(savedMessage, {
+    key: `checkin:${completed.context}:safety-saved:${reportForPhysiotherapist}`,
+    interrupt: true,
+  });
+}
+
 function acceptPainLevel(level) {
   if (!painCheckinState || !Number.isInteger(level) || level < 0 || level > 10) {
     voiceCheckinStatusEl.textContent =
@@ -3135,6 +3504,7 @@ function beginPainConfirmation() {
   painCheckinState.stage = "confirm-pain";
   painLevelChoicesEl.classList.add("hidden");
   recoveryChoicesEl.classList.add("hidden");
+  painSafetyInterviewEl.classList.add("hidden");
   painConfirmationEl.classList.remove("hidden");
   painSkipBtn.classList.add("hidden");
   updatePainCheckinPresentation();
@@ -3165,6 +3535,7 @@ function returnToPainQuestion() {
   painLevelChoicesEl.classList.remove("hidden");
   painConfirmationEl.classList.add("hidden");
   recoveryChoicesEl.classList.add("hidden");
+  painSafetyInterviewEl.classList.add("hidden");
   painSkipBtn.classList.remove("hidden");
   updatePainCheckinPresentation();
   voiceCheckinStatusEl.textContent = handsFreeVoiceEnabled
@@ -3188,7 +3559,8 @@ function acceptPainConfirmation(response) {
       "Please say yes or change, or use one of the confirmation buttons.";
     return;
   }
-  if (shouldAskRecovery()) beginRecoveryQuestion();
+  if (requiresPainSafetyInterview()) beginPainSafetyInterview();
+  else if (shouldAskRecovery()) beginRecoveryQuestion();
   else finishPainCheckin();
 }
 
@@ -3223,11 +3595,26 @@ painCheckinEl.querySelectorAll("[data-pain-confirmation]").forEach((btn) => {
   });
 });
 
+painSafetyChoicesEl.addEventListener("click", (event) => {
+  const responseButton = event.target.closest("[data-pain-safety-response]");
+  if (responseButton) {
+    acceptPainSafetyResponse(responseButton.dataset.painSafetyResponse);
+    return;
+  }
+  const actionButton = event.target.closest("[data-pain-safety-action]");
+  if (actionButton?.dataset.painSafetyAction === "save-report") {
+    finishPainSafetyInterview({ reportForPhysiotherapist: true });
+  } else if (actionButton?.dataset.painSafetyAction === "finish") {
+    finishPainSafetyInterview();
+  }
+});
+
 painVoiceInputBtn.addEventListener("click", () => {
   startPainVoiceListening();
 });
 
 painSkipBtn.addEventListener("click", () => {
+  if (isPainSafetyStage()) return;
   const completed = painCheckinState ? { ...painCheckinState } : null;
   if (completed?.context === "before") {
     preExerciseCheckinCompleted = true;

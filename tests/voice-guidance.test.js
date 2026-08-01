@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   parseConfirmationResponse,
   parsePainLevel,
+  parsePainSafetyResponse,
   parseRecoveryStatus,
   prepareGentleSpeech,
   selectGentleVoice,
@@ -26,6 +27,26 @@ assert.equal(parseConfirmationResponse("Continue"), "confirm");
 assert.equal(parseConfirmationResponse("No, change my answer"), "change");
 assert.equal(parseConfirmationResponse("That is wrong"), "change");
 assert.equal(parseConfirmationResponse("maybe"), null);
+
+assert.equal(parsePainSafetyResponse("urgent", "No symptoms"), "no");
+assert.equal(parsePainSafetyResponse("urgent", "I am not sure"), "unsure");
+assert.equal(parsePainSafetyResponse("urgent", "I feel numb"), "yes");
+assert.equal(parsePainSafetyResponse("urgent", "not really"), "");
+assert.equal(parsePainSafetyResponse("location", "My right knee"), "knee");
+assert.equal(parsePainSafetyResponse("side", "Both sides"), "both");
+assert.equal(
+  parsePainSafetyResponse("familiarity", "My usual pain is stronger"),
+  "usual-stronger"
+);
+assert.equal(
+  parsePainSafetyResponse("timing", "It started during this exercise"),
+  "during"
+);
+assert.equal(parsePainSafetyResponse("rest", "It is getting worse"), "worse");
+assert.equal(
+  parsePainSafetyResponse("mobility", "I need someone nearby"),
+  "nearby"
+);
 
 const noveltyVoice = {
   name: "Zarvox",

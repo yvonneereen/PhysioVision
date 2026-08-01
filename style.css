@@ -2436,6 +2436,81 @@ body.fall-safety-open {
   -webkit-line-clamp: 2;
 }
 
+.recorded-pain {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 2px 0 14px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--green) 35%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--mint) 48%, var(--white));
+}
+
+.recorded-pain.hidden {
+  display: none;
+}
+
+.recorded-pain-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.recorded-pain-copy span {
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.recorded-pain-copy strong {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.recorded-pain-score {
+  display: flex;
+  align-items: baseline;
+  flex: 0 0 auto;
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+}
+
+.recorded-pain-score strong {
+  font-family: var(--font-display);
+  font-size: 32px;
+  line-height: 1;
+}
+
+.recorded-pain-score span {
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.recorded-pain.is-moderate {
+  border-color: #dfc46d;
+  background: #fff7df;
+}
+
+.recorded-pain.is-moderate .recorded-pain-copy span,
+.recorded-pain.is-moderate .recorded-pain-score {
+  color: #8a6512;
+}
+
+.recorded-pain.is-high {
+  border-color: #ef9a87;
+  background: #fff0ec;
+}
+
+.recorded-pain.is-high .recorded-pain-copy span,
+.recorded-pain.is-high .recorded-pain-score {
+  color: #b9452f;
+}
+
 .rep-row {
   display: flex;
   flex-wrap: wrap;

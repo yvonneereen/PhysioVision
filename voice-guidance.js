@@ -1,5 +1,11 @@
 const VOICE_PREFERENCE_KEY = "physiovision.voice.enabled.v1";
 
+const GENTLE_VOICE_NAME =
+  /\b(samantha|karen|moira|tessa|serena|fiona|ava|aria|jenny|sonia)\b|google (us|uk) english/i;
+const NATURAL_VOICE_NAME = /\b(natural|neural|enhanced|premium|siri)\b/i;
+const NOVELTY_VOICE_NAME =
+  /\b(albert|bad news|bells|boing|bubbles|cellos|deranged|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox)\b/i;
+
 const NUMBER_WORDS = Object.freeze({
   zero: 0,
   oh: 0,
@@ -64,6 +70,49 @@ export function parseConfirmationResponse(transcript) {
   return null;
 }
 
+function voiceScore(voice, requestedLanguage) {
+  const language = String(voice?.lang ?? "").toLowerCase();
+  const requested = String(requestedLanguage ?? "en-US").toLowerCase();
+  const requestedBase = requested.split("-")[0];
+  const name = String(voice?.name ?? "");
+
+  if (language && !language.startsWith(requestedBase)) return -Infinity;
+
+  let score = 0;
+  if (language === requested) score += 80;
+  else if (language.startsWith(requestedBase)) score += 55;
+  if (NATURAL_VOICE_NAME.test(name)) score += 45;
+  if (GENTLE_VOICE_NAME.test(name)) score += 35;
+  if (voice?.default) score += 8;
+  if (voice?.localService) score += 4;
+  if (NOVELTY_VOICE_NAME.test(name)) score -= 200;
+  return score;
+}
+
+export function selectGentleVoice(voices, requestedLanguage = "en-US") {
+  const available = Array.from(voices ?? []);
+  let selected = null;
+  let selectedScore = -Infinity;
+
+  available.forEach((voice) => {
+    const score = voiceScore(voice, requestedLanguage);
+    if (score > selectedScore) {
+      selected = voice;
+      selectedScore = score;
+    }
+  });
+
+  return selectedScore === -Infinity ? null : selected;
+}
+
+export function prepareGentleSpeech(text) {
+  return String(text ?? "")
+    .replace(/\s*[—–]\s*/g, ". ")
+    .replace(/;\s*/g, ". ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function readStoredPreference(browserWindow) {
   try {
     return browserWindow.localStorage.getItem(VOICE_PREFERENCE_KEY) !== "false";
@@ -83,6 +132,20 @@ export class VoiceGuidance {
     this.enabled = browserWindow ? readStoredPreference(browserWindow) : false;
     this.lastSpoken = new Map();
     this.activeRecognition = null;
+    this.preferredVoice = null;
+    this.refreshPreferredVoice = () => {
+      const language =
+        this.window?.document?.documentElement?.lang || "en-US";
+      this.preferredVoice = selectGentleVoice(
+        this.synthesis?.getVoices?.() ?? [],
+        language
+      );
+    };
+    this.refreshPreferredVoice();
+    this.synthesis?.addEventListener?.(
+      "voiceschanged",
+      this.refreshPreferredVoice
+    );
   }
 
   get canSpeak() {
@@ -137,8 +200,11 @@ export class VoiceGuidance {
     cooldownMs = 0,
     interrupt = false,
     onEnd = null,
+    rate = 0.84,
+    pitch = 1.04,
+    volume = 0.92,
   } = {}) {
-    const message = String(text ?? "").trim();
+    const message = prepareGentleSpeech(text);
     if (!message || !this.enabled || !this.canSpeak) return false;
 
     const now = Date.now();
@@ -147,10 +213,15 @@ export class VoiceGuidance {
 
     if (interrupt) this.synthesis.cancel();
     const utterance = new this.window.SpeechSynthesisUtterance(message);
-    utterance.lang = this.window.document?.documentElement?.lang || "en-US";
-    utterance.rate = 0.88;
-    utterance.pitch = 1;
-    utterance.volume = 1;
+    if (!this.preferredVoice) this.refreshPreferredVoice();
+    if (this.preferredVoice) utterance.voice = this.preferredVoice;
+    utterance.lang =
+      this.preferredVoice?.lang ||
+      this.window.document?.documentElement?.lang ||
+      "en-US";
+    utterance.rate = Math.min(Math.max(Number(rate) || 0.84, 0.5), 1.25);
+    utterance.pitch = Math.min(Math.max(Number(pitch) || 1.04, 0.75), 1.3);
+    utterance.volume = Math.min(Math.max(Number(volume) || 0.92, 0.2), 1);
     if (typeof onEnd === "function") utterance.addEventListener("end", onEnd);
     this.lastSpoken.set(key, now);
     this.synthesis.speak(utterance);

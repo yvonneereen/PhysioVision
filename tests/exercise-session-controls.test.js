@@ -190,6 +190,12 @@ assert.match(
   "the pain check-in should show explicit confirm and change actions"
 );
 
+assert.match(
+  markup,
+  /id="recordedPain"[\s\S]*?id="recordedPainMessage"[\s\S]*?id="recordedPainValue"/,
+  "the right-side exercise panel should show the confirmed pain level"
+);
+
 const acceptPainSource = functionSource(
   "acceptPainLevel",
   "beginPainConfirmation"
@@ -223,6 +229,36 @@ assert.match(
   acceptConfirmationSource,
   /if \(shouldAskRecovery\(\)\) beginRecoveryQuestion\(\);[\s\S]*?else finishPainCheckin\(\)/,
   "only a confirmed pain level should advance the check-in"
+);
+
+const finishPainSource = functionSource(
+  "finishPainCheckin",
+  "acceptPainLevel"
+);
+assert.match(
+  finishPainSource,
+  /hidePainCheckin\(\);[\s\S]*?acknowledgeRecordedPain\(completed\)/,
+  "a completed pain check-in should show and speak an acknowledgement"
+);
+assert.doesNotMatch(
+  finishPainSource,
+  /continueAfterPainCheckin\(completed\)/,
+  "camera setup should wait for the pain acknowledgement"
+);
+
+const acknowledgementSource = functionSource(
+  "acknowledgeRecordedPain",
+  "startPainVoiceListening"
+);
+assert.match(
+  acknowledgementSource,
+  /recorded your pain level as \$\{level\} out of 10/,
+  "the acknowledgement should repeat the recorded pain level"
+);
+assert.match(
+  acknowledgementSource,
+  /onEnd:\s*continueOnce/,
+  "the next step should begin after the spoken acknowledgement"
 );
 
 const voiceVisibilitySource = functionSource(

@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=57" />
+  <link rel="stylesheet" href="style.css?v=58" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -1087,6 +1087,22 @@
             <div class="dose-card">
               <span>Plan</span>
               <strong id="prescription"></strong>
+            </div>
+          </div>
+
+          <div
+            id="recordedPain"
+            class="recorded-pain hidden"
+            role="status"
+            aria-live="polite"
+          >
+            <div class="recorded-pain-copy">
+              <span id="recordedPainContext">Before exercise pain</span>
+              <strong id="recordedPainMessage">Pain level recorded</strong>
+            </div>
+            <div class="recorded-pain-score" aria-label="Recorded pain level out of 10">
+              <strong id="recordedPainValue">0</strong>
+              <span>/10</span>
             </div>
           </div>
 
@@ -2353,7 +2369,7 @@
   <script type="module" src="patient-dashboard.js?v=15"></script>
   <script type="module" src="therapist.js?v=15"></script>
   <script type="module" src="exercise-library.js?v=15"></script>
-  <script type="module" src="main.js?v=54"></script>
+  <script type="module" src="main.js?v=56"></script>
   <script type="module" src="agent-chat.js?v=13"></script>
   <script type="module" src="care-workflow.js?v=13"></script>
 </body>

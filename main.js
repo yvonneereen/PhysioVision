@@ -896,6 +896,7 @@ exSelect.addEventListener("change", () => {
   }
   preExerciseCheckinCompleted = false;
   confirmedPreExercisePain = null;
+  clearRecordedPain();
   discardExerciseSession();
   cancelCalibration();
   engine.changeExercise(
@@ -932,6 +933,7 @@ sideSelect.addEventListener("change", () => {
   }
   preExerciseCheckinCompleted = false;
   confirmedPreExercisePain = null;
+  clearRecordedPain();
   discardExerciseSession();
   cancelCalibration();
   engine.changeExercise(
@@ -953,6 +955,7 @@ window.addEventListener("physiovision:profile-updated", (event) => {
   cancelCalibration();
   preExerciseCheckinCompleted = false;
   confirmedPreExercisePain = null;
+  clearRecordedPain();
   profile = event.detail;
   if (authenticatedRole === "patient") {
     authenticatedPatientProfile = event.detail;
@@ -985,6 +988,7 @@ window.addEventListener("physiovision:profile-updated", (event) => {
 window.addEventListener("physiovision:prescriptions-updated", (event) => {
   preExerciseCheckinCompleted = false;
   confirmedPreExercisePain = null;
+  clearRecordedPain();
   const prescriptions = Array.isArray(event.detail) ? event.detail : [];
   window.sessionStorage.setItem(
     "physiovision.prescriptions.v1",
@@ -2871,6 +2875,10 @@ const painConfirmationSummaryEl = document.getElementById("painConfirmationSumma
 const recoveryChoicesEl = document.getElementById("recoveryChoices");
 const voiceCheckinStatusEl = document.getElementById("voiceCheckinStatus");
 const painVoiceInputBtn = document.getElementById("painVoiceInput");
+const recordedPainEl = document.getElementById("recordedPain");
+const recordedPainContextEl = document.getElementById("recordedPainContext");
+const recordedPainMessageEl = document.getElementById("recordedPainMessage");
+const recordedPainValueEl = document.getElementById("recordedPainValue");
 let painCheckinState = null;
 
 function painQuestion(context) {
@@ -2904,6 +2912,54 @@ function continueAfterPainCheckin(completed) {
   } else if (completed.continuation === "camera" || completed.startAfter) {
     activateCameraGuide();
   }
+}
+
+function renderRecordedPain({ painLevel, context }) {
+  if (!Number.isInteger(painLevel) || painLevel < 0 || painLevel > 10) return;
+
+  recordedPainEl.classList.remove("hidden", "is-moderate", "is-high");
+  if (painLevel >= 7) recordedPainEl.classList.add("is-high");
+  else if (painLevel >= 4) recordedPainEl.classList.add("is-moderate");
+
+  recordedPainContextEl.textContent =
+    context === "after" ? "After exercise pain" : "Before exercise pain";
+  recordedPainMessageEl.textContent = `Pain level ${painLevel} recorded`;
+  recordedPainValueEl.textContent = String(painLevel);
+  recordedPainEl.setAttribute(
+    "aria-label",
+    `${recordedPainContextEl.textContent}: pain level ${painLevel} out of 10 recorded`
+  );
+}
+
+function clearRecordedPain() {
+  recordedPainEl.classList.add("hidden");
+  recordedPainEl.classList.remove("is-moderate", "is-high");
+  recordedPainEl.removeAttribute("aria-label");
+}
+
+function acknowledgeRecordedPain(completed) {
+  renderRecordedPain(completed);
+
+  const level = completed.painLevel;
+  const acknowledgement =
+    `Thank you. I have recorded your pain level as ${level} out of 10. We will continue gently.`;
+  let continued = false;
+  let fallbackTimer = null;
+  const continueOnce = () => {
+    if (continued) return;
+    continued = true;
+    if (fallbackTimer) window.clearTimeout(fallbackTimer);
+    continueAfterPainCheckin(completed);
+  };
+
+  const spoken = voiceGuidance.speak(acknowledgement, {
+    key: `checkin:${completed.context}:recorded:${level}`,
+    interrupt: true,
+    onEnd: continueOnce,
+  });
+
+  if (spoken) fallbackTimer = window.setTimeout(continueOnce, 3500);
+  else window.setTimeout(continueOnce, 200);
 }
 
 function startPainVoiceListening({ expectedStage = null } = {}) {
@@ -2970,6 +3026,8 @@ function showPainCheckin(context = "after", {
     });
     return;
   }
+
+  if (context === "before") clearRecordedPain();
 
   painCheckinState = {
     context,
@@ -3058,7 +3116,7 @@ function finishPainCheckin() {
     confirmedPreExercisePain = completed.painLevel;
   }
   hidePainCheckin();
-  continueAfterPainCheckin(completed);
+  acknowledgeRecordedPain(completed);
 }
 
 function acceptPainLevel(level) {

@@ -242,6 +242,72 @@ class CommandScopingTests(TestCase):
         self.assertIn("No active exercise", error)
 
 
+class ClaimPatientTests(TestCase):
+    """Triage 'Claim' assigns an unclaimed patient to the acting clinician."""
+
+    def setUp(self):
+        from api.core.models import (
+            ClinicianProfile, PatientProfile, User, UserRole,
+        )
+        self.clinician = ClinicianProfile.objects.create(
+            user=User.objects.create_user(
+                username="dr@c.com", email="dr@c.com", password="pw",
+                role=UserRole.CLINICIAN, first_name="Dee", last_name="Doc",
+            ),
+            license_number="L1", slack_user_id="UDOC",
+        )
+        # Unassigned patient — the kind that lands in the triage channel.
+        self.patient = PatientProfile.objects.create(
+            user=User.objects.create_user(
+                username="pat@c.com", email="pat@c.com", password="pw",
+                role=UserRole.PATIENT, first_name="Sarah", last_name="Payne",
+            ),
+            primary_clinician=None,
+            slack_thread_ts="OLD-TS",
+        )
+
+    def test_claim_assigns_and_resets_thread(self):
+        from .services import claim_patient
+        patient, error = claim_patient(self.clinician, str(self.patient.id))
+        self.assertIsNone(error)
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.primary_clinician_id, self.clinician.id)
+        self.assertEqual(self.patient.slack_thread_ts, "")
+
+    def test_claim_rejects_another_clinicians_patient(self):
+        from api.core.models import ClinicianProfile, User, UserRole
+        from .services import claim_patient
+        other = ClinicianProfile.objects.create(
+            user=User.objects.create_user(
+                username="dr2@c.com", email="dr2@c.com", password="pw",
+                role=UserRole.CLINICIAN, first_name="Ann", last_name="Other",
+            ),
+            license_number="L2",
+        )
+        self.patient.primary_clinician = other
+        self.patient.save(update_fields=["primary_clinician"])
+        patient, error = claim_patient(self.clinician, str(self.patient.id))
+        self.assertIsNone(patient)
+        self.assertIn("already assigned", error)
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.primary_clinician_id, other.id)
+
+    def test_claim_unknown_patient_errors(self):
+        from .services import claim_patient
+        # A well-formed but non-existent UUID.
+        patient, error = claim_patient(
+            self.clinician, "00000000-0000-0000-0000-000000000000",
+        )
+        self.assertIsNone(patient)
+        self.assertIn("no longer exists", error)
+
+    def test_claim_malformed_id_errors(self):
+        from .services import claim_patient
+        patient, error = claim_patient(self.clinician, "999999")
+        self.assertIsNone(patient)
+        self.assertIn("no longer exists", error)
+
+
 class PlanBuilderTests(TestCase):
     """The AI programme builder's accept/mapping logic (no live Gemini call)."""
 

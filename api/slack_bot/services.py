@@ -196,11 +196,13 @@ def claim_patient(clinician, patient_id):
     Resets the Slack thread so future activity starts fresh in the new
     clinician's DM. Returns (patient, error).
     """
+    from django.core.exceptions import ValidationError
+
     from api.core.models import PatientProfile
 
     try:
         patient = PatientProfile.objects.select_related('user', 'primary_clinician').get(id=patient_id)
-    except (PatientProfile.DoesNotExist, ValueError, TypeError):
+    except (PatientProfile.DoesNotExist, ValidationError, ValueError, TypeError):
         return None, "That patient no longer exists."
 
     if patient.primary_clinician_id and patient.primary_clinician_id != clinician.id:

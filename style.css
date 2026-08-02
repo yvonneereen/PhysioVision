@@ -4505,6 +4505,19 @@ details.metrics summary {
   font-weight: 700;
 }
 
+.patient-pathway-invite-nocode {
+  margin: 12px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.patient-pathway-invite-nocode .text-link {
+  font-size: 12px;
+}
+
 .patient-pathway-status {
   min-height: 20px;
   margin: 12px 0 0;

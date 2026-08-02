@@ -50,6 +50,9 @@ const pathwayInviteSubmit = document.getElementById(
 const pathwayInviteStatus = document.getElementById(
   "patientPathwayInviteStatus",
 );
+const pathwaySelfRefer = document.getElementById(
+  "patientPathwaySelfRefer",
+);
 const trendStatus = document.getElementById("patientTrendStatus");
 const trendMessage = document.getElementById("patientTrendMessage");
 const trendChart = document.getElementById("patientTrendChart");
@@ -951,6 +954,30 @@ pathwayInviteForm?.addEventListener("submit", async (event) => {
     pathwayInviteCode.disabled = false;
     pathwayInviteSubmit.disabled = false;
     pathwayInviteCode.focus();
+  }
+});
+
+// Self-referral: patient wants a physiotherapist but has no invite code. Select
+// the physiotherapist pathway with no clinician — the backend posts them to the
+// triage queue for the care team to claim.
+pathwaySelfRefer?.addEventListener("click", async () => {
+  setPathwayButtonsDisabled(true);
+  pathwayInviteCode.disabled = true;
+  pathwayInviteSubmit.disabled = true;
+  pathwaySelfRefer.disabled = true;
+  pathwayInviteStatus.textContent = "Adding you to the triage queue…";
+  try {
+    const profile = await selectPatientPathway("physiotherapist");
+    pathwayInviteStatus.textContent =
+      "Request received. A physiotherapist will pick up your case soon.";
+    await finishPathwaySetup(profile);
+  } catch (error) {
+    pathwayInviteStatus.textContent =
+      error.message || "Your request could not be sent. Please try again.";
+    setPathwayButtonsDisabled(false);
+    pathwayInviteCode.disabled = false;
+    pathwayInviteSubmit.disabled = false;
+    pathwaySelfRefer.disabled = false;
   }
 });
 

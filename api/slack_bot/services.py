@@ -215,14 +215,40 @@ def claim_patient(clinician, patient_id):
     return patient, None
 
 
+def _claim_button(patient):
+    return {
+        "type": "button",
+        "text": {"type": "plain_text", "text": "Claim patient"},
+        "action_id": "claim_patient",
+        "value": str(patient.id),
+        "style": "primary",
+    }
+
+
+def _open_dashboard_button(*, primary=False):
+    button = {
+        "type": "button",
+        "text": {"type": "plain_text", "text": "Open dashboard"},
+        "url": getattr(settings, 'FRONTEND_URL', 'http://localhost:3000'),
+    }
+    if primary:
+        button["style"] = "primary"
+    return button
+
+
+def _wants_therapist(patient):
+    """True if the patient has opted in to seeking physiotherapist help."""
+    from api.core.models import PatientPathwayChoice
+    return patient.pathway_choice == PatientPathwayChoice.PHYSIOTHERAPIST
+
+
 def _post_escalation_alert(escalation):
     if not getattr(settings, 'SLACK_BOT_TOKEN', ''):
         return
 
-    patient    = escalation.patient
-    name       = _patient_name(patient)
-    trigger    = TRIGGER_LABELS.get(escalation.trigger_type, escalation.trigger_type)
-    frontend   = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+    patient = escalation.patient
+    name    = _patient_name(patient)
+    trigger = TRIGGER_LABELS.get(escalation.trigger_type, escalation.trigger_type)
 
     section = {
         "type": "section",
@@ -231,12 +257,6 @@ def _post_escalation_alert(escalation):
             "text": f":rotating_light: *New escalation — {name}*\n*Trigger:* {trigger}\n{escalation.description}",
         },
     }
-    open_dashboard = {
-        "type": "button",
-        "text": {"type": "plain_text", "text": "Open dashboard"},
-        "url": frontend,
-        "style": "primary",
-    }
     text = f"New escalation for {name}: {trigger}"
 
     clinician = patient.primary_clinician
@@ -244,24 +264,55 @@ def _post_escalation_alert(escalation):
         # The patient has a linked physiotherapist — DM them privately.
         post_in_patient_thread(
             patient,
-            blocks=[section, {"type": "actions", "elements": [open_dashboard]}],
+            blocks=[section, {"type": "actions", "elements": [_open_dashboard_button(primary=True)]}],
             text=text,
         )
-    else:
-        # Unassigned/unlinked — drop it in the shared triage queue with a Claim
-        # button so any physio can take the patient on.
-        claim = {
-            "type": "button",
-            "text": {"type": "plain_text", "text": "Claim patient"},
-            "action_id": "claim_patient",
-            "value": str(patient.id),
-            "style": "primary",
-        }
+    elif _wants_therapist(patient):
+        # No assigned clinician, but the patient asked to be seen — surface it in
+        # triage with a Claim button so any physio can take them on.
         _post_to_triage(
             patient,
-            blocks=[section, {"type": "actions", "elements": [claim, open_dashboard]}],
+            blocks=[section, {"type": "actions", "elements": [_claim_button(patient), _open_dashboard_button()]}],
             text=f"Unclaimed — {text}",
         )
+    else:
+        # Patient hasn't opted in to physiotherapist help — respect that choice
+        # and don't surface their log anywhere.
+        logger.info("Escalation for %s not surfaced (no clinician, no opt-in).", name)
+
+
+def post_self_referral_to_triage(patient):
+    """
+    A patient has asked to be seen by a physiotherapist (chose the
+    physiotherapist pathway). Post their log to the shared triage channel with a
+    Claim button so any physio can take them on. No-op if they already have a
+    clinician, or Slack/triage isn't configured.
+    """
+    if not getattr(settings, 'SLACK_BOT_TOKEN', ''):
+        return None
+    if patient.primary_clinician_id:
+        return None
+
+    header = {
+        "type": "section",
+        "text": {
+            "type": "mrkdwn",
+            "text": (
+                f":raising_hand: *New request for a physiotherapist — {_patient_name(patient)}*\n"
+                "_Patient opted in to seek professional help._"
+            ),
+        },
+    }
+    actions = {
+        "type": "actions",
+        "elements": [_claim_button(patient), _open_dashboard_button()],
+    }
+    blocks = [header] + build_patient_summary_blocks(patient) + [actions]
+    return _post_to_triage(
+        patient,
+        blocks=blocks,
+        text=f"{_patient_name(patient)} requested a physiotherapist",
+    )
 
 
 # ── Daily digest ──────────────────────────────────────────────

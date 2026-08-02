@@ -449,3 +449,80 @@ class OptionalSlackIntegrationTests(TestCase):
             response.json(),
             {'detail': 'Slack integration is not configured.'},
         )
+
+
+@override_settings(SLACK_BOT_TOKEN='xoxb-test', SLACK_TRIAGE_CHANNEL_ID='C-TRIAGE')
+class SelfReferralTriageTests(TestCase):
+    """Only patients who opt in to physiotherapist help appear in triage."""
+
+    def setUp(self):
+        from api.core.models import (
+            PatientPathwayChoice, PatientProfile, User, UserRole,
+        )
+        self.PatientPathwayChoice = PatientPathwayChoice
+        self.patient = PatientProfile.objects.create(
+            user=User.objects.create_user(
+                username="pat@c.com", email="pat@c.com", password="pw",
+                role=UserRole.PATIENT, first_name="Sarah", last_name="Payne",
+            ),
+            primary_clinician=None,
+            pathway_choice=PatientPathwayChoice.PHYSIOTHERAPIST,
+        )
+
+    def test_opt_in_patient_is_posted_to_triage_with_claim_button(self):
+        from unittest.mock import MagicMock, patch
+        from .services import post_self_referral_to_triage
+
+        client = MagicMock()
+        with patch('api.slack_bot.services._get_slack_client', return_value=client):
+            post_self_referral_to_triage(self.patient)
+
+        client.chat_postMessage.assert_called_once()
+        kwargs = client.chat_postMessage.call_args.kwargs
+        self.assertEqual(kwargs["channel"], "C-TRIAGE")
+        action_ids = [
+            el.get("action_id")
+            for block in kwargs["blocks"] if block.get("type") == "actions"
+            for el in block["elements"]
+        ]
+        self.assertIn("claim_patient", action_ids)
+
+    def test_patient_with_clinician_is_not_posted(self):
+        from unittest.mock import MagicMock, patch
+        from api.core.models import ClinicianProfile, User, UserRole
+        from .services import post_self_referral_to_triage
+
+        self.patient.primary_clinician = ClinicianProfile.objects.create(
+            user=User.objects.create_user(
+                username="dr@c.com", email="dr@c.com", password="pw",
+                role=UserRole.CLINICIAN, first_name="Dee", last_name="Doc",
+            ),
+            license_number="L1",
+        )
+        self.patient.save(update_fields=["primary_clinician"])
+
+        client = MagicMock()
+        with patch('api.slack_bot.services._get_slack_client', return_value=client):
+            result = post_self_referral_to_triage(self.patient)
+
+        self.assertIsNone(result)
+        client.chat_postMessage.assert_not_called()
+
+    def test_wellness_patient_escalation_is_not_surfaced(self):
+        from unittest.mock import MagicMock, patch
+        from api.consultations.models import Escalation, EscalationTrigger
+        from .services import _post_escalation_alert
+
+        # Patient did NOT opt in to therapist help.
+        self.patient.pathway_choice = self.PatientPathwayChoice.WELLNESS
+        self.patient.save(update_fields=["pathway_choice"])
+        esc = Escalation.objects.create(
+            patient=self.patient, trigger_type=EscalationTrigger.MANUAL,
+            description="High pain.", status="open",
+        )
+
+        client = MagicMock()
+        with patch('api.slack_bot.services._get_slack_client', return_value=client):
+            _post_escalation_alert(esc)
+
+        client.chat_postMessage.assert_not_called()

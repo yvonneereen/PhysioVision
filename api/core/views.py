@@ -664,6 +664,18 @@ class PatientPathwayChoiceView(APIView):
             "updated_at",
         ])
 
+        # Opting in to physiotherapist help with no clinician yet — surface the
+        # patient in the shared triage queue so any physio can pick them up.
+        if (
+            choice == PatientPathwayChoice.PHYSIOTHERAPIST
+            and not profile.primary_clinician_id
+        ):
+            try:
+                from api.slack_bot.services import post_self_referral_to_triage
+                post_self_referral_to_triage(profile)
+            except Exception:  # Slack must never block the pathway response
+                logger.exception("Failed to post self-referral to Slack triage")
+
         return Response(PatientProfileSerializer(profile).data)
 
 

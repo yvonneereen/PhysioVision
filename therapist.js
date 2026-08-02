@@ -4,8 +4,8 @@ import {
   getConsultations, confirmConsultation, cancelConsultation, completeConsultation,
   getPatientSessions, getPatientPainCheckins,
   requestSlackLinkCode, disconnectSlack,
-  getCareMessages, sendCareMessage,
-} from "./api.js?v=23";
+  getCareMessages, sendCareMessage, getCareMessageThreads,
+} from "./api.js?v=24";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = ["January", "February", "March", "April", "May", "June",
@@ -16,6 +16,7 @@ const TAB_TITLES = {
   patients: "All patients",
   programmes: "Programmes",
   consultations: "Consultations",
+  messaging: "Messaging",
 };
 
 // In-memory caches populated on load; tabs render from these.
@@ -456,6 +457,100 @@ function switchTab(tab) {
 
   if (tab === "programmes") loadProgrammes();
   if (tab === "consultations") renderConsultations();
+  if (tab === "messaging") loadMessaging();
+}
+
+// ── Messaging inbox ─────────────────────────────────────────
+
+let activeConversation = null;
+
+async function loadMessaging() {
+  const list = document.getElementById("messaging-list");
+  try {
+    const threads = await getCareMessageThreads();
+    const rows = Array.isArray(threads) ? threads : threads.results ?? [];
+    renderMessagingList(rows);
+    updateMessagingBadge(rows);
+  } catch (err) {
+    console.error("Messaging load failed:", err);
+    if (list) list.innerHTML = `<p class="empty-state">Could not load conversations.</p>`;
+  }
+}
+
+function updateMessagingBadge(threads) {
+  const total = threads.reduce((sum, t) => sum + (t.unread || 0), 0);
+  const badge = document.getElementById("messaging-badge");
+  if (!badge) return;
+  badge.textContent = total;
+  badge.hidden = total === 0;
+}
+
+function renderMessagingList(threads) {
+  const list = document.getElementById("messaging-list");
+  if (!list) return;
+  if (!threads.length) {
+    list.innerHTML = `<p class="empty-state">No patient messages yet.</p>`;
+    return;
+  }
+  list.innerHTML = threads.map(t => {
+    const preview = t.last_sender === "clinician" ? `You: ${t.last_body}` : t.last_body;
+    const when = new Date(t.last_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" });
+    const unread = t.unread ? `<span class="conversation-unread">${t.unread}</span>` : "";
+    const active = activeConversation === t.patient ? " is-active" : "";
+    return `
+      <button type="button" class="conversation-item${active}" data-conversation="${t.patient}">
+        <span class="conversation-top">
+          <strong>${escapeHtml(t.patient_name)}</strong>${unread}
+        </span>
+        <span class="conversation-preview">${escapeHtml(preview)}</span>
+        <span class="conversation-when">${when}</span>
+      </button>`;
+  }).join("");
+}
+
+async function openConversation(patientId) {
+  activeConversation = patientId;
+  document.querySelectorAll(".conversation-item").forEach(el =>
+    el.classList.toggle("is-active", el.getAttribute("data-conversation") === String(patientId)));
+  const panel = document.getElementById("messaging-conversation");
+  if (!panel) return;
+  panel.innerHTML = `<p class="empty-state">Loading…</p>`;
+  try {
+    const data = await getCareMessages(patientId);
+    const messages = Array.isArray(data) ? data : data.results ?? [];
+    const name = messages[0]
+      ? (messages[0].sender === "patient" ? messages[0].sender_name : "this patient")
+      : "Patient";
+    panel.innerHTML = `
+      <div class="conversation-head"><strong>${escapeHtml(name)}</strong></div>
+      <div class="detail-messages-thread" id="conversation-thread">${careMessageRows(messages)}</div>
+      <form class="detail-messages-form" id="conversation-form">
+        <textarea id="conversation-input" rows="2" maxlength="1000" placeholder="Write a reply…"></textarea>
+        <button class="button button-coral button-small" type="submit">Send</button>
+      </form>`;
+    const thread = panel.querySelector("#conversation-thread");
+    if (thread) thread.scrollTop = thread.scrollHeight;
+    panel.querySelector("#conversation-form")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const input = panel.querySelector("#conversation-input");
+      const body = input.value.trim();
+      if (!body) return;
+      e.target.querySelector("button").disabled = true;
+      try {
+        await sendCareMessage(body, patientId);
+        input.value = "";
+        await openConversation(patientId);
+        loadMessaging();
+      } catch (err) {
+        console.error("Reply failed:", err);
+        e.target.querySelector("button").disabled = false;
+      }
+    });
+    loadMessaging();  // refresh unread counts now this thread is read
+  } catch (err) {
+    console.error("Conversation load failed:", err);
+    panel.innerHTML = `<p class="empty-state">Could not load this conversation.</p>`;
+  }
 }
 
 async function loadProgrammes() {
@@ -550,6 +645,10 @@ async function loadDashboard() {
     renderStats(state.patients);
     renderOverview(state.patients, state.consultations);
     renderPatientTable(state.patients);
+    // Surface the unread-messages badge without opening the tab.
+    getCareMessageThreads()
+      .then(t => updateMessagingBadge(Array.isArray(t) ? t : t.results ?? []))
+      .catch(() => {});
   } catch (err) {
     const body = document.getElementById("patient-table-body");
     if (body) body.innerHTML = `<p class="empty-state">Could not load patients. Please try again.</p>`;
@@ -569,6 +668,12 @@ document.addEventListener("click", (e) => {
   if (slackBtn) {
     if (slackBtn.dataset.linked === "true") disconnectSlackAccount();
     else connectSlack();
+    return;
+  }
+
+  const conversation = e.target.closest("[data-conversation]");
+  if (conversation) {
+    openConversation(conversation.getAttribute("data-conversation"));
     return;
   }
 

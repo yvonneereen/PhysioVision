@@ -14,13 +14,13 @@ import {
   selectPatientPathway,
   sendCareMessage,
   updateConsultation,
-} from "./api.js?v=23";
+} from "./api.js?v=24";
 import {
   analysePatientTrend,
   findUpcomingConsultation,
   isCurrentPrescription,
 } from "./patient-dashboard-state.js?v=2";
-import { saveProfile } from "./personalization.js?v=6";
+import { saveProfile } from "./personalization.js?v=7";
 import { EXERCISE_MAP } from "./exercises/registry.js";
 
 const dashboard = document.getElementById("patientDashboard");

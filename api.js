@@ -300,6 +300,10 @@ export async function getCareMessages(patientId = null) {
   return request("GET", `/care-messages/${query}`);
 }
 
+export async function getCareMessageThreads() {
+  return request("GET", "/care-messages/threads/");
+}
+
 export async function sendCareMessage(body, patientId = null) {
   const payload = patientId ? { body, patient: patientId } : { body };
   return request("POST", "/care-messages/", payload);

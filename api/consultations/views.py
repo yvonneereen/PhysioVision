@@ -185,6 +185,42 @@ class CareMessageViewSet(ModelViewSet):
                 "Failed to notify clinician of care message via Slack"
             )
 
+    @action(detail=False, methods=['get'])
+    def threads(self, request):
+        """One row per patient the clinician has a conversation with: latest
+        message + unread (patient→clinician) count, newest first."""
+        if (
+            request.user.role != UserRole.CLINICIAN
+            or not hasattr(request.user, 'clinician_profile')
+        ):
+            return Response([])
+        clinician = request.user.clinician_profile
+        by_patient = {}
+        messages = (
+            CareMessage.objects
+            .filter(clinician=clinician)
+            .select_related('patient__user')
+            .order_by('created_at')
+        )
+        for message in messages:
+            entry = by_patient.setdefault(message.patient_id, {
+                'patient': str(message.patient_id),
+                'patient_name': (
+                    message.patient.user.get_full_name().strip()
+                    or message.patient.user.email
+                ),
+                'unread': 0,
+            })
+            entry['last_body'] = message.body
+            entry['last_at'] = message.created_at
+            entry['last_sender'] = message.sender
+            if message.sender == MessageSender.PATIENT and message.read_at is None:
+                entry['unread'] += 1
+        threads = sorted(
+            by_patient.values(), key=lambda t: t['last_at'], reverse=True
+        )
+        return Response(threads)
+
 
 class EscalationViewSet(ModelViewSet):
     serializer_class = EscalationSerializer

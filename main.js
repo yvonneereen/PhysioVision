@@ -18,12 +18,12 @@ import {
   loadProfile,
   saveCalibration,
   validateCalibrationCapture,
-} from "./personalization.js";
+} from "./personalization.js?v=7";
 import {
   buildCalibrationSafetyContext,
   evaluateCalibrationReuse,
 } from "./calibration-policy.js";
-import { postSession, postPainCheckin, postCalibration, isLoggedIn } from "./api.js?v=23";
+import { postSession, postPainCheckin, postCalibration, isLoggedIn } from "./api.js?v=24";
 import { DRAFT_EXERCISES } from "./exercises/catalog.js";
 import {
   parseConfirmationResponse,

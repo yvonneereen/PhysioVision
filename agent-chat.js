@@ -2,7 +2,7 @@ import {
   getMe,
   isLoggedIn,
   sendAgentMessage,
-} from "./api.js?v=23";
+} from "./api.js?v=24";
 import { voiceGuidance } from "./voice-guidance.js";
 
 const launcher = document.getElementById("agentChatLauncher");

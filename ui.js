@@ -2,7 +2,7 @@ import {
   hasSavedProfile,
   loadProfile,
   saveProfile,
-} from "./personalization.js";
+} from "./personalization.js?v=7";
 import {
   evaluateWellnessScreening,
   WELLNESS_SCREENING_KEYS,
@@ -12,7 +12,7 @@ import {
   generateWellnessPlan,
   isLoggedIn,
   postWellnessScreening,
-} from "./api.js?v=23";
+} from "./api.js?v=24";
 
 const GOAL_API_VALUES = Object.freeze({
   "Stronger knees": "stronger_knees",

@@ -13,7 +13,7 @@ import {
   verifyEmail,
   verifyLogin,
   verifyPasswordResetCode,
-} from "./api.js?v=23";
+} from "./api.js?v=24";
 import { getRoleNavigationState } from "./role-ui.js?v=17";
 
 const shell        = document.getElementById("auth-modal");

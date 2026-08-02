@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=63" />
+  <link rel="stylesheet" href="style.css?v=64" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -2110,6 +2110,7 @@
           <button type="button" data-tab="patients"><span>◎</span> Patients</button>
           <button type="button" data-tab="programmes"><span>□</span> Programmes</button>
           <button type="button" data-tab="consultations"><span>◷</span> Consultations</button>
+          <button type="button" data-tab="messaging"><span>💬</span> Messaging<span class="tab-badge" id="messaging-badge" hidden></span></button>
         </nav>
         <div class="clinician-profile">
           <div class="avatar avatar-mei" id="clinician-avatar">ML</div>
@@ -2221,6 +2222,18 @@
           <div class="patient-table-wrap">
             <div class="table-heading"><div><strong>Past</strong><span>Completed &amp; cancelled</span></div></div>
             <div id="consult-past"><p class="empty-state">Loading…</p></div>
+          </div>
+        </section>
+
+        <!-- ── Messaging tab ──────────────────────────────── -->
+        <section class="tab-panel hidden" data-panel="messaging">
+          <div class="messaging-layout">
+            <div class="messaging-list" id="messaging-list">
+              <p class="empty-state">Loading conversations…</p>
+            </div>
+            <div class="messaging-conversation" id="messaging-conversation">
+              <p class="empty-state">Select a conversation to read and reply.</p>
+            </div>
           </div>
         </section>
       </div>
@@ -2475,13 +2488,13 @@
   </div>
 
   <script src="runtime-config.js"></script>
-  <script type="module" src="auth.js?v=25"></script>
-  <script type="module" src="ui.js?v=20"></script>
-  <script type="module" src="patient-dashboard.js?v=21"></script>
-  <script type="module" src="therapist.js?v=19"></script>
+  <script type="module" src="auth.js?v=26"></script>
+  <script type="module" src="ui.js?v=21"></script>
+  <script type="module" src="patient-dashboard.js?v=22"></script>
+  <script type="module" src="therapist.js?v=20"></script>
   <script type="module" src="exercise-library.js?v=15"></script>
-  <script type="module" src="main.js?v=60"></script>
-  <script type="module" src="agent-chat.js?v=15"></script>
-  <script type="module" src="care-workflow.js?v=15"></script>
+  <script type="module" src="main.js?v=61"></script>
+  <script type="module" src="agent-chat.js?v=16"></script>
+  <script type="module" src="care-workflow.js?v=16"></script>
 </body>
 </html>

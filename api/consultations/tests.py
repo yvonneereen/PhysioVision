@@ -134,6 +134,20 @@ class CareMessageTests(APITestCase):
         self.assertEqual(reply.status_code, 201)
         self.assertEqual(reply.data['sender'], 'clinician')
 
+    def test_threads_lists_conversation_with_unread_count(self):
+        self.client.force_authenticate(self.patient_user)
+        self.client.post('/api/care-messages/', {'body': 'Q1'}, format='json')
+        self.client.post('/api/care-messages/', {'body': 'Q2'}, format='json')
+
+        self.client.force_authenticate(self.clinician_user)
+        response = self.client.get('/api/care-messages/threads/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        thread = response.data[0]
+        self.assertEqual(thread['patient'], str(self.patient.id))
+        self.assertEqual(thread['unread'], 2)
+        self.assertEqual(thread['last_body'], 'Q2')
+
     def test_clinician_cannot_message_other_roster_patient(self):
         other = PatientProfile.objects.create(
             user=User.objects.create_user(

@@ -281,6 +281,35 @@ def _post_escalation_alert(escalation):
         logger.info("Escalation for %s not surfaced (no clinician, no opt-in).", name)
 
 
+def notify_clinician_of_message(message):
+    """
+    Ping the clinician in their private per-patient Slack DM thread when a
+    patient sends them an in-app message. No-op if Slack isn't configured or the
+    clinician hasn't linked Slack.
+    """
+    patient = message.patient
+    body = (message.body or "").strip()
+    preview = body if len(body) <= 300 else body[:297] + "…"
+    blocks = [
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    f":speech_balloon: *{_patient_name(patient)}* sent you a message:\n"
+                    f">{preview}"
+                ),
+            },
+        },
+        {"type": "actions", "elements": [_open_dashboard_button(primary=True)]},
+    ]
+    return post_in_patient_thread(
+        patient,
+        blocks=blocks,
+        text=f"New message from {_patient_name(patient)}",
+    )
+
+
 def post_self_referral_to_triage(patient):
     """
     A patient has asked to be seen by a physiotherapist (chose the

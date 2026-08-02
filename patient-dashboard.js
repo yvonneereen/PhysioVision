@@ -3,6 +3,7 @@ import {
   acceptConsultation,
   cancelConsultation,
   createConsultation,
+  getCareMessages,
   getConsultations,
   getEscalations,
   getMe,
@@ -11,8 +12,9 @@ import {
   getSessions,
   isLoggedIn,
   selectPatientPathway,
+  sendCareMessage,
   updateConsultation,
-} from "./api.js?v=22";
+} from "./api.js?v=23";
 import {
   analysePatientTrend,
   findUpcomingConsultation,
@@ -58,6 +60,11 @@ const pathwaySelfRefer = document.getElementById(
 const referPhysio = document.getElementById("patientReferPhysio");
 const referPhysioButton = document.getElementById("patientReferPhysioButton");
 const referPhysioStatus = document.getElementById("patientReferPhysioStatus");
+const messagesCard = document.getElementById("patientMessagesCard");
+const messagesClinician = document.getElementById("patientMessagesClinician");
+const messagesThread = document.getElementById("patientMessagesThread");
+const messagesForm = document.getElementById("patientMessagesForm");
+const messagesInput = document.getElementById("patientMessagesInput");
 const trendStatus = document.getElementById("patientTrendStatus");
 const trendMessage = document.getElementById("patientTrendMessage");
 const trendChart = document.getElementById("patientTrendChart");
@@ -306,6 +313,7 @@ function renderClinicianPlan(prescriptions) {
   dashboardSide.hidden = false;
   consultationCard.hidden = false;
   if (referPhysio) referPhysio.hidden = true;
+  setupPatientMessaging(currentUser?.profile);
   const isDemo = active.some((item) => item.is_demo);
   demoNotice.hidden = !isDemo;
 
@@ -371,6 +379,7 @@ function renderWellnessPlan(profile) {
   consultationCard.hidden = true;
   demoNotice.hidden = true;
   if (referPhysio) referPhysio.hidden = false;
+  if (messagesCard) messagesCard.hidden = true;
 
   if (!eligible) {
     firstExerciseId = null;
@@ -872,6 +881,75 @@ async function finishPathwaySetup(profile, user = currentUser) {
   pathwayStatus.textContent = "";
   await loadDashboardData();
 }
+
+// ── Messaging with the assigned physiotherapist ──────────────
+
+function setupPatientMessaging(profile) {
+  if (!messagesCard) return;
+  const hasClinician = Boolean(profile?.primary_clinician);
+  messagesCard.hidden = !hasClinician;
+  if (!hasClinician) return;
+  if (messagesClinician) {
+    messagesClinician.textContent =
+      profile.primary_clinician_name || "your physiotherapist";
+  }
+  loadCareMessages();
+}
+
+async function loadCareMessages() {
+  if (!messagesThread) return;
+  try {
+    const data = await getCareMessages();
+    renderCareMessages(results(data));
+  } catch (_) {
+    messagesThread.innerHTML =
+      '<p class="patient-messages-empty">Could not load messages.</p>';
+  }
+}
+
+function renderCareMessages(messages) {
+  messagesThread.innerHTML = "";
+  if (!messages.length) {
+    const empty = document.createElement("p");
+    empty.className = "patient-messages-empty";
+    empty.textContent = "No messages yet. Say hello or ask a question.";
+    messagesThread.appendChild(empty);
+    return;
+  }
+  for (const message of messages) {
+    const mine = message.sender === "patient";
+    const bubble = document.createElement("div");
+    bubble.className = `care-message ${mine ? "care-message-mine" : "care-message-theirs"}`;
+    const body = document.createElement("p");
+    body.className = "care-message-body";
+    body.textContent = message.body;
+    const meta = document.createElement("span");
+    meta.className = "care-message-meta";
+    const who = mine ? "You" : (message.sender_name || "Physiotherapist");
+    meta.textContent =
+      `${who} · ${formatDate(message.created_at, { hour: "numeric", minute: "2-digit" })}`;
+    bubble.append(body, meta);
+    messagesThread.appendChild(bubble);
+  }
+  messagesThread.scrollTop = messagesThread.scrollHeight;
+}
+
+messagesForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const body = messagesInput.value.trim();
+  if (!body) return;
+  const sendButton = document.getElementById("patientMessagesSend");
+  if (sendButton) sendButton.disabled = true;
+  try {
+    await sendCareMessage(body);
+    messagesInput.value = "";
+    await loadCareMessages();
+  } catch (error) {
+    showToast(error.message || "Your message could not be sent.");
+  } finally {
+    if (sendButton) sendButton.disabled = false;
+  }
+});
 
 function browserProfileFromApi(profile) {
   const wellnessPlan = profile.wellness_plan ?? null;

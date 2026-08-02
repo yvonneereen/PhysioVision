@@ -23,7 +23,7 @@ import {
   buildCalibrationSafetyContext,
   evaluateCalibrationReuse,
 } from "./calibration-policy.js";
-import { postSession, postPainCheckin, postCalibration, isLoggedIn } from "./api.js?v=22";
+import { postSession, postPainCheckin, postCalibration, isLoggedIn } from "./api.js?v=23";
 import { DRAFT_EXERCISES } from "./exercises/catalog.js";
 import {
   parseConfirmationResponse,

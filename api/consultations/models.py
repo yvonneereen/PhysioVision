@@ -145,3 +145,39 @@ class Escalation(TimestampedModel):
 
     def __str__(self) -> str:
         return f"Escalation [{self.trigger_type}] for {self.patient.user} — {self.status}"
+
+
+# ── Care messaging ────────────────────────────────────────────
+
+class MessageSender(models.TextChoices):
+    PATIENT   = "patient",   _("Patient")
+    CLINICIAN = "clinician", _("Clinician")
+
+
+class CareMessage(TimestampedModel):
+    """
+    A single message in the ongoing async thread between a patient and their
+    assigned physiotherapist. Not real-time and not for emergencies; a lighter
+    channel than a consultation for questions and check-ins.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    patient   = models.ForeignKey(PatientProfile, on_delete=models.CASCADE, related_name="care_messages")
+    clinician = models.ForeignKey(ClinicianProfile, on_delete=models.CASCADE, related_name="care_messages")
+
+    sender  = models.CharField(max_length=10, choices=MessageSender.choices, db_index=True)
+    body    = models.TextField()
+    read_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table  = "consultations_caremessage"
+        ordering  = ["created_at"]
+        indexes   = [
+            models.Index(fields=["patient", "created_at"]),
+            models.Index(fields=["clinician", "created_at"]),
+        ]
+        verbose_name        = _("care message")
+        verbose_name_plural = _("care messages")
+
+    def __str__(self) -> str:
+        return f"{self.sender} message: {self.patient.user} ↔ {self.clinician.user}"

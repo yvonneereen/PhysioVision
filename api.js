@@ -293,6 +293,18 @@ export async function getEscalations() {
   return request("GET", "/escalations/");
 }
 
+// ── Care messaging (patient ↔ physiotherapist) ───────────────
+
+export async function getCareMessages(patientId = null) {
+  const query = patientId ? `?patient=${encodeURIComponent(patientId)}` : "";
+  return request("GET", `/care-messages/${query}`);
+}
+
+export async function sendCareMessage(body, patientId = null) {
+  const payload = patientId ? { body, patient: patientId } : { body };
+  return request("POST", "/care-messages/", payload);
+}
+
 // ── Role-specific AI assistant ───────────────────────────────
 
 export async function sendAgentMessage(message) {

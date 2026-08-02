@@ -4,15 +4,21 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
-from api.core.models import ClinicianProfile, UserRole
+from api.core.models import ClinicianProfile, PatientProfile, UserRole
 
 from .models import (
+    CareMessage,
     Consultation,
     ConsultationInitiator,
     ConsultationStatus,
     Escalation,
+    MessageSender,
 )
-from .serializers import ConsultationSerializer, EscalationSerializer
+from .serializers import (
+    CareMessageSerializer,
+    ConsultationSerializer,
+    EscalationSerializer,
+)
 
 
 class ConsultationViewSet(ModelViewSet):
@@ -106,6 +112,78 @@ class ConsultationViewSet(ModelViewSet):
             initiated_by=ConsultationInitiator.PATIENT,
             status=ConsultationStatus.REQUESTED,
         )
+
+
+class CareMessageViewSet(ModelViewSet):
+    """
+    Async thread between a patient and their assigned physiotherapist.
+    Patients see their own thread; clinicians must scope with ?patient=<id>.
+    """
+    serializer_class = CareMessageSerializer
+    http_method_names = ['get', 'post', 'head', 'options']
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role == UserRole.PATIENT and hasattr(user, 'patient_profile'):
+            qs = CareMessage.objects.filter(patient=user.patient_profile)
+        elif user.role == UserRole.CLINICIAN and hasattr(user, 'clinician_profile'):
+            patient_id = self.request.query_params.get('patient')
+            if not patient_id:
+                return CareMessage.objects.none()
+            qs = CareMessage.objects.filter(
+                clinician=user.clinician_profile, patient_id=patient_id
+            )
+        else:
+            return CareMessage.objects.none()
+        return qs.select_related('patient__user', 'clinician__user').order_by('created_at')
+
+    def list(self, request, *args, **kwargs):
+        # Opening the thread marks the other party's messages as read.
+        inbound = (
+            MessageSender.CLINICIAN if request.user.role == UserRole.PATIENT
+            else MessageSender.PATIENT
+        )
+        self.get_queryset().filter(
+            sender=inbound, read_at__isnull=True
+        ).update(read_at=timezone.now())
+        return super().list(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if user.role == UserRole.PATIENT and hasattr(user, 'patient_profile'):
+            patient = user.patient_profile
+            clinician = patient.primary_clinician
+            if not clinician:
+                raise ValidationError({
+                    'detail': 'You are not linked to a physiotherapist yet.'
+                })
+            message = serializer.save(
+                patient=patient, clinician=clinician, sender=MessageSender.PATIENT
+            )
+            self._notify_clinician(message)
+        elif user.role == UserRole.CLINICIAN and hasattr(user, 'clinician_profile'):
+            clinician = user.clinician_profile
+            patient = PatientProfile.objects.filter(
+                id=self.request.data.get('patient'), primary_clinician=clinician
+            ).first()
+            if not patient:
+                raise ValidationError({'detail': 'That patient is not in your roster.'})
+            serializer.save(
+                patient=patient, clinician=clinician, sender=MessageSender.CLINICIAN
+            )
+        else:
+            raise PermissionDenied('Only patients and clinicians can send messages.')
+
+    def _notify_clinician(self, message):
+        # A patient message pings the clinician in their private Slack DM thread.
+        try:
+            from api.slack_bot.services import notify_clinician_of_message
+            notify_clinician_of_message(message)
+        except Exception:  # Slack must never block the message API
+            import logging
+            logging.getLogger(__name__).exception(
+                "Failed to notify clinician of care message via Slack"
+            )
 
 
 class EscalationViewSet(ModelViewSet):

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Consultation, Escalation
+from .models import CareMessage, Consultation, Escalation, MessageSender
 
 
 class ConsultationSerializer(serializers.ModelSerializer):
@@ -26,6 +26,25 @@ class ConsultationSerializer(serializers.ModelSerializer):
 
     def get_patient_name(self, obj):
         return obj.patient.user.get_full_name().strip() or obj.patient.user.email
+
+
+class CareMessageSerializer(serializers.ModelSerializer):
+    sender_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = CareMessage
+        fields = [
+            'id', 'patient', 'clinician', 'sender', 'sender_name', 'body',
+            'read_at', 'created_at',
+        ]
+        read_only_fields = [
+            'id', 'patient', 'clinician', 'sender', 'sender_name', 'read_at',
+            'created_at',
+        ]
+
+    def get_sender_name(self, obj):
+        user = obj.patient.user if obj.sender == MessageSender.PATIENT else obj.clinician.user
+        return user.get_full_name().strip() or user.email
 
 
 class EscalationSerializer(serializers.ModelSerializer):

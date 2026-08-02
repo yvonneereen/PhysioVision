@@ -168,6 +168,7 @@ class ResetPasswordSerializer(serializers.Serializer):
 
 class PatientProfileSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
+    primary_clinician_name = serializers.SerializerMethodField()
 
     class Meta:
         model  = PatientProfile
@@ -179,15 +180,21 @@ class PatientProfileSerializer(serializers.ModelSerializer):
             'wellness_screening_status', 'wellness_screening_answers',
             'wellness_screened_at',
             'wellness_plan', 'wellness_plan_accepted_at',
-            'primary_clinician', 'created_at', 'updated_at',
+            'primary_clinician', 'primary_clinician_name', 'created_at', 'updated_at',
         ]
         read_only_fields = [
             'id', 'user', 'care_path', 'pathway_choice',
             'pathway_selected_at', 'wellness_screening_status',
             'wellness_screening_answers', 'wellness_screened_at',
             'wellness_plan', 'wellness_plan_accepted_at',
-            'created_at', 'updated_at',
+            'primary_clinician_name', 'created_at', 'updated_at',
         ]
+
+    def get_primary_clinician_name(self, obj):
+        clinician = obj.primary_clinician
+        if not clinician:
+            return None
+        return clinician.user.get_full_name().strip() or clinician.user.email
 
     def validate(self, attrs):
         current_goal = getattr(

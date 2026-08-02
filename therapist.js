@@ -4,7 +4,8 @@ import {
   getConsultations, confirmConsultation, cancelConsultation, completeConsultation,
   getPatientSessions, getPatientPainCheckins,
   requestSlackLinkCode, disconnectSlack,
-} from "./api.js?v=22";
+  getCareMessages, sendCareMessage,
+} from "./api.js?v=23";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = ["January", "February", "March", "April", "May", "June",
@@ -162,12 +163,14 @@ async function showPatientDetail(patientId) {
   panel.innerHTML = `<p class="empty-state">Loading ${escapeHtml(patient.full_name)}…</p>`;
 
   try {
-    const [sessRaw, painRaw] = await Promise.all([
+    const [sessRaw, painRaw, msgRaw] = await Promise.all([
       getPatientSessions(patientId),
       getPatientPainCheckins(patientId),
+      getCareMessages(patientId).catch(() => []),
     ]);
     const sessions = (Array.isArray(sessRaw) ? sessRaw : sessRaw.results ?? []);
     const pains    = (Array.isArray(painRaw) ? painRaw : painRaw.results ?? []);
+    const messages = (Array.isArray(msgRaw) ? msgRaw : msgRaw.results ?? []);
 
     const recent = [...sessions].reverse();       // oldest → newest
     const qSpark = sparkline(recent.map(s => s.quality_score), 0, 100);
@@ -213,14 +216,65 @@ async function showPatientDetail(patientId) {
         <div><span>Programme</span><small>${rx}</small></div>
       </div>
       <div class="detail-section"><strong>Recent sessions</strong>${sessionRows}</div>
-      <div class="detail-section"><strong>Pain diary</strong>${painRows}</div>`;
+      <div class="detail-section"><strong>Pain diary</strong>${painRows}</div>
+      <div class="detail-section detail-messages">
+        <strong>Messages</strong>
+        <div class="detail-messages-thread" id="detail-messages-thread">${careMessageRows(messages)}</div>
+        <form class="detail-messages-form" id="detail-messages-form">
+          <textarea id="detail-messages-input" rows="2" maxlength="1000"
+            placeholder="Reply to ${escapeHtml(patient.full_name)}…"></textarea>
+          <button class="button button-coral button-small" type="submit">Send</button>
+        </form>
+      </div>`;
 
     panel.querySelector("#detail-close")?.addEventListener("click", () => panel.classList.add("hidden"));
+    wireDetailMessaging(panel, patientId);
     panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
   } catch (err) {
     panel.innerHTML = `<p class="empty-state">Could not load patient detail.</p>`;
     console.error("Patient detail failed:", err);
   }
+}
+
+function careMessageRows(messages) {
+  if (!messages.length) {
+    return `<p class="empty-state">No messages yet.</p>`;
+  }
+  return messages.map(m => {
+    const mine = m.sender === "clinician";
+    const when = new Date(m.created_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" });
+    const who = mine ? "You" : escapeHtml(m.sender_name || "Patient");
+    return `
+      <div class="care-message ${mine ? "care-message-mine" : "care-message-theirs"}">
+        <p class="care-message-body">${escapeHtml(m.body)}</p>
+        <span class="care-message-meta">${who} · ${when}</span>
+      </div>`;
+  }).join("");
+}
+
+function wireDetailMessaging(panel, patientId) {
+  const form = panel.querySelector("#detail-messages-form");
+  const input = panel.querySelector("#detail-messages-input");
+  const thread = panel.querySelector("#detail-messages-thread");
+  if (!form || !input || !thread) return;
+  thread.scrollTop = thread.scrollHeight;
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const body = input.value.trim();
+    if (!body) return;
+    form.querySelector("button").disabled = true;
+    try {
+      await sendCareMessage(body, patientId);
+      input.value = "";
+      const data = await getCareMessages(patientId);
+      thread.innerHTML = careMessageRows(Array.isArray(data) ? data : data.results ?? []);
+      thread.scrollTop = thread.scrollHeight;
+    } catch (err) {
+      console.error("Reply failed:", err);
+    } finally {
+      form.querySelector("button").disabled = false;
+    }
+  });
 }
 
 // ── Overview ────────────────────────────────────────────────

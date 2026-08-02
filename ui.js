@@ -12,7 +12,7 @@ import {
   generateWellnessPlan,
   isLoggedIn,
   postWellnessScreening,
-} from "./api.js?v=22";
+} from "./api.js?v=23";
 
 const GOAL_API_VALUES = Object.freeze({
   "Stronger knees": "stronger_knees",

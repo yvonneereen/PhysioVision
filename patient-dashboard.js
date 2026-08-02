@@ -55,6 +55,9 @@ const pathwayInviteStatus = document.getElementById(
 const pathwaySelfRefer = document.getElementById(
   "patientPathwaySelfRefer",
 );
+const referPhysio = document.getElementById("patientReferPhysio");
+const referPhysioButton = document.getElementById("patientReferPhysioButton");
+const referPhysioStatus = document.getElementById("patientReferPhysioStatus");
 const trendStatus = document.getElementById("patientTrendStatus");
 const trendMessage = document.getElementById("patientTrendMessage");
 const trendChart = document.getElementById("patientTrendChart");
@@ -302,6 +305,7 @@ function renderClinicianPlan(prescriptions) {
   primaryActions.hidden = false;
   dashboardSide.hidden = false;
   consultationCard.hidden = false;
+  if (referPhysio) referPhysio.hidden = true;
   const isDemo = active.some((item) => item.is_demo);
   demoNotice.hidden = !isDemo;
 
@@ -366,6 +370,7 @@ function renderWellnessPlan(profile) {
   dashboardSide.hidden = true;
   consultationCard.hidden = true;
   demoNotice.hidden = true;
+  if (referPhysio) referPhysio.hidden = false;
 
   if (!eligible) {
     firstExerciseId = null;
@@ -1069,6 +1074,29 @@ pathwaySelfRefer?.addEventListener("click", async () => {
     pathwayInviteCode.disabled = false;
     pathwayInviteSubmit.disabled = false;
     pathwaySelfRefer.disabled = false;
+  }
+});
+
+// Wellness patient asks to be seen by a physiotherapist. Switch to the
+// physiotherapist pathway (no clinician yet) — the backend posts their log to
+// the triage queue for the care team to claim.
+referPhysioButton?.addEventListener("click", async () => {
+  const confirmed = window.confirm(
+    "Request a physiotherapist? This pauses your self-guided wellness plan "
+    + "and shares your recent history with the care team.",
+  );
+  if (!confirmed) return;
+  referPhysioButton.disabled = true;
+  referPhysioStatus.textContent = "Sending your request…";
+  try {
+    const profile = await selectPatientPathway("physiotherapist");
+    referPhysioStatus.textContent =
+      "Request sent. A physiotherapist will pick up your case soon.";
+    await finishPathwaySetup(profile);
+  } catch (error) {
+    referPhysioStatus.textContent =
+      error.message || "Your request could not be sent. Please try again.";
+    referPhysioButton.disabled = false;
   }
 });
 

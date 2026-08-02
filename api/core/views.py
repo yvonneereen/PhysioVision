@@ -629,9 +629,17 @@ class PatientPathwayChoiceView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
+        # A wellness patient may self-refer up to the physiotherapist pathway
+        # (this posts them to triage). Any other change after selection is
+        # blocked and must go through support/a clinician.
+        is_self_referral = (
+            profile.pathway_choice == PatientPathwayChoice.WELLNESS
+            and choice == PatientPathwayChoice.PHYSIOTHERAPIST
+        )
         if (
             profile.pathway_choice != PatientPathwayChoice.UNSELECTED
             and profile.pathway_choice != choice
+            and not is_self_referral
         ):
             return Response(
                 {

@@ -5197,6 +5197,41 @@ details.metrics summary {
   font-size: 12px;
 }
 
+.patient-refer-physio {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+}
+
+.patient-refer-physio > div {
+  flex: 1 1 220px;
+}
+
+.patient-refer-physio strong {
+  display: block;
+  font-size: 14px;
+}
+
+.patient-refer-physio p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.patient-refer-physio-status {
+  flex-basis: 100%;
+  margin: 0;
+  min-height: 16px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .patient-pathway-status {
   min-height: 20px;
   margin: 12px 0 0;

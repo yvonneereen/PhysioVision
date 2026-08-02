@@ -304,9 +304,9 @@ export function measureHandSequenceFrame({
   };
 }
 
-function posePointMeasurement(landmarks, indices, names, calculate) {
+function posePointMeasurement(landmarks, indices, names, calculate, options = {}) {
   const points = indices.map((index) => landmarks?.[index]);
-  const quality = landmarkQuality(points, names);
+  const quality = landmarkQuality(points, names, options);
   const value = quality.usable ? calculate(...points) : NaN;
   return measurementResult(value, {
     score: quality.score,
@@ -345,14 +345,14 @@ function sideIndices(side) {
   };
 }
 
-function bodyScaleMeasurement(landmarks, indices, names, calculate) {
+function scaledMeasurement(landmarks, indices, names, calculate, options = {}) {
   return posePointMeasurement(landmarks, indices, names, (...points) => {
     const value = calculate(...points);
     return Number.isFinite(value) ? value : NaN;
-  });
+  }, options);
 }
 
-function relativeMotionRange(history, pointIndices, anchorIndices, referencePair) {
+function relativeMotionRangeImpl(history, pointIndices, anchorIndices, referencePair, options = {}) {
   if (!Array.isArray(history) || history.length === 0) {
     return measurementResult(NaN, {
       unavailable: true,
@@ -370,7 +370,7 @@ function relativeMotionRange(history, pointIndices, anchorIndices, referencePair
     const refs = referencePair.map((index) => frame.landmarks?.[index]);
     const all = [...points, ...anchors, ...refs];
     const names = all.map((_point, index) => `motion_${index}`);
-    const quality = landmarkQuality(all, names);
+    const quality = landmarkQuality(all, names, options);
     scores.push(quality.score);
     weakPoints.push(...quality.weakPoints);
     if (!quality.usable) continue;
@@ -431,7 +431,7 @@ function localTrajectory(history, pointIndex, anchorIndex, referencePair) {
     });
   }
 
-  const motion = relativeMotionRange(
+  const motion = relativeMotionRangeImpl(
     history,
     [pointIndex],
     [anchorIndex],
@@ -509,12 +509,13 @@ export function measurePoseExerciseFrame({
   exercise,
   side = "right",
   poseHistory = [],
+  visibilityThreshold = VISIBILITY_THRESHOLD,
 }) {
   const landmarks = poseResult?.landmarks?.[0];
   const worldLandmarks = poseResult?.worldLandmarks?.[0];
   if (!landmarks || !worldLandmarks) return {};
 
-  const measurements = jointAngles(worldLandmarks, landmarks);
+  const measurements = jointAngles(worldLandmarks, landmarks, visibilityThreshold);
   const working = sideIndices(side);
   const opposite = sideIndices(side === "left" ? "right" : "left");
   const both = {
@@ -526,6 +527,14 @@ export function measurePoseExerciseFrame({
   };
 
   const add = (key, value) => { measurements[key] = value; };
+  // Every metric below inherits the frame's visibility threshold, so calibration
+  // can loosen it (occluded side-lying / floor poses still measure) without
+  // affecting live rep-tracking, which keeps the default.
+  const qualityOptions = { threshold: visibilityThreshold };
+  const bodyScaleMeasurement = (lm, indices, names, calculate) =>
+    scaledMeasurement(lm, indices, names, calculate, qualityOptions);
+  const relativeMotionRange = (history, pointIndices, anchorIndices, referencePair) =>
+    relativeMotionRangeImpl(history, pointIndices, anchorIndices, referencePair, qualityOptions);
   const id = exercise?.id;
 
   if ([
@@ -727,7 +736,7 @@ export function measureCombinedForearmFrame({
   const hand = match.value.hand;
   const sideLm = sideIndices(side);
   const angles = jointAngles(poseWorldLandmarks, poseLandmarks);
-  const upperArmMotion = relativeMotionRange(
+  const upperArmMotion = relativeMotionRangeImpl(
     recentHistory(poseHistory, 800),
     [sideLm.elbow],
     [sideLm.shoulder],

@@ -6,7 +6,7 @@ import {
   measureCombinedExerciseFrame,
   measureHandExerciseFrame,
   measurePoseExerciseFrame,
-} from "./exercise-tracking.js";
+} from "./exercise-tracking.js?v=2";
 import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=41";
 import { POSES } from "./poses.js";
 import {
@@ -798,6 +798,10 @@ let holdTotal     = 0;
 const CALIBRATION_CAPTURE_MS = 1200;
 const CALIBRATION_POSITION_STABLE_MS = 500;
 const CALIBRATION_RETURN_STABLE_MS = 350;
+// Calibration is a deliberate hold, so accept lower-confidence landmarks than
+// live tracking (0.5). This lets occluded side-lying/floor poses (e.g. clamshell,
+// where one knee/hip overlaps the other) still measure and cache a personal range.
+const CALIBRATION_VISIBILITY_THRESHOLD = 0.3;
 const SESSION_POSITION_CAPTURE_MS = 1700;
 const SET_POSITION_STABLE_MS = 750;
 let calibrationSession = null;
@@ -1382,6 +1386,9 @@ function renderFrame() {
             exercise: engine.exercise,
             side: sideSelect.value,
             poseHistory: combinedPoseHistory,
+            visibilityThreshold: calibrationSession
+              ? CALIBRATION_VISIBILITY_THRESHOLD
+              : VISIBILITY_THRESHOLD,
           });
           const angles = Object.fromEntries(
             Object.entries(raw).map(([k, a]) => [k, smoother.smooth(k, a)])

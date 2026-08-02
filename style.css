@@ -5934,12 +5934,36 @@ details.metrics summary {
   align-items: start;
 }
 
+.messaging-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.messaging-new-btn { align-self: flex-start; }
+
 .messaging-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 560px;
+  max-height: 520px;
   overflow-y: auto;
+}
+
+.new-conversation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+.conversation-head span {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
 }
 
 .conversation-item {

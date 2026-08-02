@@ -518,12 +518,13 @@ async function openConversation(patientId) {
   try {
     const data = await getCareMessages(patientId);
     const messages = Array.isArray(data) ? data : data.results ?? [];
-    const name = messages[0]
-      ? (messages[0].sender === "patient" ? messages[0].sender_name : "this patient")
-      : "Patient";
+    const rosterName = state.patients.find(p => String(p.id) === String(patientId))?.full_name;
+    const name = rosterName
+      || (messages[0]?.sender === "patient" ? messages[0].sender_name : "Patient");
+    const emptyThread = `<p class="empty-state">No messages yet — say hello.</p>`;
     panel.innerHTML = `
       <div class="conversation-head"><strong>${escapeHtml(name)}</strong></div>
-      <div class="detail-messages-thread" id="conversation-thread">${careMessageRows(messages)}</div>
+      <div class="detail-messages-thread" id="conversation-thread">${messages.length ? careMessageRows(messages) : emptyThread}</div>
       <form class="detail-messages-form" id="conversation-form">
         <textarea id="conversation-input" rows="2" maxlength="1000" placeholder="Write a reply…"></textarea>
         <button class="button button-coral button-small" type="submit">Send</button>
@@ -551,6 +552,28 @@ async function openConversation(patientId) {
     console.error("Conversation load failed:", err);
     panel.innerHTML = `<p class="empty-state">Could not load this conversation.</p>`;
   }
+}
+
+// Physio-initiated conversation: pick any roster patient to start a thread.
+function showNewConversationPicker() {
+  activeConversation = null;
+  document.querySelectorAll(".conversation-item.is-active")
+    .forEach(el => el.classList.remove("is-active"));
+  const panel = document.getElementById("messaging-conversation");
+  if (!panel) return;
+  if (!state.patients.length) {
+    panel.innerHTML = `<p class="empty-state">No patients in your roster yet.</p>`;
+    return;
+  }
+  panel.innerHTML = `
+    <div class="conversation-head"><strong>New message</strong><span>Choose a patient to message</span></div>
+    <div class="new-conversation-list">
+      ${state.patients.map(p => `
+        <button type="button" class="conversation-item" data-new-conversation="${p.id}">
+          <span class="conversation-top"><strong>${escapeHtml(p.full_name || "Patient")}</strong></span>
+          <span class="conversation-preview">${escapeHtml(goalLabel(p.goal))}</span>
+        </button>`).join("")}
+    </div>`;
 }
 
 async function loadProgrammes() {
@@ -668,6 +691,17 @@ document.addEventListener("click", (e) => {
   if (slackBtn) {
     if (slackBtn.dataset.linked === "true") disconnectSlackAccount();
     else connectSlack();
+    return;
+  }
+
+  if (e.target.closest("#messaging-new")) {
+    showNewConversationPicker();
+    return;
+  }
+
+  const newConversation = e.target.closest("[data-new-conversation]");
+  if (newConversation) {
+    openConversation(newConversation.getAttribute("data-new-conversation"));
     return;
   }
 

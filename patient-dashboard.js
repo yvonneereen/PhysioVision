@@ -60,7 +60,9 @@ const pathwaySelfRefer = document.getElementById(
 const referPhysio = document.getElementById("patientReferPhysio");
 const referPhysioButton = document.getElementById("patientReferPhysioButton");
 const referPhysioStatus = document.getElementById("patientReferPhysioStatus");
-const messagesCard = document.getElementById("patientMessagesCard");
+const messagesLauncher = document.getElementById("patientMessagesLauncher");
+const messagesPanel = document.getElementById("patientMessagesPanel");
+const messagesClose = document.getElementById("patientMessagesClose");
 const messagesClinician = document.getElementById("patientMessagesClinician");
 const messagesThread = document.getElementById("patientMessagesThread");
 const messagesForm = document.getElementById("patientMessagesForm");
@@ -379,7 +381,8 @@ function renderWellnessPlan(profile) {
   consultationCard.hidden = true;
   demoNotice.hidden = true;
   if (referPhysio) referPhysio.hidden = false;
-  if (messagesCard) messagesCard.hidden = true;
+  if (messagesLauncher) messagesLauncher.hidden = true;
+  closeMessagesPanel();
 
   if (!eligible) {
     firstExerciseId = null;
@@ -885,16 +888,38 @@ async function finishPathwaySetup(profile, user = currentUser) {
 // ── Messaging with the assigned physiotherapist ──────────────
 
 function setupPatientMessaging(profile) {
-  if (!messagesCard) return;
+  if (!messagesLauncher) return;
   const hasClinician = Boolean(profile?.primary_clinician);
-  messagesCard.hidden = !hasClinician;
-  if (!hasClinician) return;
+  messagesLauncher.hidden = !hasClinician;
+  if (!hasClinician) {
+    closeMessagesPanel();
+    return;
+  }
   if (messagesClinician) {
     messagesClinician.textContent =
       profile.primary_clinician_name || "your physiotherapist";
   }
-  loadCareMessages();
 }
+
+function openMessagesPanel() {
+  if (!messagesPanel) return;
+  messagesPanel.hidden = false;
+  messagesLauncher?.setAttribute("aria-expanded", "true");
+  loadCareMessages();
+  messagesInput?.focus();
+}
+
+function closeMessagesPanel() {
+  if (!messagesPanel) return;
+  messagesPanel.hidden = true;
+  messagesLauncher?.setAttribute("aria-expanded", "false");
+}
+
+messagesLauncher?.addEventListener("click", () => {
+  if (messagesPanel?.hidden) openMessagesPanel();
+  else closeMessagesPanel();
+});
+messagesClose?.addEventListener("click", closeMessagesPanel);
 
 async function loadCareMessages() {
   if (!messagesThread) return;

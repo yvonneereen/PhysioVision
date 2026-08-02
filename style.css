@@ -5929,15 +5929,15 @@ details.metrics summary {
 
 .messaging-layout {
   display: grid;
-  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  gap: 28px;
   align-items: start;
 }
 
 .messaging-sidebar {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 18px;
 }
 
 .messaging-new-btn { align-self: flex-start; }
@@ -5945,16 +5945,16 @@ details.metrics summary {
 .messaging-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-height: 520px;
+  gap: 10px;
+  max-height: 560px;
   overflow-y: auto;
 }
 
 .new-conversation-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-height: 520px;
+  gap: 10px;
+  max-height: 560px;
   overflow-y: auto;
 }
 
@@ -5969,15 +5969,17 @@ details.metrics summary {
 .conversation-item {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   width: 100%;
-  padding: 11px 13px;
+  padding: 14px 16px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--paper);
   text-align: left;
   cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
+.conversation-item:hover { border-color: var(--green); }
 .conversation-item.is-active { border-color: var(--green); background: var(--green-light); }
 
 .conversation-top {
@@ -6012,10 +6014,11 @@ details.metrics summary {
 
 .messaging-conversation {
   border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 16px;
+  border-radius: 16px;
+  padding: 22px;
+  min-height: 340px;
 }
-.conversation-head { margin-bottom: 12px; font-size: 15px; }
+.conversation-head { margin-bottom: 16px; font-size: 16px; }
 .detail-messages-form {
   display: flex;
   gap: 8px;

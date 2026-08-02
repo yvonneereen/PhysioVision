@@ -385,7 +385,7 @@ if settings.SLACK_BOT_TOKEN and settings.SLACK_SIGNING_SECRET:
             _dispatch(event, say)
 
         @slack_app.action("claim_patient")
-        def handle_claim_patient(ack, body, say):
+        def handle_claim_patient(ack, body, say, respond):
             # A physio clicked "Claim" on a triage alert — assign the patient to
             # them so future alerts DM them privately.
             ack()
@@ -397,17 +397,36 @@ if settings.SLACK_BOT_TOKEN and settings.SLACK_SIGNING_SECRET:
 
             clinician = find_clinician_by_slack_user(slack_user)
             if not clinician:
-                say("Link your account first: send `@Physio Assistant link <code>`.")
+                # Keep the card claimable; just tell this user to link first.
+                respond(
+                    text="Link your account first: send `@Physio Assistant link <code>`.",
+                    replace_original=False,
+                )
                 return
 
             patient, error = claim_patient(clinician, patient_id)
             if error:
-                say(error)
+                # e.g. already claimed by someone else — leave the card as-is.
+                respond(text=error, replace_original=False)
                 return
-            say(
-                f":white_check_mark: <@{slack_user}> claimed *{patient.user.first_name}* — "
-                "future alerts will come to your DMs."
-            )
+
+            # Remove the buttons so the patient can't be claimed twice, and stamp
+            # the card with who took it.
+            kept = [
+                block for block in body.get("message", {}).get("blocks", [])
+                if block.get("type") != "actions"
+            ]
+            kept.append({
+                "type": "context",
+                "elements": [{
+                    "type": "mrkdwn",
+                    "text": (
+                        f":white_check_mark: Claimed by <@{slack_user}> — "
+                        "future alerts go to their DMs."
+                    ),
+                }],
+            })
+            respond(blocks=kept, replace_original=True)
 
         @csrf_exempt
         def slack_events(request):

@@ -1515,6 +1515,24 @@ textarea:focus-visible {
   opacity: 0.62;
 }
 
+.camera-placeholder-actions .camera-setup-status {
+  width: 100%;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 208, 95, 0.7);
+  border-radius: 12px;
+  background: rgba(255, 208, 95, 0.12);
+  color: #fff4cd;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.camera-placeholder-actions .camera-setup-status[hidden] {
+  display: none;
+}
+
 .camera-placeholder-actions small {
   color: rgba(255, 255, 255, 0.62);
   font-size: 12px;
@@ -1688,6 +1706,151 @@ textarea:focus-visible {
   pointer-events: auto;
 }
 
+.voice-setup-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: rgba(4, 20, 21, 0.82);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+.voice-setup-dialog {
+  width: min(620px, 100%);
+  padding: clamp(24px, 4vw, 36px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  color: var(--white);
+  background: rgba(11, 36, 38, 0.98);
+  box-shadow: 0 24px 70px rgba(2, 13, 14, 0.45);
+}
+
+.voice-setup-eyebrow {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--mint);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.voice-setup-dialog h3 {
+  margin: 0 0 10px;
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 1.02;
+  letter-spacing: -0.045em;
+}
+
+.voice-setup-dialog > p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.voice-setup-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.voice-setup-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  min-height: 132px;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 15px;
+  color: var(--white);
+  background: rgba(255, 255, 255, 0.07);
+  text-align: left;
+  cursor: pointer;
+}
+
+.voice-setup-option:hover,
+.voice-setup-option:focus-visible {
+  border-color: var(--mint);
+  background: rgba(185, 217, 200, 0.14);
+}
+
+.voice-setup-option:focus-visible {
+  outline: 3px solid rgba(185, 217, 200, 0.3);
+  outline-offset: 3px;
+}
+
+.voice-setup-option.is-hands-free {
+  border-color: rgba(255, 103, 74, 0.9);
+}
+
+.voice-setup-option:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.voice-setup-icon {
+  display: grid;
+  flex: 0 0 42px;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  color: var(--ink-deep);
+  background: var(--mint);
+  font-size: 18px;
+}
+
+.voice-setup-option strong,
+.voice-setup-option small {
+  display: block;
+}
+
+.voice-setup-option strong {
+  margin: 2px 0 7px;
+  font-size: 16px;
+}
+
+.voice-setup-option small {
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.voice-setup-status {
+  min-height: 22px;
+  margin-top: 14px !important;
+  color: #ffd05f !important;
+  font-size: 13px !important;
+  font-weight: 700;
+}
+
+.voice-setup-privacy {
+  display: block;
+  margin-top: 8px;
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+@media (max-width: 650px) {
+  .voice-setup-overlay {
+    padding: 16px;
+  }
+
+  .voice-setup-options {
+    grid-template-columns: 1fr;
+  }
+
+  .voice-setup-option {
+    min-height: 0;
+  }
+}
+
 .calibration-step-label {
   display: block;
   margin-bottom: 8px;
@@ -1767,22 +1930,334 @@ textarea:focus-visible {
 }
 
 .camera-safety {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.9fr);
   align-items: center;
-  gap: 10px;
-  min-height: 62px;
-  padding: 0 24px;
+  gap: 16px;
+  min-height: 78px;
+  padding: 10px 24px;
   color: rgba(255, 255, 255, 0.5);
   background: #0a2224;
   font-size: 11px;
 }
 
-.camera-safety span {
+.camera-privacy-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.camera-privacy-note > span {
   color: var(--mint);
 }
 
-.camera-safety p {
+.camera-privacy-note p {
   margin: 0;
+}
+
+.fall-readiness {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 11px;
+  border: 1px solid rgba(185, 217, 200, 0.25);
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.fall-readiness-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: #173f3d;
+  background: var(--mint);
+  font-weight: 800;
+}
+
+.fall-readiness strong,
+.fall-readiness small {
+  display: block;
+}
+
+.fall-readiness strong {
+  color: var(--white);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.fall-readiness small {
+  margin-top: 2px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.fall-readiness[data-state="limited"] .fall-readiness-icon {
+  color: #6b4b09;
+  background: #f5d579;
+}
+
+.fall-readiness[data-state="unavailable"] .fall-readiness-icon {
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+body.fall-safety-open {
+  overflow: hidden;
+}
+
+.fall-safety-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 18, 20, 0.92);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.fall-safety-dialog {
+  width: min(820px, 100%);
+  max-height: calc(100vh - 48px);
+  padding: clamp(28px, 5vw, 58px);
+  overflow-y: auto;
+  border: 3px solid #f15a40;
+  border-radius: 24px;
+  color: var(--ink);
+  background: var(--paper);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.38);
+}
+
+.fall-safety-alert-icon {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  margin-bottom: 20px;
+  border-radius: 50%;
+  color: var(--white);
+  background: #d94732;
+  font-size: 34px;
+  font-weight: 800;
+}
+
+.fall-safety-eyebrow {
+  display: block;
+  margin-bottom: 12px;
+  color: #a73223;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.fall-safety-dialog h2 {
+  margin: 0 0 14px;
+  color: var(--ink);
+  font-size: clamp(44px, 7vw, 74px);
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+}
+
+.fall-safety-dialog > p {
+  max-width: 650px;
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(18px, 2.2vw, 23px);
+  line-height: 1.5;
+}
+
+.fall-safety-countdown {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 28px 0;
+  padding: 16px 20px;
+  border-radius: 14px;
+  color: #6e311f;
+  background: #fff0dd;
+}
+
+.fall-safety-countdown strong {
+  min-width: 58px;
+  font-size: 42px;
+  line-height: 1;
+}
+
+.fall-safety-countdown span {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.fall-safety-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.fall-safety-button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 3px 14px;
+  min-height: 116px;
+  padding: 20px;
+  border: 3px solid transparent;
+  border-radius: 18px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.fall-safety-button > span {
+  grid-row: 1 / 3;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.fall-safety-button strong {
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.fall-safety-button small {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.fall-safety-button.is-okay {
+  border-color: #2f8d61;
+  color: #123e2b;
+  background: #dff5e8;
+}
+
+.fall-safety-button.is-okay > span {
+  color: var(--white);
+  background: #2f8d61;
+}
+
+.fall-safety-button.is-help {
+  border-color: #c43d2a;
+  color: #6e2016;
+  background: #ffe1db;
+}
+
+.fall-safety-button.is-help > span {
+  color: var(--white);
+  background: #c43d2a;
+}
+
+.fall-safety-button:focus-visible,
+.fall-safety-voice:focus-visible,
+.fall-safety-finish:focus-visible {
+  outline: 4px solid #f2c14d;
+  outline-offset: 4px;
+}
+
+.fall-safety-voice,
+.fall-safety-finish {
+  min-height: 58px;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.fall-safety-voice {
+  margin-top: 18px;
+  padding: 14px 24px;
+  color: var(--white);
+  background: var(--deep-green);
+}
+
+.fall-safety-voice:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.fall-safety-voice-status {
+  min-height: 24px;
+  margin-top: 12px !important;
+  color: var(--ink) !important;
+  font-size: 14px !important;
+  font-weight: 700;
+}
+
+.fall-safety-prototype-note {
+  margin-top: 12px !important;
+  padding-top: 12px;
+  border-top: 1px solid #d9ddd8;
+  font-size: 13px !important;
+}
+
+.fall-safety-no-alert {
+  display: grid;
+  gap: 6px;
+  margin: 28px 0;
+  padding: 20px;
+  border-left: 5px solid #c43d2a;
+  border-radius: 8px;
+  color: #6e2016;
+  background: #ffe1db;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.fall-safety-finish {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 28px;
+  padding: 16px 24px;
+  color: var(--white);
+  background: var(--deep-green);
+}
+
+.fall-safety-result-safe .fall-safety-alert-icon {
+  background: #2f8d61;
+}
+
+@media (max-width: 760px) {
+  .camera-safety {
+    grid-template-columns: 1fr;
+    padding: 14px 18px;
+  }
+
+  .fall-safety-overlay {
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .fall-safety-dialog {
+    width: 100%;
+    min-height: 100%;
+    max-height: 100vh;
+    padding: 30px 22px;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .fall-safety-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .fall-safety-button {
+    min-height: 104px;
+  }
 }
 
 .panel {
@@ -1972,6 +2447,81 @@ textarea:focus-visible {
   -webkit-line-clamp: 2;
 }
 
+.recorded-pain {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 2px 0 14px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--green) 35%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--mint) 48%, var(--white));
+}
+
+.recorded-pain.hidden {
+  display: none;
+}
+
+.recorded-pain-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.recorded-pain-copy span {
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.recorded-pain-copy strong {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.recorded-pain-score {
+  display: flex;
+  align-items: baseline;
+  flex: 0 0 auto;
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+}
+
+.recorded-pain-score strong {
+  font-family: var(--font-display);
+  font-size: 32px;
+  line-height: 1;
+}
+
+.recorded-pain-score span {
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.recorded-pain.is-moderate {
+  border-color: #dfc46d;
+  background: #fff7df;
+}
+
+.recorded-pain.is-moderate .recorded-pain-copy span,
+.recorded-pain.is-moderate .recorded-pain-score {
+  color: #8a6512;
+}
+
+.recorded-pain.is-high {
+  border-color: #ef9a87;
+  background: #fff0ec;
+}
+
+.recorded-pain.is-high .recorded-pain-copy span,
+.recorded-pain.is-high .recorded-pain-score {
+  color: #b9452f;
+}
+
 .rep-row {
   display: flex;
   flex-wrap: wrap;
@@ -2039,6 +2589,7 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   gap: 13px;
+  min-width: 0;
   min-height: 69px;
   margin-bottom: 18px;
   padding: 11px 14px;
@@ -2046,6 +2597,11 @@ textarea:focus-visible {
   color: #255a3d;
   background: var(--green-light);
   transition: background 0.2s ease, color 0.2s ease;
+}
+
+.feedback-banner > div {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .feedback-banner.needs-adjustment {
@@ -2090,6 +2646,8 @@ textarea:focus-visible {
 .feedback-banner div > span {
   opacity: 0.72;
   font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .phase-flow {
@@ -2182,7 +2740,40 @@ textarea:focus-visible {
 
 .camera-button {
   width: 100%;
+  margin-top: 0;
+}
+
+.camera-session-actions {
+  display: grid;
+  gap: 12px;
   margin-top: 4px;
+}
+
+.finish-exercise-button {
+  width: 100%;
+  border: 2px solid var(--ink);
+  color: var(--ink);
+  background: #fff;
+  box-shadow: none;
+}
+
+.finish-exercise-button:not(:disabled):hover {
+  color: #fff;
+  background: var(--ink);
+}
+
+.finish-exercise-button:disabled {
+  border-color: rgba(25, 56, 58, 0.2);
+  color: rgba(25, 56, 58, 0.46);
+  background: rgba(255, 255, 255, 0.72);
+  cursor: not-allowed;
+}
+
+.camera-session-hint {
+  margin: 9px 2px 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .hand-tracking-card {
@@ -3532,6 +4123,69 @@ details.metrics summary {
   resize: vertical;
 }
 
+.planner-history-question {
+  margin: 14px 0 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fafbf9;
+}
+
+.planner-history-question legend {
+  padding: 0 6px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.planner-history-question > p {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.planner-history-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.planner-history-options label {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid #cfd8d3;
+  border-radius: 9px;
+  color: var(--muted);
+  background: var(--white);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.planner-history-options label:has(input:checked) {
+  border-color: var(--green);
+  color: var(--ink);
+  background: var(--mint-light);
+}
+
+.planner-history-options input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--green);
+}
+
+.planner-medical-history small {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
 .planner-request-status {
   min-height: 18px;
   margin: 10px 0 0;
@@ -4046,6 +4700,24 @@ details.metrics summary {
   margin: 0;
 }
 
+.patient-trend-alert-actions {
+  display: flex;
+  width: min(100%, 310px);
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.patient-trend-alert-actions .button {
+  justify-content: space-between;
+  white-space: nowrap;
+}
+
+.patient-trend-alert-actions small {
+  margin: 0;
+  line-height: 1.4;
+}
+
 .patient-trend-alert h2 {
   margin: 3px 0 5px;
   font-size: clamp(20px, 2.4vw, 30px);
@@ -4205,6 +4877,13 @@ details.metrics summary {
 
 .patient-plan-actions [hidden] {
   display: none;
+}
+
+.patient-change-plan {
+  min-height: 48px;
+  padding: 0 4px;
+  font-size: 14px;
+  white-space: nowrap;
 }
 
 .patient-metric-grid {
@@ -4618,8 +5297,9 @@ details.metrics summary {
     grid-template-columns: auto minmax(0, 1fr);
   }
 
-  .patient-trend-alert .button {
+  .patient-trend-alert-actions {
     grid-column: 1 / -1;
+    width: 100%;
   }
 
   .patient-metric-grid,
@@ -5692,6 +6372,17 @@ details.metrics summary {
 
   .practice-app {
     grid-template-columns: 1fr;
+    height: auto;
+    overflow: visible;
+  }
+
+  .camera-column {
+    min-height: clamp(420px, 76vh, 680px);
+  }
+
+  .panel {
+    height: auto;
+    overflow: visible;
   }
 
   .stage {
@@ -6146,6 +6837,7 @@ details.metrics summary {
   gap: 0.75rem;
 }
 .pain-checkin.hidden { display: none; }
+.pain-checkin.hands-free-checkin:not(.safety-interview-active) { display: none; }
 .pain-checkin-context {
   color: var(--green);
   font-size: 0.72rem;
@@ -6183,6 +6875,7 @@ details.metrics summary {
   border-color: #4caf80;
 }
 .pain-checkin-buttons button:focus-visible,
+.pain-confirmation-actions button:focus-visible,
 .recovery-choices button:focus-visible,
 .voice-answer-button:focus-visible {
   outline: 3px solid rgba(22, 101, 82, 0.28);
@@ -6193,6 +6886,38 @@ details.metrics summary {
 .pain-checkin-buttons button[data-pain="10"] {
   border-color: #e8a0a0;
   color: #c0392b;
+}
+.pain-confirmation.hidden { display: none; }
+.pain-confirmation {
+  padding: 0.9rem;
+  border: 1px solid #b8d9ca;
+  border-radius: 12px;
+  background: #e5f3ed;
+}
+.pain-confirmation p {
+  margin: 0 0 0.7rem;
+  color: var(--ink);
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+.pain-confirmation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+.pain-confirmation-actions button {
+  min-height: 44px;
+  padding: 0.65rem 1rem;
+  border: 1.5px solid var(--green);
+  border-radius: 999px;
+  color: var(--green);
+  background: #fff;
+  font: 700 0.84rem/1.2 var(--font-body);
+  cursor: pointer;
+}
+.pain-confirmation-actions button:first-child {
+  color: #fff;
+  background: var(--green);
 }
 .recovery-choices.hidden { display: none; }
 .recovery-choices p {
@@ -6214,6 +6939,72 @@ details.metrics summary {
   background: #fff;
   font: 700 0.82rem/1.2 var(--font-body);
   cursor: pointer;
+}
+.pain-safety-interview.hidden { display: none; }
+.pain-safety-interview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.pain-safety-reassurance {
+  padding: 0.95rem 1rem;
+  border-left: 4px solid #ef9f36;
+  border-radius: 8px;
+  background: #fff4d9;
+  color: var(--ink);
+}
+.pain-safety-reassurance strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 1rem;
+}
+.pain-safety-reassurance p,
+.pain-safety-question,
+.pain-safety-help {
+  margin: 0;
+}
+.pain-safety-question {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.45;
+}
+.pain-safety-help {
+  color: #52655d;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+.pain-safety-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+.pain-safety-choices button {
+  min-height: 52px;
+  padding: 0.75rem 0.9rem;
+  border: 1.5px solid #b9cec4;
+  border-radius: 10px;
+  color: var(--ink);
+  background: #fff;
+  font: 750 0.86rem/1.25 var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+.pain-safety-choices button:hover,
+.pain-safety-choices button:focus-visible {
+  border-color: var(--green);
+  background: #e8f4ef;
+  outline: 3px solid rgba(22, 101, 82, 0.22);
+  outline-offset: 2px;
+}
+.pain-safety-interview.is-urgent .pain-safety-reassurance {
+  border-left-color: #d44836;
+  background: #ffe9e4;
+}
+.pain-safety-interview.is-outcome .pain-safety-choices button:first-child {
+  color: #fff;
+  border-color: var(--green);
+  background: var(--green);
 }
 .voice-checkin-status {
   min-height: 1.25rem;
@@ -6237,6 +7028,11 @@ details.metrics summary {
 .voice-answer-button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+@media (max-width: 620px) {
+  .pain-safety-choices {
+    grid-template-columns: 1fr;
+  }
 }
 .pain-safety-note {
   color: #68766f;

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { EXERCISES, EXERCISE_MAP } from "../exercises/registry.js";
 import {
   applyCalibration,
+  calibrationFrameMatchesPhase,
   clearCalibration,
   createCalibration,
   getCalibration,
@@ -72,13 +73,13 @@ const targetCaptures = [
 
   assert.equal(calibration.target.leftKnee.median, 130);
   assert.equal(calibration.target.rightKnee.median, 128);
-  assert.deepEqual(calibration.phaseRanges.squat.leftKnee, [122, 138]);
-  assert.deepEqual(calibration.phaseRanges.squat.rightKnee, [120, 136]);
+  assert.deepEqual(calibration.phaseRanges.squat.leftKnee, [118, 142]);
+  assert.deepEqual(calibration.phaseRanges.squat.rightKnee, [116, 140]);
   assert.equal(calibration.naturalKneeDifference, 2);
 
   const personalised = applyCalibration(halfSquat, calibration);
   const squat = personalised.phases.find((phase) => phase.name === "squat");
-  assert.deepEqual(squat.leftKnee, [122, 138]);
+  assert.deepEqual(squat.leftKnee, [118, 142]);
   assert.deepEqual(squat.torsoLean, [0, 40]);
   assert.equal(personalised.symmetry.maxDiffDeg, 8);
 
@@ -94,6 +95,36 @@ const targetCaptures = [
   const tamperedSquat = tampered.phases.find((phase) => phase.name === "squat");
   assert.deepEqual(tamperedSquat.leftKnee, [90, 145]);
   assert.deepEqual(tamperedSquat.torsoLean, [0, 40]);
+}
+
+{
+  const standingFrame = {
+    leftKnee: 172,
+    rightKnee: 170,
+    leftHip: 166,
+    rightHip: 165,
+    torsoLean: 8,
+  };
+  const squatFrame = {
+    leftKnee: 130,
+    rightKnee: 128,
+    leftHip: 136,
+    rightHip: 134,
+    torsoLean: 21,
+  };
+
+  assert.equal(
+    calibrationFrameMatchesPhase(halfSquat, standingFrame, "start"),
+    true
+  );
+  assert.equal(
+    calibrationFrameMatchesPhase(halfSquat, standingFrame, "target"),
+    false
+  );
+  assert.equal(
+    calibrationFrameMatchesPhase(halfSquat, squatFrame, "target"),
+    true
+  );
 }
 
 {

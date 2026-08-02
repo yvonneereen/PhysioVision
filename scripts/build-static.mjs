@@ -17,6 +17,7 @@ const frontendEntries = [
   "care-workflow.js",
   "exercise-library.js",
   "exercise-tracking.js",
+  "fall-monitoring.js",
   "geometry.js",
   "hand-geometry.js",
   "img",

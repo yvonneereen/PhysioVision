@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   analysePatientTrend,
+  findUpcomingConsultation,
   isCurrentPrescription,
 } from "../patient-dashboard-state.js";
 
@@ -65,6 +66,41 @@ assert.equal(
     new Date("2026-07-27T12:00:00Z"),
   ),
   true,
+);
+
+assert.equal(
+  findUpcomingConsultation(
+    [
+      {
+        id: 1,
+        status: "cancelled",
+        scheduled_at: "2026-08-03T09:00:00Z",
+      },
+      {
+        id: 2,
+        status: "requested",
+        scheduled_at: "2026-08-04T09:00:00Z",
+      },
+      {
+        id: 3,
+        status: "confirmed",
+        scheduled_at: "2026-08-02T09:00:00Z",
+      },
+    ],
+    new Date("2026-08-01T09:00:00Z"),
+  )?.id,
+  3,
+);
+
+assert.equal(
+  findUpcomingConsultation(
+    [{
+      status: "requested",
+      scheduled_at: "2026-07-31T09:00:00Z",
+    }],
+    new Date("2026-08-01T09:00:00Z"),
+  ),
+  null,
 );
 
 console.log("patient dashboard state tests passed");

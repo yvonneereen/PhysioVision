@@ -145,6 +145,15 @@ class PainCheckin(TimestampedModel):
         help_text="Patient-reported change compared with the relevant prior point.",
     )
     location_notes = models.CharField(max_length=100, blank=True)
+    safety_follow_up = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Structured answers and outcome from a pain safety follow-up.",
+    )
+    requires_review = models.BooleanField(
+        default=False,
+        help_text="Whether this check-in should be reviewed before more exercise.",
+    )
     checked_at     = models.DateTimeField()
 
     class Meta:

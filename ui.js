@@ -55,6 +55,12 @@ const ACTIVITY_API_VALUES = Object.freeze({
   const planRevisionRequest = document.getElementById("planRevisionRequest");
   const planCustomGoalField = document.getElementById("planCustomGoalField");
   const planCustomGoalInput = document.getElementById("planCustomGoal");
+  const plannerMedicalHistoryField = document.getElementById(
+    "plannerMedicalHistoryField"
+  );
+  const plannerMedicalHistory = document.getElementById(
+    "plannerMedicalHistory"
+  );
   const profileCustomGoalField = document.getElementById("profileCustomGoalField");
   const profileCustomGoalInput = document.getElementById("profileCustomGoal");
   let activeModal = null;
@@ -91,6 +97,31 @@ const ACTIVITY_API_VALUES = Object.freeze({
       profileCustomGoalInput
     );
   });
+
+  function syncPlannerMedicalHistoryField() {
+    const hasRelevantHistory =
+      planForm
+        ?.querySelector('input[name="hasRelevantHistory"]:checked')
+        ?.value === "true";
+    if (plannerMedicalHistoryField) {
+      plannerMedicalHistoryField.hidden = !hasRelevantHistory;
+    }
+    if (plannerMedicalHistory) {
+      plannerMedicalHistory.disabled = !hasRelevantHistory;
+      plannerMedicalHistory.required = hasRelevantHistory;
+    }
+  }
+
+  planForm
+    ?.querySelectorAll('input[name="hasRelevantHistory"]')
+    .forEach((input) => {
+      input.addEventListener("change", () => {
+        syncPlannerMedicalHistoryField();
+        if (input.value === "true" && input.checked) {
+          plannerMedicalHistory?.focus();
+        }
+      });
+    });
 
   const setHeaderState = () => {
     header?.classList.toggle("is-scrolled", window.scrollY > 80);
@@ -130,13 +161,16 @@ const ACTIVITY_API_VALUES = Object.freeze({
     body.classList.add("modal-open");
 
     if (id === "plan-modal") {
+      const savedProfile = loadProfile();
       if (hasSavedProfile()) {
-        const savedProfile = loadProfile();
         fillFormFromProfile(planForm, savedProfile);
         fillWellnessScreening(planForm, savedProfile.wellnessScreening);
       }
       syncCustomGoalField(planForm, planCustomGoalField, planCustomGoalInput);
-      activeWellnessPlan = null;
+      syncPlannerMedicalHistoryField();
+      // A replacement draft may use the accepted plan as context. Merely
+      // opening or closing the planner never removes the current plan.
+      activeWellnessPlan = savedProfile.wellnessPlan ?? null;
       activePlanPreferences = null;
       activePlanDraftToken = null;
       if (plannerRequestStatus) plannerRequestStatus.textContent = "";
@@ -396,6 +430,8 @@ const ACTIVITY_API_VALUES = Object.freeze({
       const value = String(formData.get(name) ?? "").trim();
       return value ? Number(value) : null;
     };
+    const hasRelevantHistory =
+      formData.get("hasRelevantHistory") === "true";
     return {
       goal: GOAL_API_VALUES[goalLabel] ?? "stay_active",
       custom_goal:
@@ -415,6 +451,10 @@ const ACTIVITY_API_VALUES = Object.freeze({
       planning_notes: String(
         formData.get("planningNotes") || ""
       ).trim(),
+      has_relevant_history: hasRelevantHistory,
+      medical_history: hasRelevantHistory
+        ? String(formData.get("medicalHistory") || "").trim()
+        : "",
       age: numberOrNull("age"),
       height_cm: numberOrNull("height"),
       weight_kg: numberOrNull("weight"),
@@ -533,6 +573,12 @@ const ACTIVITY_API_VALUES = Object.freeze({
           pathwayChoice: profile.pathway_choice,
           wellnessPlan: profile.wellness_plan,
           wellnessPlanAcceptedAt: profile.wellness_plan_accepted_at,
+          daysPerWeek: activePlanPreferences.days_per_week,
+          minutesPerSession: activePlanPreferences.minutes_per_session,
+          equipment: activePlanPreferences.equipment,
+          planningNotes: activePlanPreferences.planning_notes,
+          hasRelevantHistory: Boolean(profile.medical_history),
+          medicalHistory: profile.medical_history ?? "",
         }, {
           syncBackend: false,
           syncScreening: false,

@@ -26,78 +26,66 @@ WELLNESS_EXERCISE_CATALOGUE = {
         "name": "Half squats",
         "goals": ["stronger_knees", "better_balance", "stay_active", "walking_confidence"],
         "equipment": "chair",
+        "history_cautious": False,
     },
     "leg-extensions": {
         "name": "Seated leg extensions",
         "goals": ["stronger_knees", "stay_active"],
         "equipment": "chair",
+        "history_cautious": True,
     },
     "heel-cord-stretch": {
         "name": "Heel cord stretch",
         "goals": ["less_stiffness", "ankle_mobility", "walking_confidence"],
         "equipment": "none",
+        "history_cautious": True,
     },
     "calf-raises": {
         "name": "Calf raises",
         "goals": ["stronger_knees", "better_balance", "ankle_mobility", "walking_confidence"],
         "equipment": "chair",
+        "history_cautious": False,
     },
     "hamstring-curls": {
         "name": "Hamstring curls",
         "goals": ["stronger_knees", "stay_active", "walking_confidence"],
         "equipment": "chair",
+        "history_cautious": False,
     },
     "hip-abduction": {
         "name": "Standing hip abduction",
         "goals": ["better_balance", "stronger_hips", "walking_confidence"],
         "equipment": "chair",
+        "history_cautious": False,
     },
     "straight-leg-raises-supine": {
         "name": "Supine straight-leg raises",
         "goals": ["stronger_knees", "stronger_hips"],
         "equipment": "none",
+        "history_cautious": True,
     },
     "hip-adduction": {
         "name": "Side-lying hip adduction",
         "goals": ["stronger_hips", "stay_active"],
         "equipment": "none",
+        "history_cautious": True,
     },
     "leg-presses": {
         "name": "Elastic-band leg presses",
         "goals": ["stronger_knees", "stronger_hips", "walking_confidence"],
         "equipment": "band",
-    },
-    "supported_single_leg_balance": {
-        "name": "Supported single-leg balance",
-        "goals": ["better_balance", "walking_confidence"],
-        "equipment": "chair",
-    },
-    "ankle_pumps": {
-        "name": "Ankle pumps",
-        "goals": ["less_stiffness", "ankle_mobility", "stay_active"],
-        "equipment": "none",
-    },
-    "heel_slides": {
-        "name": "Heel slides",
-        "goals": ["less_stiffness", "stay_active"],
-        "equipment": "none",
-    },
-    "hip_bridge": {
-        "name": "Supine bridge",
-        "goals": ["stronger_hips", "stay_active"],
-        "equipment": "none",
-    },
-    "clamshell": {
-        "name": "Clamshell",
-        "goals": ["stronger_hips", "better_balance"],
-        "equipment": "none",
+        "history_cautious": False,
     },
 }
 
 DAY_SCHEDULES = {
+    1: ["Mon"],
     2: ["Mon", "Thu"],
     3: ["Mon", "Wed", "Sat"],
     4: ["Mon", "Tue", "Thu", "Sat"],
+    5: ["Mon", "Tue", "Wed", "Fri", "Sat"],
+    6: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+    7: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
 }
 
 
@@ -107,6 +95,7 @@ def _clean_text(value, *, maximum):
 
 def allowed_exercises(preferences):
     equipment = preferences.get("equipment", "chair")
+    history_cautious = bool(preferences.get("has_relevant_history"))
     supported_equipment = {
         "none": {"none"},
         "chair": {"none", "chair"},
@@ -116,6 +105,10 @@ def allowed_exercises(preferences):
         exercise_id: exercise
         for exercise_id, exercise in WELLNESS_EXERCISE_CATALOGUE.items()
         if exercise["equipment"] in supported_equipment
+        and (
+            not history_cautious
+            or exercise.get("history_cautious") is True
+        )
     }
 
 
@@ -125,25 +118,43 @@ def normalize_wellness_plan(raw_plan, preferences):
 
     expected_days = int(preferences.get("days_per_week", 3))
     if expected_days not in DAY_SCHEDULES:
-        raise WellnessPlanValidationError("Choose between two and four sessions per week.")
+        raise WellnessPlanValidationError("Choose between one and seven sessions per week.")
 
     available = allowed_exercises(preferences)
+    history_cautious = bool(preferences.get("has_relevant_history"))
     raw_days = raw_plan.get("days")
     if not isinstance(raw_days, list) or len(raw_days) != expected_days:
         raise WellnessPlanValidationError(
             f"The draft must contain exactly {expected_days} sessions."
         )
 
-    maximum_minutes = int(preferences.get("minutes_per_session", 10))
+    requested_minutes = int(preferences.get("minutes_per_session", 10))
+    maximum_minutes = (
+        min(requested_minutes, 15)
+        if history_cautious
+        else requested_minutes
+    )
+    maximum_exercises = 1 if history_cautious else 2
     days = []
     selected_ids = []
     for index, raw_day in enumerate(raw_days):
         if not isinstance(raw_day, dict):
             raise WellnessPlanValidationError("Every session must be an object.")
         exercise_ids = raw_day.get("exercise_ids", raw_day.get("exerciseIds"))
-        if not isinstance(exercise_ids, list) or not 1 <= len(exercise_ids) <= 2:
+        if (
+            not isinstance(exercise_ids, list)
+            or not 1 <= len(exercise_ids) <= maximum_exercises
+        ):
             raise WellnessPlanValidationError(
-                "Every session must contain one or two reviewed exercises."
+                (
+                    "Every session must contain one lower-load reviewed "
+                    "exercise when recovered history is being considered."
+                    if history_cautious
+                    else (
+                        "Every session must contain one or two reviewed "
+                        "exercises."
+                    )
+                )
             )
         exercise_ids = list(dict.fromkeys(str(item) for item in exercise_ids))
         if not exercise_ids or any(item not in available for item in exercise_ids):
@@ -197,6 +208,18 @@ def normalize_wellness_plan(raw_plan, preferences):
         rationale = [
             "The draft uses only reviewed exercises compatible with your answers and available equipment."
         ]
+    if history_cautious:
+        rationale = [
+            (
+                "Your recovered medical or injury history was treated as a "
+                "caution, so this draft uses the lower-load reviewed subset "
+                "and shorter sessions."
+            ),
+            (
+                "Every session still requires your review, and you should "
+                "stop if a movement causes pain or concerning symptoms."
+            ),
+        ]
 
     goal_label = (
         _clean_text(preferences.get("custom_goal"), maximum=120)
@@ -207,22 +230,42 @@ def normalize_wellness_plan(raw_plan, preferences):
         "version": 1,
         "source": "gemini_wellness_agent",
         "goal": goal_label or "Stay active",
-        "summary": _clean_text(
-            raw_plan.get("summary")
-            or f"A gradual plan focused on {goal_label or 'staying active'}.",
-            maximum=240,
+        "summary": (
+            f"A cautious starting plan focused on "
+            f"{goal_label or 'staying active'}."
+            if history_cautious
+            else _clean_text(
+                raw_plan.get("summary")
+                or (
+                    f"A gradual plan focused on "
+                    f"{goal_label or 'staying active'}."
+                ),
+                maximum=240,
+            )
         ),
         "rationale": rationale,
         "days": days,
         "constraints": {
             "days_per_week": expected_days,
             "minutes_per_session": maximum_minutes,
+            "requested_minutes_per_session": requested_minutes,
             "equipment": preferences.get("equipment", "chair"),
+            "recovered_history_considered": history_cautious,
             "safety_screen_required": True,
         },
         "agent_trace": [
             "Confirmed the general-wellness safety screen is eligible.",
             f"Filtered the reviewed catalogue to {len(available)} compatible exercises.",
+            *(
+                [
+                    (
+                        "Applied the recovered-history caution: lower-load "
+                        "movements, one movement per session and a 15-minute cap."
+                    )
+                ]
+                if history_cautious
+                else []
+            ),
             "Validated every exercise and session against fixed application limits.",
         ],
     }
@@ -273,6 +316,13 @@ def _planner_prompt(user, preferences, previous_plan=None, revision=""):
         "minutes_per_session": preferences.get("minutes_per_session"),
         "equipment": preferences.get("equipment"),
         "user_notes": preferences.get("planning_notes", ""),
+        "history_cautious_mode": bool(
+            preferences.get("has_relevant_history")
+        ),
+        "recovered_medical_or_injury_history": preferences.get(
+            "medical_history",
+            "",
+        ),
         "revision_request": revision,
         "previous_draft": previous_plan or None,
         "reviewed_catalogue_tool_result": catalogue,
@@ -298,6 +348,14 @@ requested number of sessions, with one or two exercises per session and no
 session longer than minutes_per_session. Prefer gradual variety and the user's
 stated goal, activity, equipment and notes. A revision request may change the
 draft but can never loosen those rules.
+
+If history_cautious_mode is true, treat the recovered history only as a
+conservative planning constraint, never as a diagnosis or medical clearance.
+Use only the already-filtered lower-load catalogue, choose exactly one movement
+per session, keep every session at or below 15 minutes, and do not claim that
+the plan will prevent pain. The rationale should briefly explain how the
+reported history made the draft more cautious without repeating sensitive
+details.
 
 Return JSON only, using this shape:
 {

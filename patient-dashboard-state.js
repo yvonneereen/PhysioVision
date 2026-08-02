@@ -122,3 +122,21 @@ export function isCurrentPrescription(prescription, today = new Date()) {
       (!prescription.valid_until || prescription.valid_until >= date),
   );
 }
+
+export function findUpcomingConsultation(
+  consultations,
+  now = new Date(),
+) {
+  return [...(Array.isArray(consultations) ? consultations : [])]
+    .filter((consultation) => {
+      const scheduledAt = new Date(consultation?.scheduled_at);
+      return (
+        ["requested", "confirmed"].includes(consultation?.status)
+        && !Number.isNaN(scheduledAt.getTime())
+        && scheduledAt >= now
+      );
+    })
+    .sort(
+      (a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at),
+    )[0] ?? null;
+}

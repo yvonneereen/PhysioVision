@@ -22,6 +22,8 @@ def preferences(**overrides):
         "minutes_per_session": 10,
         "equipment": "chair",
         "planning_notes": "",
+        "has_relevant_history": False,
+        "medical_history": "",
     }
     values.update(overrides)
     return values
@@ -88,7 +90,110 @@ class WellnessAgentGuardrailTests(unittest.TestCase):
         available = allowed_exercises(preferences(equipment="none"))
         self.assertNotIn("half-squats", available)
         self.assertNotIn("leg-presses", available)
-        self.assertIn("ankle_pumps", available)
+        self.assertIn("hip-adduction", available)
+
+    def test_clinician_only_exercises_are_never_available_to_wellness_plans(self):
+        available = allowed_exercises(preferences(equipment="chair_band"))
+
+        for exercise_id in (
+            "supported_single_leg_balance",
+            "ankle_pumps",
+            "heel_slides",
+            "hip_bridge",
+            "clamshell",
+        ):
+            self.assertNotIn(exercise_id, available)
+
+    def test_supports_a_seven_day_preference(self):
+        plan = normalize_wellness_plan(
+            {
+                "days": [
+                    {"exercise_ids": ["hip-adduction"]}
+                    for _ in range(7)
+                ],
+            },
+            preferences(
+                goal="stay_active",
+                days_per_week=7,
+                minutes_per_session=30,
+            ),
+        )
+
+        self.assertEqual(len(plan["days"]), 7)
+        self.assertEqual(plan["days"][-1]["day"], "Sun")
+        self.assertEqual(
+            plan["constraints"]["minutes_per_session"],
+            30,
+        )
+
+    def test_recovered_history_uses_cautious_catalogue(self):
+        available = allowed_exercises(preferences(
+            has_relevant_history=True,
+            medical_history="Recovered from an old knee injury.",
+        ))
+
+        self.assertNotIn("half-squats", available)
+        self.assertNotIn("leg-presses", available)
+        self.assertIn("leg-extensions", available)
+        self.assertIn("hip-adduction", available)
+
+    def test_recovered_history_caps_duration_and_session_size(self):
+        cautious = preferences(
+            has_relevant_history=True,
+            medical_history="Recovered from an old knee injury.",
+            minutes_per_session=30,
+        )
+        plan = normalize_wellness_plan(
+            {
+                "summary": (
+                    "A plan for the user's old right knee injury."
+                ),
+                "rationale": [
+                    "The old right knee injury needs special treatment.",
+                ],
+                "days": [
+                    {
+                        "exercise_ids": ["leg-extensions"],
+                        "duration_minutes": 30,
+                    }
+                    for _ in range(3)
+                ],
+            },
+            cautious,
+        )
+
+        self.assertEqual(
+            plan["constraints"]["minutes_per_session"],
+            15,
+        )
+        self.assertTrue(
+            plan["constraints"]["recovered_history_considered"],
+        )
+        self.assertTrue(all(
+            day["duration_minutes"] == 15
+            for day in plan["days"]
+        ))
+        self.assertNotIn("right knee", plan["summary"].lower())
+        self.assertNotIn(
+            "right knee",
+            " ".join(plan["rationale"]).lower(),
+        )
+
+        with self.assertRaises(WellnessPlanValidationError):
+            normalize_wellness_plan(
+                {
+                    "days": [
+                        {
+                            "exercise_ids": [
+                                "leg-extensions",
+                                "hip-adduction",
+                            ],
+                        }
+                        for _ in range(3)
+                    ],
+                },
+                cautious,
+            )
 
 
 if __name__ == "__main__":

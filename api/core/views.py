@@ -950,6 +950,7 @@ class WellnessPlanAcceptView(APIView):
         profile.cue_style = data["cue_style"]
         profile.height_cm = data.get("height_cm")
         profile.weight_kg = data.get("weight_kg")
+        profile.medical_history = data.get("medical_history", "")
         profile.wellness_plan = plan
         profile.wellness_plan_accepted_at = timezone.now()
         profile.save(update_fields=[
@@ -960,6 +961,7 @@ class WellnessPlanAcceptView(APIView):
             "cue_style",
             "height_cm",
             "weight_kg",
+            "medical_history",
             "wellness_plan",
             "wellness_plan_accepted_at",
             "updated_at",

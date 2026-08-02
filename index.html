@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=56" />
+  <link rel="stylesheet" href="style.css?v=60" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -193,6 +193,24 @@
           a consultation.
         </small>
       </div>
+      <div class="patient-trend-alert-actions">
+        <button
+          class="button button-coral patient-trend-request"
+          id="patientTrendRequestPhysiotherapist"
+          type="button"
+          data-open="booking-modal"
+        >
+          Request a physiotherapist <span aria-hidden="true">→</span>
+        </button>
+        <small
+          id="patientTrendRequestStatus"
+          role="status"
+          aria-live="polite"
+        >
+          Choose a preferred time. The request must be accepted before it is
+          confirmed.
+        </small>
+      </div>
     </section>
 
     <div class="patient-dashboard-grid">
@@ -233,12 +251,13 @@
             Start exercises <span aria-hidden="true">→</span>
           </button>
           <button
-            class="text-link"
-            id="patientCreateWellnessPlan"
+            class="text-link patient-change-plan"
+            id="patientPlanChange"
             type="button"
             data-open="plan-modal"
+            hidden
           >
-            Create or update my wellness plan
+            Change my plan
           </button>
         </div>
       </section>
@@ -450,10 +469,6 @@
               Build my recovery plan
               <span aria-hidden="true">↗</span>
             </button>
-            <a class="round-link" href="#practice" aria-label="Try the live exercise guide">
-              <span>Try it live</span>
-              <span class="round-link-icon" aria-hidden="true">↓</span>
-            </a>
           </div>
           <div class="hero-account-entry" aria-label="Account access">
             <span>Already have a patient or physiotherapist account?</span>
@@ -652,7 +667,7 @@
         <span aria-hidden="true">←</span> Back to my home
       </button>
       <div class="section-kicker section-kicker-light">
-        <span>02</span>
+        <span aria-hidden="true"></span>
         <span>Live exercise guide</span>
       </div>
 
@@ -843,9 +858,10 @@
                 <span class="guide-leg guide-leg-right"></span>
               </div>
               <div class="camera-placeholder-actions">
-                <p>
+                <p id="primaryCameraInstruction">
                   <strong>Stand where your full body fits</strong>
-                  Press the large button below to begin your camera setup.
+                  Press Start camera guide below. We’ll ask about your pain
+                  level before turning on the camera.
                 </p>
                 <button
                   class="button button-coral camera-setup-button"
@@ -853,9 +869,15 @@
                   type="button"
                   disabled
                 >
-                  <span id="primaryCalibrationLabel">Set up my camera to continue</span>
+                  <span id="primaryCalibrationLabel">Start camera guide</span>
                   <span aria-hidden="true">→</span>
                 </button>
+                <p
+                  class="camera-setup-status"
+                  id="cameraSetupStatus"
+                  role="alert"
+                  hidden
+                ></p>
                 <small>
                   Face your device and keep a stable chair nearby for support.
                 </small>
@@ -880,7 +902,7 @@
               <div class="calibration-dialog">
                 <span id="calibrationStepLabel" class="calibration-step-label">Personal calibration</span>
                 <div class="calibration-dots" aria-hidden="true">
-                  <span class="active"></span><span></span><span></span><span></span>
+                  <span class="active"></span><span></span><span></span>
                 </div>
                 <h3 id="calibrationTitle">Fit this exercise to your movement</h3>
                 <p id="calibrationInstructions">
@@ -890,18 +912,168 @@
                 <p id="calibrationStatus" class="calibration-status" role="status"></p>
                 <div class="calibration-actions">
                   <button id="calibrationCancel" class="text-button calibration-cancel" type="button">Cancel</button>
-                  <button id="calibrationAction" class="button button-coral" type="button">Begin</button>
+                  <button id="calibrationAction" class="button button-coral" type="button" hidden>Save personal range</button>
                 </div>
+              </div>
+            </div>
+            <div
+              id="voiceSetupOverlay"
+              class="voice-setup-overlay hidden"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="voiceSetupTitle"
+              aria-describedby="voiceSetupDescription"
+            >
+              <div class="voice-setup-dialog">
+                <span class="voice-setup-eyebrow">Before movement begins</span>
+                <h3 id="voiceSetupTitle">How would you like to answer?</h3>
+                <p id="voiceSetupDescription">
+                  Choose now, while you are still near your device. No AI
+                  guidance will speak until you make this choice.
+                </p>
+                <div class="voice-setup-options">
+                  <button
+                    id="voiceSetupHandsFree"
+                    class="voice-setup-option is-hands-free"
+                    type="button"
+                  >
+                    <span class="voice-setup-icon" aria-hidden="true">🎙</span>
+                    <span>
+                      <strong>Use hands-free voice</strong>
+                      <small>
+                        Hear each question, then answer aloud automatically
+                        without returning to press a button.
+                      </small>
+                    </span>
+                  </button>
+                  <button
+                    id="voiceSetupButtons"
+                    class="voice-setup-option"
+                    type="button"
+                  >
+                    <span class="voice-setup-icon" aria-hidden="true">○</span>
+                    <span>
+                      <strong>Use on-screen buttons</strong>
+                      <small>
+                        Keep spoken guidance and microphone listening off.
+                      </small>
+                    </span>
+                  </button>
+                </div>
+                <p id="voiceSetupStatus" class="voice-setup-status" role="alert"></p>
+                <small class="voice-setup-privacy">
+                  Hands-free mode asks for microphone permission. Voice
+                  recognition may be processed by your browser provider.
+                </small>
               </div>
             </div>
           </div>
 
           <div class="camera-safety">
-            <span aria-hidden="true">✦</span>
-            <p>
-              Your camera feed is processed for movement guidance and is not
-              recorded in this prototype.
-            </p>
+            <div class="camera-privacy-note">
+              <span aria-hidden="true">✦</span>
+              <p>
+                Your camera feed is processed for movement guidance and is not
+                recorded in this prototype.
+              </p>
+            </div>
+            <div
+              id="fallReadiness"
+              class="fall-readiness"
+              data-state="ready"
+              role="status"
+              aria-live="polite"
+            >
+              <span class="fall-readiness-icon" aria-hidden="true">✓</span>
+              <div>
+                <strong id="fallReadinessTitle">Local possible-fall check available</strong>
+                <small id="fallReadinessDetail">
+                  It starts with the camera. No emergency alert is sent.
+                </small>
+              </div>
+            </div>
+          </div>
+
+          <div
+            id="fallSafetyOverlay"
+            class="fall-safety-overlay hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="fallSafetyTitle"
+            aria-describedby="fallSafetyMessage"
+          >
+            <section id="fallSafetyQuestion" class="fall-safety-dialog">
+              <div class="fall-safety-alert-icon" aria-hidden="true">!</div>
+              <span class="fall-safety-eyebrow">Possible fall detected</span>
+              <h2 id="fallSafetyTitle">Are you okay?</h2>
+              <p id="fallSafetyMessage">
+                We noticed an unexpected movement and stopped the exercise.
+                This can be a false alarm.
+              </p>
+              <div class="fall-safety-countdown" aria-live="polite">
+                <strong id="fallSafetyCountdown">30</strong>
+                <span>seconds to answer before the exercise stops</span>
+              </div>
+              <div class="fall-safety-actions">
+                <button
+                  id="fallSafetyOkay"
+                  class="fall-safety-button is-okay"
+                  type="button"
+                >
+                  <span aria-hidden="true">✓</span>
+                  <strong>I’m okay</strong>
+                  <small>Cancel this check and stop the exercise</small>
+                </button>
+                <button
+                  id="fallSafetyHelp"
+                  class="fall-safety-button is-help"
+                  type="button"
+                >
+                  <span aria-hidden="true">!</span>
+                  <strong>I need help</strong>
+                  <small>Stop the exercise and show help instructions</small>
+                </button>
+              </div>
+              <button
+                id="fallSafetyVoice"
+                class="fall-safety-voice"
+                type="button"
+              >
+                <span aria-hidden="true">🎙</span> Answer by voice
+              </button>
+              <p
+                id="fallSafetyVoiceStatus"
+                class="fall-safety-voice-status"
+                role="status"
+                aria-live="polite"
+              ></p>
+              <p class="fall-safety-prototype-note">
+                No emergency contact or outside service is alerted in this version.
+              </p>
+            </section>
+
+            <section id="fallSafetyResult" class="fall-safety-dialog hidden">
+              <div id="fallSafetyResultIcon" class="fall-safety-alert-icon" aria-hidden="true">✓</div>
+              <span class="fall-safety-eyebrow">Exercise stopped</span>
+              <h2 id="fallSafetyResultTitle">Your response was recorded.</h2>
+              <p id="fallSafetyResultMessage">
+                Take a moment before deciding whether to exercise again.
+              </p>
+              <div id="fallSafetyNoAlert" class="fall-safety-no-alert hidden">
+                <strong>No emergency alert was sent.</strong>
+                <span>
+                  Emergency contacts are not configured in this version. Use
+                  your phone or call out to someone nearby if you need help.
+                </span>
+              </div>
+              <button
+                id="fallSafetyClose"
+                class="fall-safety-finish"
+                type="button"
+              >
+                Return to my home <span aria-hidden="true">→</span>
+              </button>
+            </section>
           </div>
         </div>
 
@@ -947,6 +1119,22 @@
             </div>
           </div>
 
+          <div
+            id="recordedPain"
+            class="recorded-pain hidden"
+            role="status"
+            aria-live="polite"
+          >
+            <div class="recorded-pain-copy">
+              <span id="recordedPainContext">Before exercise pain</span>
+              <strong id="recordedPainMessage">Pain level recorded</strong>
+            </div>
+            <div class="recorded-pain-score" aria-label="Recorded pain level out of 10">
+              <strong id="recordedPainValue">0</strong>
+              <span>/10</span>
+            </div>
+          </div>
+
           <div class="rep-row">
             <div class="rep-block">
               <span id="repCount" class="rep-count">0</span>
@@ -967,7 +1155,7 @@
             <span class="feedback-symbol">●</span>
             <div>
               <strong>Get into position</strong>
-              <span>Your guidance will appear here</span>
+              <span>Live guidance appears here</span>
             </div>
           </div>
 
@@ -1013,6 +1201,22 @@
               <button type="button" data-pain="9">9</button>
               <button type="button" data-pain="10">10</button>
             </div>
+            <div
+              id="painConfirmation"
+              class="pain-confirmation hidden"
+              role="group"
+              aria-labelledby="painConfirmationSummary"
+            >
+              <p id="painConfirmationSummary">Pain level 0 out of 10</p>
+              <div class="pain-confirmation-actions">
+                <button type="button" data-pain-confirmation="confirm">
+                  Yes, continue
+                </button>
+                <button type="button" data-pain-confirmation="change">
+                  Change my answer
+                </button>
+              </div>
+            </div>
             <div id="recoveryChoices" class="recovery-choices hidden">
               <p>Compared with your previous session, how is your recovery?</p>
               <div>
@@ -1021,6 +1225,20 @@
                 <button type="button" data-recovery="worse">Worse</button>
                 <button type="button" data-recovery="unsure">Not sure</button>
               </div>
+            </div>
+            <div
+              id="painSafetyInterview"
+              class="pain-safety-interview hidden"
+              role="group"
+              aria-labelledby="painSafetyQuestion"
+            >
+              <div id="painSafetyReassurance" class="pain-safety-reassurance">
+                <strong id="painSafetyHeading">Let’s make sure you are safe</strong>
+                <p id="painSafetyMessage"></p>
+              </div>
+              <p id="painSafetyQuestion" class="pain-safety-question"></p>
+              <p id="painSafetyHelp" class="pain-safety-help"></p>
+              <div id="painSafetyChoices" class="pain-safety-choices"></div>
             </div>
             <p id="voiceCheckinStatus" class="voice-checkin-status" role="status" aria-live="polite"></p>
             <div class="pain-checkin-actions">
@@ -1065,10 +1283,28 @@
             </dl>
           </section>
 
-          <button id="toggle" class="button button-coral camera-button" disabled>
-            Start camera guide
-            <span aria-hidden="true">→</span>
-          </button>
+          <div class="camera-session-actions">
+            <button
+              id="toggle"
+              class="button button-coral camera-button hidden"
+              disabled
+            >
+              Pause camera guide
+              <span aria-hidden="true">→</span>
+            </button>
+            <button
+              id="finishExercise"
+              class="button finish-exercise-button"
+              type="button"
+              disabled
+            >
+              Finish exercise and check in
+              <span aria-hidden="true">✓</span>
+            </button>
+          </div>
+          <p id="cameraSessionHint" class="camera-session-hint" aria-live="polite">
+            Stopping the camera does not mark an exercise as finished.
+          </p>
 
           <details class="metrics">
             <summary>Technical movement details</summary>
@@ -1446,9 +1682,13 @@
             <label>
               <span>Days each week</span>
               <select name="daysPerWeek" required>
+                <option value="1">1 day</option>
                 <option value="2">2 days</option>
                 <option value="3" selected>3 days</option>
                 <option value="4">4 days</option>
+                <option value="5">5 days</option>
+                <option value="6">6 days</option>
+                <option value="7">7 days</option>
               </select>
             </label>
             <label>
@@ -1458,6 +1698,8 @@
                 <option value="10" selected>About 10 minutes</option>
                 <option value="15">About 15 minutes</option>
                 <option value="20">About 20 minutes</option>
+                <option value="25">About 25 minutes</option>
+                <option value="30">About 30 minutes</option>
               </select>
             </label>
             <label>
@@ -1503,6 +1745,54 @@
               <em>kg</em>
             </label>
           </div>
+          <fieldset class="planner-history-question">
+            <legend>
+              Do you have any past medical, injury, or surgery history that
+              you have recovered from but the planner should still consider?
+            </legend>
+            <p>
+              This includes an old injury that may make certain movements
+              uncomfortable. If the issue is current, worsening, or has
+              clinician restrictions, return to the safety screen instead.
+            </p>
+            <div class="planner-history-options">
+              <label>
+                <input
+                  type="radio"
+                  name="hasRelevantHistory"
+                  value="false"
+                  required
+                />
+                No history to consider
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="hasRelevantHistory"
+                  value="true"
+                />
+                Yes, I will describe it
+              </label>
+            </div>
+          </fieldset>
+          <label
+            class="planner-notes-field planner-medical-history"
+            id="plannerMedicalHistoryField"
+            hidden
+          >
+            <span>Recovered medical or injury history</span>
+            <textarea
+              id="plannerMedicalHistory"
+              name="medicalHistory"
+              maxlength="1000"
+              rows="3"
+              placeholder="For example: I recovered from a right knee injury two years ago, but deep bending can still feel uncomfortable."
+            ></textarea>
+            <small>
+              The planner will use a lower-load exercise subset and shorter
+              sessions. It cannot guarantee that an exercise will not cause pain.
+            </small>
+          </label>
           <label class="planner-notes-field">
             <span>Anything the planner should consider? <small>(optional)</small></span>
             <textarea
@@ -2117,13 +2407,13 @@
   </div>
 
   <script src="runtime-config.js"></script>
-  <script type="module" src="auth.js?v=24"></script>
-  <script type="module" src="ui.js?v=18"></script>
-  <script type="module" src="patient-dashboard.js?v=12"></script>
-  <script type="module" src="therapist.js?v=17"></script>
+  <script type="module" src="auth.js?v=25"></script>
+  <script type="module" src="ui.js?v=20"></script>
+  <script type="module" src="patient-dashboard.js?v=18"></script>
+  <script type="module" src="therapist.js?v=18"></script>
   <script type="module" src="exercise-library.js?v=15"></script>
-  <script type="module" src="main.js?v=49"></script>
-  <script type="module" src="agent-chat.js?v=14"></script>
-  <script type="module" src="care-workflow.js?v=14"></script>
+  <script type="module" src="main.js?v=59"></script>
+  <script type="module" src="agent-chat.js?v=15"></script>
+  <script type="module" src="care-workflow.js?v=15"></script>
 </body>
 </html>

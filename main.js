@@ -7,9 +7,10 @@ import {
   measureHandExerciseFrame,
   measurePoseExerciseFrame,
 } from "./exercise-tracking.js";
-import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=40";
+import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=41";
 import { POSES } from "./poses.js";
 import {
+  calibrationFrameMatchesPhase,
   createCalibration,
   extractCalibrationFrame,
   getCalibration,
@@ -18,10 +19,16 @@ import {
   saveCalibration,
   validateCalibrationCapture,
 } from "./personalization.js";
+import {
+  buildCalibrationSafetyContext,
+  evaluateCalibrationReuse,
+} from "./calibration-policy.js";
 import { postSession, postPainCheckin, postCalibration, isLoggedIn } from "./api.js?v=22";
 import { DRAFT_EXERCISES } from "./exercises/catalog.js";
 import {
+  parseConfirmationResponse,
   parsePainLevel,
+  parsePainSafetyResponse,
   parseRecoveryStatus,
   voiceGuidance,
 } from "./voice-guidance.js";
@@ -30,6 +37,11 @@ import {
   PRACTICE_VIEWS,
   resolvePracticeAccess,
 } from "./practice-access.js";
+import {
+  FallMonitor,
+  fallMonitoringReadiness,
+  parseWellbeingResponse,
+} from "./fall-monitoring.js";
 
 let PoseLandmarker;
 let HandLandmarker;
@@ -79,6 +91,8 @@ const synchronizedFrameContext = synchronizedFrame.getContext("2d", {
 });
 const statusEl    = document.getElementById("status");
 const toggleBtn   = document.getElementById("toggle");
+const finishExerciseBtn = document.getElementById("finishExercise");
+const cameraSessionHintEl = document.getElementById("cameraSessionHint");
 const fpsEl       = document.getElementById("fps");
 const exSelect    = document.getElementById("exerciseSelect");
 const sideSelect  = document.getElementById("sideSelect");
@@ -156,6 +170,10 @@ const openCalibrationPrimary =
   document.getElementById("openCalibrationPrimary");
 const primaryCalibrationLabel =
   document.getElementById("primaryCalibrationLabel");
+const primaryCameraInstruction =
+  document.getElementById("primaryCameraInstruction");
+const cameraSetupStatus =
+  document.getElementById("cameraSetupStatus");
 const calibrationOverlay    = document.getElementById("calibrationOverlay");
 const calibrationStepLabel  = document.getElementById("calibrationStepLabel");
 const calibrationTitle      = document.getElementById("calibrationTitle");
@@ -171,6 +189,10 @@ const handTrackingReadout   = document.getElementById("handTrackingReadout");
 const handModelStatus       = document.getElementById("handModelStatus");
 const handGuideText         = handFrameGuide?.querySelector(":scope > span");
 const soundToggle           = document.getElementById("soundToggle");
+const voiceSetupOverlay     = document.getElementById("voiceSetupOverlay");
+const voiceSetupHandsFree   = document.getElementById("voiceSetupHandsFree");
+const voiceSetupButtons     = document.getElementById("voiceSetupButtons");
+const voiceSetupStatus      = document.getElementById("voiceSetupStatus");
 const publicPracticePreview = document.getElementById("publicPracticePreview");
 const patientPracticeGate   = document.getElementById("patientPracticeGate");
 const patientPracticeGateTitle =
@@ -183,11 +205,32 @@ const patientPracticeWorkspace =
   document.getElementById("patientPracticeWorkspace");
 const clinicianPracticeGate =
   document.getElementById("clinicianPracticeGate");
+const fallReadinessEl = document.getElementById("fallReadiness");
+const fallReadinessTitleEl = document.getElementById("fallReadinessTitle");
+const fallReadinessDetailEl = document.getElementById("fallReadinessDetail");
+const fallSafetyOverlay = document.getElementById("fallSafetyOverlay");
+const fallSafetyQuestion = document.getElementById("fallSafetyQuestion");
+const fallSafetyResult = document.getElementById("fallSafetyResult");
+const fallSafetyCountdown = document.getElementById("fallSafetyCountdown");
+const fallSafetyOkay = document.getElementById("fallSafetyOkay");
+const fallSafetyHelp = document.getElementById("fallSafetyHelp");
+const fallSafetyVoice = document.getElementById("fallSafetyVoice");
+const fallSafetyVoiceStatus = document.getElementById("fallSafetyVoiceStatus");
+const fallSafetyResultTitle = document.getElementById("fallSafetyResultTitle");
+const fallSafetyResultMessage = document.getElementById("fallSafetyResultMessage");
+const fallSafetyResultIcon = document.getElementById("fallSafetyResultIcon");
+const fallSafetyNoAlert = document.getElementById("fallSafetyNoAlert");
+const fallSafetyClose = document.getElementById("fallSafetyClose");
+
+// Keep the full-screen wellbeing dialog outside the camera grid so ancestor
+// overflow rules cannot crop its viewport-sized accessible controls.
+document.body.appendChild(fallSafetyOverlay);
 
 let profile = loadProfile();
 let poseLandmarker = null;
 let handLandmarker = null;
 let sessionStartedAt = null;
+let exerciseSessionActive = false;
 let activePrescriptions = loadActivePrescriptions();
 const initialAuthState = window.physioVisionAuthState ?? null;
 let authenticatedRole = initialAuthState?.role ?? null;
@@ -202,11 +245,101 @@ let practiceDecision = resolvePracticeAccess({
   loggedIn: isLoggedIn(),
 });
 let movementModelsPromise = null;
+const fallMonitor = new FallMonitor();
+let safetyCheckActive = false;
+let fallSafetyTimer = null;
+let fallSafetySecondsRemaining = 30;
+let fallSafetyPreviousFocus = null;
+let activeFallEvent = null;
+let handsFreeVoiceEnabled = false;
+let voiceModeChosenThisSession = false;
+let voiceModeChoicePromise = null;
+let resolveVoiceModeChoice = null;
+let preExerciseCheckinCompleted = false;
+let confirmedPreExercisePain = null;
 const exerciseContent = new Map(
   DRAFT_EXERCISES.map((exercise) => [exercise.id, exercise])
 );
 
 voiceGuidance.attachToggle(soundToggle);
+
+function finishVoiceModeChoice(handsFree) {
+  handsFreeVoiceEnabled = Boolean(handsFree);
+  voiceModeChosenThisSession = true;
+  voiceGuidance.setEnabled(handsFreeVoiceEnabled);
+  voiceSetupOverlay.classList.add("hidden");
+  voiceSetupHandsFree.disabled = false;
+  voiceSetupButtons.disabled = false;
+  voiceSetupStatus.textContent = "";
+  const resolve = resolveVoiceModeChoice;
+  resolveVoiceModeChoice = null;
+  voiceModeChoicePromise = null;
+  resolve?.(true);
+}
+
+function ensureVoiceModeChosen() {
+  if (voiceModeChosenThisSession) return Promise.resolve(true);
+  if (voiceModeChoicePromise) return voiceModeChoicePromise;
+
+  voiceSetupOverlay.classList.remove("hidden");
+  voiceSetupHandsFree.disabled =
+    !voiceGuidance.canSpeak || !voiceGuidance.canListen;
+  voiceSetupStatus.textContent = voiceSetupHandsFree.disabled
+    ? (
+      "Hands-free voice is unavailable in this browser. "
+      + "Choose on-screen buttons to continue."
+    )
+    : (
+      "Choose once before setup. No AI speech or microphone listening "
+      + "starts until you select an option."
+    );
+  (voiceSetupHandsFree.disabled
+    ? voiceSetupButtons
+    : voiceSetupHandsFree
+  ).focus({ preventScroll: true });
+
+  voiceModeChoicePromise = new Promise((resolve) => {
+    resolveVoiceModeChoice = resolve;
+  });
+  return voiceModeChoicePromise;
+}
+
+voiceSetupHandsFree.addEventListener("click", async () => {
+  if (!voiceGuidance.canSpeak || !voiceGuidance.canListen) return;
+
+  voiceSetupHandsFree.disabled = true;
+  voiceSetupButtons.disabled = true;
+  voiceSetupStatus.textContent = "Checking microphone permission…";
+
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error("Microphone access is unavailable in this browser.");
+    }
+    const permissionStream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+    });
+    permissionStream.getTracks().forEach((track) => track.stop());
+    finishVoiceModeChoice(true);
+  } catch (_) {
+    voiceSetupHandsFree.disabled = false;
+    voiceSetupButtons.disabled = false;
+    voiceSetupStatus.textContent =
+      "Microphone access was not allowed. Allow it and try again, "
+      + "or choose on-screen buttons.";
+    voiceSetupButtons.focus({ preventScroll: true });
+  }
+});
+
+voiceSetupButtons.addEventListener("click", () => {
+  finishVoiceModeChoice(false);
+});
+
+soundToggle?.addEventListener("click", () => {
+  if (!voiceGuidance.enabled) {
+    handsFreeVoiceEnabled = false;
+    if (painCheckinState) updatePainCheckinPresentation();
+  }
+});
 
 function loadActivePrescriptions() {
   try {
@@ -226,6 +359,214 @@ function loadActivePrescriptions() {
   } catch (_) {
     return new Map();
   }
+}
+
+function renderFallReadiness(exercise = engine?.exercise) {
+  const readiness = fallMonitoringReadiness(exercise);
+  fallReadinessEl.dataset.state = readiness.state;
+  fallReadinessTitleEl.textContent = readiness.title;
+  fallReadinessDetailEl.textContent = readiness.detail;
+  const icon = fallReadinessEl.querySelector(".fall-readiness-icon");
+  if (icon) {
+    icon.textContent = readiness.state === "ready"
+      ? "✓"
+      : readiness.state === "limited"
+        ? "!"
+        : "—";
+  }
+}
+
+function configureFallMonitoring(exercise = engine?.exercise) {
+  fallMonitor.configure(exercise);
+  renderFallReadiness(exercise);
+}
+
+function recordLocalSafetyIncident(response, event = {}) {
+  const storageKey = "physiovision.local-safety-incidents.v1";
+  try {
+    const previous = JSON.parse(window.sessionStorage.getItem(storageKey) ?? "[]");
+    const incidents = Array.isArray(previous) ? previous : [];
+    incidents.push({
+      recordedAt: new Date().toISOString(),
+      exerciseId: engine?.exercise?.id ?? null,
+      monitoringMode: event.mode ?? fallMonitor.mode,
+      response,
+      signals: Array.isArray(event.signals) ? event.signals : [],
+    });
+    window.sessionStorage.setItem(
+      storageKey,
+      JSON.stringify(incidents.slice(-20))
+    );
+  } catch (_) {
+    // A private-browsing storage failure must not block the on-screen check.
+  }
+}
+
+function clearFallSafetyTimer() {
+  window.clearInterval(fallSafetyTimer);
+  fallSafetyTimer = null;
+}
+
+function showFallSafetyResult(response, event = {}) {
+  clearFallSafetyTimer();
+  recordLocalSafetyIncident(response, event);
+  deactivateCameraGuide({
+    statusMessage: "Exercise stopped for a safety check",
+  });
+
+  fallSafetyQuestion.classList.add("hidden");
+  fallSafetyResult.classList.remove("hidden");
+  fallSafetyResult.classList.toggle(
+    "fall-safety-result-safe",
+    response === "okay"
+  );
+  fallSafetyNoAlert.classList.toggle("hidden", response === "okay");
+
+  if (response === "okay") {
+    fallSafetyResultIcon.textContent = "✓";
+    fallSafetyResultTitle.textContent = "Thank you. The exercise has stopped.";
+    fallSafetyResultMessage.textContent =
+      "The possible fall was marked as a false alarm. Take a moment before deciding whether to exercise again.";
+  } else if (response === "help") {
+    fallSafetyResultIcon.textContent = "!";
+    fallSafetyResultTitle.textContent = "You said that you need help.";
+    fallSafetyResultMessage.textContent =
+      "Stay where you are if moving may be unsafe. Use your phone or call out to someone nearby.";
+  } else {
+    fallSafetyResultIcon.textContent = "!";
+    fallSafetyResultTitle.textContent = "We did not receive a response.";
+    fallSafetyResultMessage.textContent =
+      "The exercise and camera have stopped. Use your phone or call out to someone nearby if you need help.";
+  }
+
+  voiceGuidance.speak(
+    `${fallSafetyResultTitle.textContent} ${fallSafetyResultMessage.textContent}` +
+      (response === "okay"
+        ? ""
+        : " No emergency alert was sent because emergency contacts are not configured in this version."),
+    {
+      key: `fall-safety-result:${response}`,
+      interrupt: true,
+    }
+  );
+  fallSafetyClose.focus({ preventScroll: true });
+}
+
+function startFallSafetyVoiceListening() {
+  if (!safetyCheckActive || fallSafetyQuestion.classList.contains("hidden")) {
+    return false;
+  }
+  return voiceGuidance.listen({
+    onStatus: (status) => {
+      fallSafetyVoiceStatus.textContent = status;
+    },
+    onError: (message) => {
+      fallSafetyVoiceStatus.textContent =
+        `${message} You can also use one of the two large buttons.`;
+    },
+    onResult: (transcript) => {
+      const response = parseWellbeingResponse(transcript);
+      fallSafetyVoiceStatus.textContent = `I heard: “${transcript}”`;
+      if (response) {
+        showFallSafetyResult(response, activeFallEvent ?? {});
+      } else {
+        fallSafetyVoiceStatus.textContent =
+          `I heard: “${transcript}”. Please say “I’m okay” or “I need help”, or use a large button.`;
+      }
+    },
+  });
+}
+
+function beginFallSafetyCheck(event) {
+  if (safetyCheckActive) return;
+  safetyCheckActive = true;
+  activeFallEvent = event;
+  fallSafetyPreviousFocus = document.activeElement;
+  clearHoldTimer(activeDose(engine.exercise).holdSeconds);
+  resetSpokenCoaching();
+  voiceGuidance.cancel();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  fallSafetyQuestion.classList.remove("hidden");
+  fallSafetyResult.classList.add("hidden");
+  fallSafetyResult.classList.remove("fall-safety-result-safe");
+  fallSafetyNoAlert.classList.add("hidden");
+  fallSafetyVoiceStatus.textContent = handsFreeVoiceEnabled
+    ? "Hands-free voice is on. Listening will start after the question."
+    : voiceGuidance.canListen
+      ? "Use a large button, or choose Answer by voice as a fallback."
+    : "Voice input is unavailable in this browser. Use a large button.";
+  fallSafetyVoice.disabled = !voiceGuidance.canListen;
+  fallSafetySecondsRemaining = 30;
+  fallSafetyCountdown.textContent = String(fallSafetySecondsRemaining);
+  fallSafetyOverlay.classList.remove("hidden");
+  document.body.classList.add("fall-safety-open");
+  fallSafetyOkay.focus({ preventScroll: true });
+
+  const spoken = voiceGuidance.speak(
+    "We noticed a possible fall and stopped the exercise. Are you okay? Select I’m okay or I need help.",
+    {
+      key: "possible-fall-check",
+      interrupt: true,
+      onEnd: () => {
+        if (handsFreeVoiceEnabled && safetyCheckActive) {
+          startFallSafetyVoiceListening();
+        }
+      },
+    }
+  );
+  if (!spoken && handsFreeVoiceEnabled) {
+    window.setTimeout(() => {
+      if (safetyCheckActive) startFallSafetyVoiceListening();
+    }, 200);
+  }
+
+  clearFallSafetyTimer();
+  fallSafetyTimer = window.setInterval(() => {
+    fallSafetySecondsRemaining -= 1;
+    fallSafetyCountdown.textContent = String(
+      Math.max(fallSafetySecondsRemaining, 0)
+    );
+    if (fallSafetySecondsRemaining === 10) {
+      voiceGuidance.speak("Ten seconds left to answer.", {
+        key: "possible-fall-countdown-10",
+      });
+    } else if (fallSafetySecondsRemaining === 5) {
+      voiceGuidance.speak("Five seconds left to answer.", {
+        key: "possible-fall-countdown-5",
+      });
+    } else if (fallSafetySecondsRemaining <= 0) {
+      showFallSafetyResult("no_response", event);
+    }
+  }, 1000);
+}
+
+function closeFallSafetyCheck() {
+  clearFallSafetyTimer();
+  voiceGuidance.cancel();
+  safetyCheckActive = false;
+  fallMonitor.resumeAfterCheck();
+  fallSafetyOverlay.classList.add("hidden");
+  document.body.classList.remove("fall-safety-open");
+  const homeButton = document.querySelector("[data-patient-dashboard]");
+  if (homeButton instanceof HTMLElement) {
+    homeButton.click();
+  } else if (fallSafetyPreviousFocus instanceof HTMLElement) {
+    fallSafetyPreviousFocus.focus({ preventScroll: true });
+  }
+  fallSafetyPreviousFocus = null;
+  activeFallEvent = null;
+}
+
+function processFallMonitoring(landmarks, timestampMs) {
+  if (safetyCheckActive || calibrationSession || handPreviewMode) return null;
+  const event = fallMonitor.update({ landmarks, timestampMs });
+  if (event.type === "candidate") {
+    statusEl.textContent = "Checking an unexpected movement…";
+  } else if (event.type === "possible_fall" && !event.repeated) {
+    beginFallSafetyCheck(event);
+  }
+  return event;
 }
 
 const PRACTICE_GATE_COPY = Object.freeze({
@@ -324,8 +665,9 @@ function syncPracticeAccess() {
   if (showPatient) {
     refreshExerciseAccess();
     ensureMovementModels();
-  } else if (running) {
-    deactivateCameraGuide();
+  } else {
+    if (running) deactivateCameraGuide();
+    discardExerciseSession();
     hidePainCheckin();
   }
 }
@@ -374,6 +716,7 @@ function activeDose(exercise = engine?.exercise) {
     daysPerWeek: prescription.days_per_week,
     notes: prescription.notes,
     clinicianName: prescription.clinician_name,
+    updatedAt: prescription.updated_at ?? prescription.updatedAt ?? null,
   };
 }
 
@@ -383,6 +726,11 @@ let sessionSymmetryWarnings = 0;
 const sessionAngleStats = {}; // {angleName: {min, max, sum, count}}
 let spokenCoachingCandidate = null;
 let spokenRepCount = 0;
+let completedSetCount = 0;
+let completedSessionReps = 0;
+let pendingSetStartCheck = null;
+let sessionAllSetsComplete = false;
+let lastFeedbackResult = null;
 
 function exerciseSpokenInstruction(exercise) {
   const reviewedContent = exerciseContent.get(exercise.id);
@@ -447,7 +795,11 @@ let holdRemaining = 0;
 let holdTotal     = 0;
 
 // ── Personal calibration state ───────────────────────────────────────────────
-const CALIBRATION_CAPTURE_MS = 1800;
+const CALIBRATION_CAPTURE_MS = 1200;
+const CALIBRATION_POSITION_STABLE_MS = 500;
+const CALIBRATION_RETURN_STABLE_MS = 350;
+const SESSION_POSITION_CAPTURE_MS = 1700;
+const SET_POSITION_STABLE_MS = 750;
 let calibrationSession = null;
 let calibrationDraft = null;
 
@@ -535,9 +887,18 @@ renderPoseStrip(engine.exercise, engine.stages[0]);
 renderStaticPhaseFlow(engine);
 renderPersonalization();
 renderExerciseImage(engine.exercise);
+configureFallMonitoring(engine.exercise);
 
 exSelect.addEventListener("change", () => {
-  flushSession();
+  if (running) {
+    deactivateCameraGuide({
+      statusMessage: "Camera paused because the exercise changed",
+    });
+  }
+  preExerciseCheckinCompleted = false;
+  confirmedPreExercisePain = null;
+  clearRecordedPain();
+  discardExerciseSession();
   cancelCalibration();
   engine.changeExercise(
     exSelect.value,
@@ -562,9 +923,19 @@ exSelect.addEventListener("change", () => {
   progressLbl.textContent = "Position yourself to start";
   setFeedbackBanner("ready");
   renderPersonalization();
+  configureFallMonitoring(engine.exercise);
 });
 
 sideSelect.addEventListener("change", () => {
+  if (running) {
+    deactivateCameraGuide({
+      statusMessage: "Camera paused because the focus side changed",
+    });
+  }
+  preExerciseCheckinCompleted = false;
+  confirmedPreExercisePain = null;
+  clearRecordedPain();
+  discardExerciseSession();
   cancelCalibration();
   engine.changeExercise(
     exSelect.value,
@@ -578,10 +949,14 @@ sideSelect.addEventListener("change", () => {
   progressEl.style.width = "0%";
   setFeedbackBanner("ready");
   renderPersonalization();
+  configureFallMonitoring(engine.exercise);
 });
 
 window.addEventListener("physiovision:profile-updated", (event) => {
   cancelCalibration();
+  preExerciseCheckinCompleted = false;
+  confirmedPreExercisePain = null;
+  clearRecordedPain();
   profile = event.detail;
   if (authenticatedRole === "patient") {
     authenticatedPatientProfile = event.detail;
@@ -608,9 +983,29 @@ window.addEventListener("physiovision:profile-updated", (event) => {
   progressEl.style.width = "0%";
   setFeedbackBanner("ready");
   renderPersonalization();
+  configureFallMonitoring(engine.exercise);
+});
+
+window.addEventListener("physiovision:practice-requested", (event) => {
+  const requestedRole = event.detail?.role ?? null;
+  const requestedProfile = event.detail?.profile ?? null;
+
+  if (requestedRole) {
+    authenticatedRole = requestedRole;
+  }
+
+  if (requestedRole === "patient" && requestedProfile) {
+    profile = { ...profile, ...requestedProfile };
+    authenticatedPatientProfile = profile;
+  }
+
+  syncPracticeAccess();
 });
 
 window.addEventListener("physiovision:prescriptions-updated", (event) => {
+  preExerciseCheckinCompleted = false;
+  confirmedPreExercisePain = null;
+  clearRecordedPain();
   const prescriptions = Array.isArray(event.detail) ? event.detail : [];
   window.sessionStorage.setItem(
     "physiovision.prescriptions.v1",
@@ -660,15 +1055,26 @@ async function createLandmarker() {
   const vision = await FilesetResolver.forVisionTasks(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
   );
-  poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+  const poseOptions = {
     baseOptions: {
       modelAssetPath:
         "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",
-      delegate: "GPU",
     },
     runningMode: "VIDEO",
     numPoses: 1,
-  });
+    minPoseDetectionConfidence: 0.5,
+    minPosePresenceConfidence: 0.5,
+    minTrackingConfidence: 0.5,
+  };
+  try {
+    poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+      ...poseOptions,
+      baseOptions: { ...poseOptions.baseOptions, delegate: "GPU" },
+    });
+  } catch (gpuError) {
+    console.info("GPU pose tracking unavailable; using CPU", gpuError);
+    poseLandmarker = await PoseLandmarker.createFromOptions(vision, poseOptions);
+  }
 
   try {
     const handOptions = {
@@ -895,6 +1301,10 @@ function renderHandPreview(result) {
 
 function renderFrame() {
   if (!running) return;
+  if (safetyCheckActive) {
+    rafId = requestAnimationFrame(renderFrame);
+    return;
+  }
 
   if (video.currentTime !== lastVideoTime) {
     lastVideoTime = video.currentTime;
@@ -920,6 +1330,8 @@ function renderFrame() {
         if (calibrationSession) {
           updateCalibrationCapture(measurements, frameTimestamp);
           statusEl.textContent = "Personal calibration in progress";
+        } else if (pendingSetStartCheck) {
+          updateSetStartingPositionCheck(measurements, frameTimestamp);
         } else {
           const feedback = updateFeedbackPanel(measurements, frameTimestamp);
           statusEl.textContent = feedback.trackingReady
@@ -948,6 +1360,8 @@ function renderFrame() {
         if (calibrationSession) {
           updateCalibrationCapture(measurements, frameTimestamp);
           statusEl.textContent = "Personal calibration in progress";
+        } else if (pendingSetStartCheck) {
+          updateSetStartingPositionCheck(measurements, frameTimestamp);
         } else {
           const feedback = updateFeedbackPanel(measurements, frameTimestamp);
           statusEl.textContent = feedback.trackingReady
@@ -977,18 +1391,26 @@ function renderFrame() {
           if (calibrationSession) {
             updateCalibrationCapture(angles, frameTimestamp);
             statusEl.textContent = "Personal calibration in progress";
+          } else if (pendingSetStartCheck) {
+            updateSetStartingPositionCheck(angles, frameTimestamp);
+            processFallMonitoring(landmarks, frameTimestamp);
           } else {
             updateFeedbackPanel(angles, frameTimestamp);
             statusEl.textContent = "Tracking your movement";
+            processFallMonitoring(landmarks, frameTimestamp);
           }
         } else {
+          const fallEvent = fallMonitor.notePoseUnavailable(frameTimestamp);
           combinedPoseHistory = [];
           updateCalibrationCapture(null, frameTimestamp);
+          updateSetStartingPositionCheck(null, frameTimestamp);
           const interruptedHold = engine.inHold;
           if (holdInterval) {
             clearHoldTimer(activeDose(engine.exercise).holdSeconds);
           }
-          statusEl.textContent = "Step back so your full body is visible";
+          statusEl.textContent = fallEvent.type === "visibility_lost"
+            ? "I can’t see you — please return to the marked area"
+            : "Step back so your full body is visible";
           setFeedbackBanner(
             "position",
             interruptedHold
@@ -999,7 +1421,9 @@ function renderFrame() {
             "position",
             interruptedHold
               ? "Your hold was reset because tracking was lost. Return to the stretch and keep your full body visible."
-              : "Step back and keep your full body visible.",
+              : fallEvent.type === "visibility_lost"
+                ? "I can’t see you. Please return to the marked area."
+                : "Step back and keep your full body visible.",
             frameTimestamp
           );
         }
@@ -1020,7 +1444,126 @@ function renderFrame() {
 
 const angleDebugEl = document.getElementById("angleDebug");
 
+function plannedSetCount(exercise = engine?.exercise) {
+  const sets = Number(activeDose(exercise).sets);
+  return Number.isFinite(sets) && sets > 0 ? Math.floor(sets) : 1;
+}
+
+function updateSetStartingPositionCheck(measurements, timestampMs) {
+  if (!pendingSetStartCheck) return false;
+  const frame = measurements
+    ? extractCalibrationFrame(engine.exercise, measurements, sideSelect.value)
+    : null;
+  const matchesStart = frame && calibrationFrameMatchesPhase(
+    engine.exercise,
+    frame,
+    "start"
+  );
+
+  if (
+    !matchesStart ||
+    !calibrationFrameIsStable(pendingSetStartCheck.previousFrame, frame)
+  ) {
+    pendingSetStartCheck.stableSince = null;
+    pendingSetStartCheck.previousFrame = frame;
+    statusEl.textContent = `Return to the starting position for set ${pendingSetStartCheck.setNumber}`;
+    setFeedbackBanner(
+      "position",
+      `Hold the starting position so set ${pendingSetStartCheck.setNumber} can begin automatically`
+    );
+    return false;
+  }
+
+  pendingSetStartCheck.previousFrame = frame;
+  if (pendingSetStartCheck.stableSince === null) {
+    pendingSetStartCheck.stableSince = timestampMs;
+  }
+  if (
+    timestampMs - pendingSetStartCheck.stableSince < SET_POSITION_STABLE_MS
+  ) {
+    statusEl.textContent = "Starting position found — hold still";
+    setFeedbackBanner("position", "Hold still for a moment");
+    return false;
+  }
+
+  const setNumber = pendingSetStartCheck.setNumber;
+  pendingSetStartCheck = null;
+  statusEl.textContent = `Set ${setNumber} starting position confirmed — begin`;
+  setFeedbackBanner("good", `Set ${setNumber} is ready. Begin when comfortable.`);
+  voiceGuidance.speak(
+    `Starting position confirmed. Begin set ${setNumber} when you are comfortable.`,
+    {
+      key: `set:${engine.exercise.id}:${setNumber}:ready`,
+      interrupt: true,
+    }
+  );
+  return true;
+}
+
+function handleCompletedSet(feedback) {
+  const setNumber = completedSetCount + 1;
+  completedSessionReps += feedback.repCount;
+  completedSetCount = setNumber;
+
+  if (setNumber >= plannedSetCount(feedback.exercise)) {
+    sessionAllSetsComplete = true;
+    lastFeedbackResult = feedback;
+    statusEl.textContent = `All ${setNumber} planned sets complete`;
+    setFeedbackBanner(
+      "good",
+      "All planned sets are complete. Choose Finish exercise when you are ready."
+    );
+    voiceGuidance.speak(
+      "All planned sets are complete. Choose Finish exercise when you are ready.",
+      {
+        key: `sets:${engine.exercise.id}:complete`,
+        interrupt: true,
+      }
+    );
+    return;
+  }
+
+  engine.changeExercise(
+    exSelect.value,
+    sideSelect.value,
+    getCalibration(exSelect.value, sideSelect.value)
+  );
+  smoother.state = {};
+  combinedPoseHistory = [];
+  if (holdInterval) {
+    clearHoldTimer(activeDose(engine.exercise).holdSeconds);
+  }
+  lastFeedbackResult = null;
+  pendingSetStartCheck = {
+    setNumber: setNumber + 1,
+    stableSince: null,
+    previousFrame: null,
+  };
+  repCountEl.textContent = "0";
+  setCompleteBadgeEl?.classList.add("hidden");
+  progressEl.style.width = "0%";
+  progressLbl.textContent = "Return to your starting position";
+  renderPoseStrip(engine.exercise, engine.stages[0]);
+  renderStaticPhaseFlow(engine);
+  resetSpokenCoaching();
+  statusEl.textContent = `Set ${setNumber} complete — checking the next starting position`;
+  setFeedbackBanner(
+    "position",
+    `Return to the starting position for set ${setNumber + 1}`
+  );
+  voiceGuidance.speak(
+    `Set ${setNumber} complete. Return to your starting position for an automatic check before set ${setNumber + 1}.`,
+    {
+      key: `set:${engine.exercise.id}:${setNumber}:complete`,
+      interrupt: true,
+    }
+  );
+}
+
 function updateFeedbackPanel(angles, timestampMs) {
+  if (sessionAllSetsComplete && lastFeedbackResult) {
+    return lastFeedbackResult;
+  }
   const fb = engine.update(angles, timestampMs);
 
   // ── Debug logging (remove before release) ────────────────────────────────
@@ -1177,6 +1720,10 @@ function updateFeedbackPanel(angles, timestampMs) {
     symWarnEl.classList.add("hidden");
   }
 
+  lastFeedbackResult = fb;
+  if (setComplete && !sessionAllSetsComplete) {
+    handleCompletedSet(fb);
+  }
   return fb;
 }
 
@@ -1237,19 +1784,18 @@ function renderPersonalization() {
       engine.exercise.calibration
     )} · safety limits unchanged`;
     openCalibrationBtn.textContent = "Recalibrate";
-    primaryCalibrationLabel.textContent = "Update my camera setup";
   } else if (supportsCalibration) {
     calibrationBadge.textContent = "Standard range";
     calibrationDetail.textContent =
       `Calibrate ${engine.exercise.name} to your movement.`;
     openCalibrationBtn.textContent = "Calibrate";
-    primaryCalibrationLabel.textContent = "Set up my camera to continue";
   } else {
     calibrationBadge.textContent = "Standard range";
     calibrationDetail.textContent = "Personal calibration is unavailable for this exercise.";
     openCalibrationBtn.textContent = "Unavailable";
-    primaryCalibrationLabel.textContent = "Camera setup unavailable";
   }
+
+  renderPrimaryCameraAction({ supportsCalibration });
 
   const requiredModelsReady = Boolean(
     poseLandmarker && (!exerciseUsesHand(engine.exercise) || handLandmarker)
@@ -1257,6 +1803,32 @@ function renderPersonalization() {
   openCalibrationBtn.disabled = !requiredModelsReady || !supportsCalibration;
   openCalibrationPrimary.disabled =
     !requiredModelsReady || !supportsCalibration;
+}
+
+function renderPrimaryCameraAction({
+  supportsCalibration = Boolean(engine.exercise.calibration),
+} = {}) {
+  if (!supportsCalibration) {
+    primaryCalibrationLabel.textContent = "Camera guide unavailable";
+    primaryCameraInstruction.innerHTML =
+      "<strong>Camera guide unavailable</strong>"
+      + "Choose another exercise to use camera guidance.";
+    return;
+  }
+
+  if (exerciseSessionActive && !running) {
+    primaryCalibrationLabel.textContent = "Resume camera guide";
+    primaryCameraInstruction.innerHTML =
+      "<strong>Your camera guide is paused</strong>"
+      + "Press Resume camera guide when you are ready to continue.";
+    return;
+  }
+
+  primaryCalibrationLabel.textContent = "Start camera guide";
+  primaryCameraInstruction.innerHTML =
+    "<strong>Stand where your full body fits</strong>"
+    + "Press Start camera guide below. We’ll ask about your pain level "
+    + "before turning on the camera.";
 }
 
 function calibrationSummary(calibration, config) {
@@ -1309,39 +1881,120 @@ let calibrationReturnFocus = openCalibrationBtn;
 
 async function openCalibrationFlow(event) {
   const trigger = event.currentTarget;
-  if (!engine.exercise.calibration) return;
-  if (!running && !(await activateCameraGuide())) return;
+  if (!(await ensureVoiceModeChosen())) return;
+  if (trigger === openCalibrationPrimary && exerciseSessionActive) {
+    await activateCameraGuide();
+    return;
+  }
+  if (isLoggedIn() && !exerciseSessionActive && !preExerciseCheckinCompleted) {
+    showPainCheckin("before", {
+      continuation: "calibration",
+      calibrationTrigger: trigger,
+    });
+    return;
+  }
+  await startCalibrationFlow(trigger);
+}
+
+async function startCalibrationFlow(
+  trigger,
+  { forceFull = trigger === openCalibrationBtn } = {}
+) {
+  cameraSetupStatus.hidden = true;
+  cameraSetupStatus.textContent = "";
+  if (!engine.exercise.calibration) {
+    cameraSetupStatus.textContent =
+      "Camera setup is unavailable for this exercise.";
+    cameraSetupStatus.hidden = false;
+    return;
+  }
+
+  const safetyContext = buildCalibrationSafetyContext({
+    profile,
+    dose: activeDose(engine.exercise),
+    painLevel: confirmedPreExercisePain,
+  });
+  const savedCalibration = getCalibration(
+    engine.exercise.id,
+    sideSelect.value
+  );
+  const reuseDecision = evaluateCalibrationReuse(
+    savedCalibration,
+    safetyContext
+  );
+  if (reuseDecision.action === "professional-review") {
+    const message =
+      "Your safety information has changed. Please get professional review before using this saved movement setup.";
+    cameraSetupStatus.textContent = message;
+    cameraSetupStatus.hidden = false;
+    statusEl.textContent = "Professional review recommended before exercise";
+    setFeedbackBanner("tracking", message);
+    voiceGuidance.speak(message, {
+      key: `calibration:${engine.exercise.id}:professional-review`,
+      interrupt: true,
+    });
+    return;
+  }
+
+  const calibrationMode = forceFull
+    ? "full-calibration"
+    : reuseDecision.action;
+  if (!running && !(await activateCameraGuide({ announceInstruction: false }))) {
+    cameraSetupStatus.textContent = engine.exercise.requiresClinicianPlan
+      && profile.carePath !== "clinician"
+      ? (
+        "This movement requires a physiotherapist-approved care plan. "
+        + "Return to My home and create a new general-wellness AI plan."
+      )
+      : (
+        statusEl.textContent
+        || "Camera setup could not start. Check the message above and try again."
+      );
+    cameraSetupStatus.hidden = false;
+    return;
+  }
 
   calibrationReturnFocus = trigger;
   calibrationDraft = null;
   calibrationSession = {
     exerciseId: engine.exercise.id,
-    step: "intro",
+    mode: calibrationMode,
+    savedCalibration,
+    safetyContext,
+    step: "start",
     startFrames: null,
     targetCaptures: [],
     capture: null,
   };
   calibrationOverlay.classList.remove("hidden");
   renderCalibrationStep();
-  calibrationAction.focus();
+  beginCalibrationCapture("start", {
+    durationMs: calibrationMode === "position-check"
+      ? SESSION_POSITION_CAPTURE_MS
+      : CALIBRATION_CAPTURE_MS,
+  });
+  announceCalibrationStage("start");
+  calibrationCancel.focus();
 }
 
 openCalibrationBtn.addEventListener("click", openCalibrationFlow);
 openCalibrationPrimary.addEventListener("click", openCalibrationFlow);
 
-calibrationCancel.addEventListener("click", cancelCalibration);
+calibrationCancel.addEventListener("click", () => {
+  const setupWasActive = Boolean(calibrationSession);
+  cancelCalibration();
+  if (setupWasActive && running) {
+    deactivateCameraGuide({
+      statusMessage: "Camera setup cancelled — exercise not started",
+    });
+    discardExerciseSession();
+  }
+});
 
 calibrationAction.addEventListener("click", () => {
   if (!calibrationSession) return;
 
-  if (calibrationSession.step === "intro") {
-    calibrationSession.step = "start";
-    renderCalibrationStep();
-  } else if (calibrationSession.step === "start") {
-    beginCalibrationCapture("start");
-  } else if (calibrationSession.step === "target") {
-    beginCalibrationCapture("target");
-  } else if (calibrationSession.step === "result" && calibrationDraft) {
+  if (calibrationSession.step === "result" && calibrationDraft) {
     saveCalibration(calibrationDraft);
     if (isLoggedIn()) {
       postCalibration({
@@ -1360,47 +2013,63 @@ calibrationAction.addEventListener("click", () => {
       calibrationDraft
     );
     smoother.state = {};
+    combinedPoseHistory = [];
     renderPersonalization();
     setFeedbackBanner("ready");
     cancelCalibration();
     statusEl.textContent = engine.exercise.calibration.personalizedKeys.length
       ? "Personal range saved — movement guide ready"
       : "Personal tracking baseline saved — movement guide ready";
+    announceExerciseInstruction("Personal movement setup saved.");
   }
 });
 
 function renderCalibrationStep() {
   if (!calibrationSession) return;
   const dots = [...calibrationOverlay.querySelectorAll(".calibration-dots span")];
-  const stepIndex = { intro: 0, start: 1, target: 2, result: 3 }[
+  const stepIndex = { start: 0, target: 1, result: 2 }[
     calibrationSession.step
   ];
   dots.forEach((dot, index) => dot.classList.toggle("active", index <= stepIndex));
   calibrationStatus.textContent = "";
   calibrationResult.classList.add("hidden");
+  calibrationAction.hidden = true;
   calibrationAction.disabled = false;
 
-  if (calibrationSession.step === "intro") {
-    calibrationStepLabel.textContent = "Personal calibration · about 1 minute";
-    calibrationTitle.textContent = `Fit ${engine.exercise.name} to your movement`;
-    calibrationInstructions.textContent =
-      `We’ll measure your ${engine.exercise.calibration.startPhase.replaceAll("_", " ")} position, then three comfortable ${engine.exercise.calibration.targetPhase.replaceAll("_", " ")} samples. Follow your clinician’s restrictions and stop for pain, dizziness, numbness or unsteadiness.`;
-    calibrationAction.textContent = "Begin";
-  } else if (calibrationSession.step === "start") {
-    calibrationStepLabel.textContent = "Step 1 · Starting position";
-    calibrationTitle.textContent = engine.exercise.calibration.startTitle
-      ?? `Hold ${engine.exercise.calibration.startPhase.replaceAll("_", " ")}`;
-    calibrationInstructions.textContent = engine.exercise.calibration.startInstruction
-      ?? "Keep every required joint visible and hold still while we measure.";
-    calibrationAction.textContent = "Measure starting position";
+  if (calibrationSession.step === "start") {
+    const isPositionCheck = calibrationSession.mode === "position-check";
+    calibrationStepLabel.textContent = isPositionCheck
+      ? "Automatic session position check"
+      : "Step 1 · Automatic starting-position check";
+    calibrationTitle.textContent = isPositionCheck
+      ? "Confirm your starting position"
+      : `Personalize ${engine.exercise.name} detection`;
+    const startInstruction = engine.exercise.calibration.startInstruction
+      ?? `Hold ${engine.exercise.calibration.startPhase.replaceAll("_", " ")} with every required joint visible.`;
+    calibrationInstructions.textContent = isPositionCheck
+      ? (
+        "Your saved personalized movement range will be reused. This quick "
+        + "2–3 second check confirms that you are visible and in the correct "
+        + `starting position. ${startInstruction} Measurement starts automatically.`
+      )
+      : (
+        "This short spoken setup measures your comfortable positions so "
+        + "PhysioVision can recognize your movement more accurately. It does "
+        + "not change safety limits. "
+        + `${startInstruction} No extra button is needed—measurement starts `
+        + "automatically when you hold the position."
+      );
   } else if (calibrationSession.step === "target") {
     const nextRep = calibrationSession.targetCaptures.length + 1;
     calibrationStepLabel.textContent = `Step 2 · Comfortable sample ${nextRep} of 3`;
     calibrationTitle.textContent = engine.exercise.calibration.targetTitle
       ?? `Move to ${engine.exercise.calibration.targetPhase.replaceAll("_", " ")}`;
-    calibrationInstructions.textContent = engine.exercise.calibration.targetInstruction
-      ?? "Move only as far as is comfortable, then hold the position.";
-    calibrationAction.textContent = `Measure sample ${nextRep}`;
+    calibrationInstructions.textContent =
+      (
+        engine.exercise.calibration.targetInstruction
+        ?? "Move only as far as is comfortable, then hold the position."
+      )
+      + " Spoken guidance will lead you, and measurement starts automatically.";
   } else {
     calibrationStepLabel.textContent = "Step 3 · Review";
     calibrationTitle.textContent = engine.exercise.calibration.personalizedKeys.length
@@ -1427,49 +2096,139 @@ function renderCalibrationStep() {
     }
     calibrationResult.innerHTML = resultItems.join("");
     calibrationResult.classList.remove("hidden");
+    calibrationAction.hidden = false;
     calibrationAction.textContent = engine.exercise.calibration.personalizedKeys.length
       ? "Save personal range"
       : "Save tracking baseline";
+    calibrationAction.focus();
   }
-  calibrationAction.focus();
 }
 
-function beginCalibrationCapture(type) {
+function beginCalibrationCapture(
+  type,
+  {
+    awaitingReturn = false,
+    retryAfter = 0,
+    durationMs = CALIBRATION_CAPTURE_MS,
+  } = {}
+) {
   calibrationSession.capture = {
     type,
-    startedAt: performance.now(),
+    durationMs,
     frames: [],
+    awaitingReturn,
+    phaseDetectedAt: null,
+    measuringStartedAt: null,
+    previousFrame: null,
+    retryAfter,
   };
-  calibrationAction.disabled = true;
-  calibrationStatus.textContent = "Measuring… hold this position";
+  calibrationAction.hidden = true;
+  calibrationStatus.textContent = awaitingReturn
+    ? "Sample saved. Return to your starting position; the next sample will begin automatically."
+    : calibrationWaitingMessage(type);
 }
 
 function updateCalibrationCapture(angles, timestampMs) {
   const capture = calibrationSession?.capture;
   if (!capture) return;
 
-  let capturedUsableFrame = false;
-  if (angles) {
-    const frame = extractCalibrationFrame(
-      engine.exercise,
-      angles,
-      sideSelect.value
-    );
-    if (frame) {
-      capture.frames.push(frame);
-      capturedUsableFrame = true;
-    }
+  if (capture.retryAfter && timestampMs < capture.retryAfter) return;
+  capture.retryAfter = 0;
+
+  const frame = angles
+    ? extractCalibrationFrame(engine.exercise, angles, sideSelect.value)
+    : null;
+  if (!frame) {
+    resetCalibrationPositionTimer(capture);
+    calibrationStatus.textContent =
+      "Keep your full body and every required joint visible. I will measure automatically.";
+    return;
   }
 
+  if (capture.awaitingReturn) {
+    if (!calibrationFrameMatchesPhase(engine.exercise, frame, "start")) {
+      capture.phaseDetectedAt = null;
+      capture.previousFrame = frame;
+      calibrationStatus.textContent =
+        "Return to your comfortable starting position. I will tell you when to move again.";
+      return;
+    }
+    if (!calibrationFrameIsStable(capture.previousFrame, frame)) {
+      capture.phaseDetectedAt = timestampMs;
+      capture.previousFrame = frame;
+      calibrationStatus.textContent =
+        "Starting position found—hold still for a moment.";
+      return;
+    }
+    capture.previousFrame = frame;
+    capture.phaseDetectedAt ??= timestampMs;
+    if (
+      timestampMs - capture.phaseDetectedAt
+      < CALIBRATION_RETURN_STABLE_MS
+    ) {
+      calibrationStatus.textContent =
+        "Starting position found—hold still for a moment.";
+      return;
+    }
+
+    capture.awaitingReturn = false;
+    resetCalibrationPositionTimer(capture);
+    calibrationStatus.textContent = calibrationWaitingMessage("target");
+    announceCalibrationStage("target", { afterReturn: true });
+    return;
+  }
+
+  if (!calibrationFrameMatchesPhase(engine.exercise, frame, capture.type)) {
+    resetCalibrationPositionTimer(capture);
+    calibrationStatus.textContent = calibrationWaitingMessage(capture.type);
+    return;
+  }
+
+  if (!calibrationFrameIsStable(capture.previousFrame, frame)) {
+    capture.frames = [];
+    capture.phaseDetectedAt = timestampMs;
+    capture.measuringStartedAt = null;
+    capture.previousFrame = frame;
+    calibrationStatus.textContent =
+      "Position found—finish moving, then hold still. Measurement will start automatically.";
+    return;
+  }
+
+  capture.previousFrame = frame;
+  capture.phaseDetectedAt ??= timestampMs;
+  if (capture.measuringStartedAt === null) {
+    if (
+      timestampMs - capture.phaseDetectedAt
+      < CALIBRATION_POSITION_STABLE_MS
+    ) {
+      calibrationStatus.textContent =
+        "Position found—hold still. Automatic measurement is about to begin.";
+      return;
+    }
+    capture.measuringStartedAt = timestampMs;
+    capture.frames = [frame];
+    calibrationStatus.textContent =
+      "Measuring automatically… keep holding this comfortable position.";
+    voiceGuidance.speak(
+      "Position found. Hold still while I measure.",
+      {
+        key: `calibration:${engine.exercise.id}:${capture.type}:measuring:${calibrationSession.targetCaptures.length}`,
+        cooldownMs: 2500,
+      }
+    );
+    return;
+  }
+
+  capture.frames.push(frame);
+  const elapsed = timestampMs - capture.measuringStartedAt;
+  const captureDurationMs = capture.durationMs ?? CALIBRATION_CAPTURE_MS;
   const remaining = Math.max(
     0,
-    Math.ceil((CALIBRATION_CAPTURE_MS - (timestampMs - capture.startedAt)) / 1000)
+    Math.ceil((captureDurationMs - elapsed) / 1000)
   );
-  calibrationStatus.textContent = capturedUsableFrame
-    ? `Measuring… ${remaining || "almost done"}`
-    : "Pause — move into the requested phase and keep every required landmark visible";
-
-  if (timestampMs - capture.startedAt < CALIBRATION_CAPTURE_MS) return;
+  calibrationStatus.textContent =
+    `Measuring automatically… ${remaining || "almost done"}`;
+  if (elapsed < captureDurationMs) return;
   finishCalibrationCapture(capture);
 }
 
@@ -1483,8 +2242,35 @@ function finishCalibrationCapture(capture) {
     );
 
     if (capture.type === "start") {
+      if (calibrationSession.mode === "position-check") {
+        const checkedCalibration = {
+          ...calibrationSession.savedCalibration,
+          safetyContext: calibrationSession.safetyContext,
+          lastPositionCheckedAt: new Date().toISOString(),
+        };
+        saveCalibration(checkedCalibration);
+        engine.changeExercise(
+          exSelect.value,
+          sideSelect.value,
+          checkedCalibration
+        );
+        smoother.state = {};
+        combinedPoseHistory = [];
+        cancelCalibration();
+        statusEl.textContent =
+          "Starting position confirmed — movement guide ready";
+        setFeedbackBanner(
+          "good",
+          "Starting position confirmed. Begin when you are comfortable."
+        );
+        announceExerciseInstruction("Starting position confirmed.");
+        return;
+      }
       calibrationSession.startFrames = capture.frames;
       calibrationSession.step = "target";
+      renderCalibrationStep();
+      beginCalibrationCapture("target");
+      announceCalibrationStage("target");
     } else {
       calibrationSession.targetCaptures.push(capture.frames);
       if (calibrationSession.targetCaptures.length >= 3) {
@@ -1493,20 +2279,125 @@ function finishCalibrationCapture(capture) {
           startFrames: calibrationSession.startFrames,
           targetCaptures: calibrationSession.targetCaptures,
         });
+        calibrationDraft.safetyContext = calibrationSession.safetyContext;
+        calibrationDraft.lastPositionCheckedAt = new Date().toISOString();
         calibrationSession.step = "result";
+        renderCalibrationStep();
+        voiceGuidance.speak(
+          "Personal movement setup complete. Review and save your range.",
+          {
+            key: `calibration:${engine.exercise.id}:complete`,
+            interrupt: true,
+          }
+        );
+      } else {
+        renderCalibrationStep();
+        beginCalibrationCapture("target", { awaitingReturn: true });
+        const completed = calibrationSession.targetCaptures.length;
+        voiceGuidance.speak(
+          `Sample ${completed} saved. Return to your starting position. I will tell you when to move again.`,
+          {
+            key: `calibration:${engine.exercise.id}:return:${completed}`,
+            interrupt: true,
+          }
+        );
       }
     }
-    renderCalibrationStep();
   } catch (error) {
-    calibrationAction.disabled = false;
-    calibrationStatus.textContent = `${error.message} Try again.`;
+    const retryAfter = performance.now() + 1800;
+    beginCalibrationCapture(capture.type, {
+      retryAfter,
+      durationMs: capture.durationMs,
+    });
+    calibrationStatus.textContent =
+      `${error.message} I will retry automatically—reposition comfortably and hold still.`;
+    voiceGuidance.speak(
+      `${error.message} Reposition comfortably. I will retry automatically.`,
+      {
+        key: `calibration:${engine.exercise.id}:${capture.type}:retry`,
+        interrupt: true,
+        cooldownMs: 3000,
+      }
+    );
   }
+}
+
+function resetCalibrationPositionTimer(capture) {
+  capture.frames = [];
+  capture.phaseDetectedAt = null;
+  capture.measuringStartedAt = null;
+  capture.previousFrame = null;
+}
+
+function calibrationFrameIsStable(previousFrame, frame) {
+  if (!previousFrame || !frame) return true;
+  return Object.keys(frame).every((key) => {
+    const previous = previousFrame[key];
+    const current = frame[key];
+    if (typeof previous === "string" || typeof current === "string") {
+      return previous === current;
+    }
+    if (!Number.isFinite(previous) || !Number.isFinite(current)) return false;
+    const tolerance = Math.max(
+      Math.abs(previous) <= 2 && Math.abs(current) <= 2 ? 0.025 : 2.5,
+      Math.abs(previous) * 0.015
+    );
+    return Math.abs(current - previous) <= tolerance;
+  });
+}
+
+function calibrationWaitingMessage(type) {
+  const config = engine.exercise.calibration;
+  const phase = type === "start" ? config.startPhase : config.targetPhase;
+  return type === "start"
+    ? `Move into your comfortable ${phase.replaceAll("_", " ")} position and hold still. Measurement starts automatically.`
+    : `Move into a comfortable ${phase.replaceAll("_", " ")} position and hold it. Measurement starts automatically.`;
+}
+
+function announceCalibrationStage(type, { afterReturn = false } = {}) {
+  const config = engine.exercise.calibration;
+  if (type === "start") {
+    const startInstruction = config.startInstruction
+      ?? `Hold your ${config.startPhase.replaceAll("_", " ")} position with your full body visible.`;
+    const introduction = calibrationSession.mode === "position-check"
+      ? (
+        "I will reuse your saved personalized movement range. This quick "
+        + "position check confirms your starting position before the session. "
+      )
+      : (
+        "This short setup personalizes movement detection so I can recognize "
+        + "your exercise more accurately. It does not change safety limits. "
+      );
+    voiceGuidance.speak(
+      introduction
+      + `${startInstruction} You do not need to press anything. I will measure automatically.`,
+      {
+        key: `calibration:${engine.exercise.id}:start`,
+        interrupt: true,
+      }
+    );
+    return;
+  }
+
+  const sample = calibrationSession.targetCaptures.length + 1;
+  const targetInstruction = config.targetInstruction
+    ?? `Move into a comfortable ${config.targetPhase.replaceAll("_", " ")} position.`;
+  voiceGuidance.speak(
+    `${afterReturn ? "Starting position found. " : "Starting position saved. "}`
+    + `${targetInstruction} This is sample ${sample} of 3. Hold the position; `
+    + "I will measure automatically.",
+    {
+      key: `calibration:${engine.exercise.id}:target:${sample}:${afterReturn ? "return" : "first"}`,
+      interrupt: true,
+    }
+  );
 }
 
 function cancelCalibration() {
   const wasActive = Boolean(calibrationSession);
   calibrationSession = null;
   calibrationDraft = null;
+  voiceGuidance.cancel();
   calibrationOverlay?.classList.add("hidden");
   if (wasActive) calibrationReturnFocus?.focus();
 }
@@ -1645,10 +2536,14 @@ function setFeedbackBanner(state, cue = "") {
     symbol.textContent = "✓";
     title.textContent = "Hand tracking ready";
     detail.textContent = "All 21 hand landmarks are visible at a usable size";
+  } else if (state === "finished") {
+    symbol.textContent = "✓";
+    title.textContent = "Exercise finished by you";
+    detail.textContent = "You can now complete or skip the optional check-in";
   } else {
     symbol.textContent = "●";
     title.textContent = "Get into position";
-    detail.textContent = "Your guidance will appear here";
+    detail.textContent = "Live guidance appears here";
   }
 }
 
@@ -1711,8 +2606,23 @@ function hasPathwayAccess() {
   return true;
 }
 
-async function activateCameraGuide() {
+function announceExerciseInstruction(prefix = "") {
+  const clinicianNote = activeDose(engine.exercise).notes;
+  const spokenInstruction = [
+    prefix,
+    exerciseSpokenInstruction(engine.exercise),
+    clinicianNote ? `Your clinician's instruction is: ${clinicianNote}` : "",
+  ].filter(Boolean).join(" ");
+  voiceGuidance.speak(spokenInstruction, {
+    key: `instruction:${engine.exercise.id}`,
+    cooldownMs: 3000,
+    interrupt: true,
+  });
+}
+
+async function activateCameraGuide({ announceInstruction = true } = {}) {
   if (running) return true;
+  if (!(await ensureVoiceModeChosen())) return false;
   if (!hasPathwayAccess()) return false;
   if (exerciseUsesHand(engine.exercise) && !handLandmarker) {
     statusEl.textContent = "The hand-tracking model is unavailable";
@@ -1730,11 +2640,14 @@ async function activateCameraGuide() {
     running = true;
     lastVideoTime = -1;
     combinedPoseHistory = [];
-    sessionStartedAt = new Date().toISOString();
-    Object.keys(sessionCueCounts).forEach(k => delete sessionCueCounts[k]);
-    Object.keys(sessionAngleStats).forEach(k => delete sessionAngleStats[k]);
-    sessionSymmetryWarnings = 0;
+    beginExerciseSession();
     resetSpokenCoaching();
+    configureFallMonitoring(engine.exercise);
+    if (fallReadinessEl.dataset.state === "ready") {
+      fallReadinessTitleEl.textContent = "Local possible-fall check ready";
+      fallReadinessDetailEl.textContent =
+        "The camera check is active. No emergency alert is sent in this version.";
+    }
     cameraStage?.classList.add("camera-active");
     if (exerciseUsesHand(engine.exercise)) {
       const combined = engine.exercise.trackingMode === TRACKING_MODES.POSE_AND_HAND;
@@ -1749,29 +2662,27 @@ async function activateCameraGuide() {
     } else {
       setupTip.textContent = cameraSetupTip(engine.exercise);
     }
-    toggleBtn.innerHTML = 'Stop camera guide <span aria-hidden="true">■</span>';
+    toggleBtn.classList.remove("hidden");
+    toggleBtn.innerHTML = 'Pause camera guide <span aria-hidden="true">Ⅱ</span>';
     toggleBtn.disabled = false;
+    finishExerciseBtn.disabled = false;
+    cameraSessionHintEl.textContent =
+      "Pausing only stops the camera. Choose “Finish exercise and check in” when you decide you are done.";
     renderFrame();
-    const clinicianNote = activeDose(engine.exercise).notes;
-    const spokenInstruction = [
-      exerciseSpokenInstruction(engine.exercise),
-      clinicianNote ? `Your clinician's instruction is: ${clinicianNote}` : "",
-    ].filter(Boolean).join(" ");
-    voiceGuidance.speak(spokenInstruction, {
-      key: `instruction:${engine.exercise.id}`,
-      cooldownMs: 3000,
-      interrupt: true,
-    });
+    if (announceInstruction) announceExerciseInstruction();
     return true;
   } catch (err) {
     statusEl.textContent = `Camera error: ${err.message}`;
+    toggleBtn.classList.add("hidden");
     toggleBtn.disabled = false;
     handTrackingToggle.disabled = !handLandmarker;
     return false;
   }
 }
 
-function deactivateCameraGuide() {
+function deactivateCameraGuide({
+  statusMessage = "Camera paused — exercise not marked finished",
+} = {}) {
   running = false;
   voiceGuidance.cancel();
   resetSpokenCoaching();
@@ -1787,13 +2698,18 @@ function deactivateCameraGuide() {
   handFrameGuide.classList.add("hidden");
   handFrameGuide.classList.remove("is-arm-mode");
   setupTip.textContent = cameraSetupTip(engine.exercise);
-  toggleBtn.innerHTML = 'Start camera guide <span aria-hidden="true">→</span>';
+  toggleBtn.innerHTML = 'Pause camera guide <span aria-hidden="true">Ⅱ</span>';
+  toggleBtn.classList.add("hidden");
+  renderPrimaryCameraAction();
+  finishExerciseBtn.disabled = !exerciseSessionActive;
+  cameraSessionHintEl.textContent = exerciseSessionActive
+    ? "Your exercise is paused and has not been marked finished. Resume the camera or finish when you are ready."
+    : "Stopping the camera does not mark an exercise as finished.";
   handTrackingToggle.disabled = !handLandmarker;
-  statusEl.textContent = "Stopped";
+  statusEl.textContent = statusMessage;
   setFeedbackBanner("ready");
+  renderFallReadiness(engine.exercise);
 
-  flushSession();
-  showPainCheckin("after");
 }
 
 async function startHandPreview() {
@@ -1845,6 +2761,7 @@ function stopHandPreview() {
   setupTip.textContent = "Phone at chest height · 2–3 m away · Full body visible";
   handTrackingToggle.textContent = "Check hand tracking";
   handTrackingToggle.disabled = false;
+  toggleBtn.classList.add("hidden");
   toggleBtn.disabled = false;
   statusEl.textContent = "Movement guide ready";
   setFeedbackBanner("ready");
@@ -1860,8 +2777,85 @@ function movementQualityScore(cuesTriggered, symmetryWarnings, reps) {
   return Math.max(0, Math.min(100, Math.round(100 - faultRate * 50)));
 }
 
-function flushSession() {
-  if (!isLoggedIn() || engine.repCount === 0 || !sessionStartedAt) return;
+function clearSessionMeasurements() {
+  Object.keys(sessionCueCounts).forEach(k => delete sessionCueCounts[k]);
+  Object.keys(sessionAngleStats).forEach(k => delete sessionAngleStats[k]);
+  sessionSymmetryWarnings = 0;
+}
+
+function resetSetProgress() {
+  completedSetCount = 0;
+  completedSessionReps = 0;
+  pendingSetStartCheck = null;
+  sessionAllSetsComplete = false;
+  lastFeedbackResult = null;
+}
+
+function resetExerciseProgressForNewSession() {
+  resetSetProgress();
+  engine.changeExercise(
+    exSelect.value,
+    sideSelect.value,
+    getCalibration(exSelect.value, sideSelect.value)
+  );
+  smoother.state = {};
+  combinedPoseHistory = [];
+  if (holdInterval) {
+    clearHoldTimer(activeDose(engine.exercise).holdSeconds);
+  }
+  holdTimerSection.classList.add("hidden");
+  progressSection.classList.remove("hidden");
+  repCountEl.textContent = "0";
+  setCompleteBadgeEl?.classList.add("hidden");
+  cueListEl.innerHTML = "";
+  symWarnEl.classList.add("hidden");
+  progressEl.style.width = "0%";
+  progressLbl.textContent = "Position yourself to start";
+  renderPoseStrip(engine.exercise, engine.stages[0]);
+  renderStaticPhaseFlow(engine);
+  resetSpokenCoaching();
+  setFeedbackBanner("ready");
+}
+
+function beginExerciseSession() {
+  if (exerciseSessionActive) return;
+  resetExerciseProgressForNewSession();
+  exerciseSessionActive = true;
+  sessionStartedAt = new Date().toISOString();
+  clearSessionMeasurements();
+}
+
+function discardExerciseSession() {
+  exerciseSessionActive = false;
+  sessionStartedAt = null;
+  resetSetProgress();
+  clearSessionMeasurements();
+  finishExerciseBtn.disabled = true;
+  cameraSessionHintEl.textContent =
+    "Stopping the camera does not mark an exercise as finished.";
+  renderPrimaryCameraAction();
+}
+
+function completeExerciseSession() {
+  const currentSetReps = sessionAllSetsComplete ? 0 : engine.repCount;
+  const totalRepsCompleted = completedSessionReps + currentSetReps;
+  const partialSetCompleted =
+    !sessionAllSetsComplete && currentSetReps > 0 ? 1 : 0;
+  const totalSetsCompleted = Math.min(
+    plannedSetCount(),
+    completedSetCount + partialSetCompleted
+  );
+  const shouldRecord =
+    exerciseSessionActive &&
+    isLoggedIn() &&
+    totalRepsCompleted > 0 &&
+    Boolean(sessionStartedAt);
+
+  if (!shouldRecord) {
+    discardExerciseSession();
+    return;
+  }
+
   const endedAt = new Date().toISOString();
   const ex = engine.exercise;
   const dose = activeDose(ex);
@@ -1884,22 +2878,18 @@ function flushSession() {
     prescription:            dose.id ?? null,
     started_at:              sessionStartedAt,
     ended_at:                endedAt,
-    sets_completed:          1,
-    reps_completed:          engine.repCount,
-    reps_target:             dose.reps ?? engine.repCount,
+    sets_completed:          totalSetsCompleted,
+    reps_completed:          totalRepsCompleted,
+    reps_target:             dose.reps ?? totalRepsCompleted,
     sets_target:             dose.sets ?? 1,
     affected_side:           profile.focusSide ?? "right",
     cues_triggered:          cuesTriggered,
     symmetry_warnings_count: sessionSymmetryWarnings,
     angle_summaries:         angleSummaries,
-    quality_score:           movementQualityScore(cuesTriggered, sessionSymmetryWarnings, engine.repCount),
+    quality_score:           movementQualityScore(cuesTriggered, sessionSymmetryWarnings, totalRepsCompleted),
   }).catch(() => {});
 
-  // Reset for the next exercise
-  sessionStartedAt = new Date().toISOString();
-  Object.keys(sessionCueCounts).forEach(k => delete sessionCueCounts[k]);
-  Object.keys(sessionAngleStats).forEach(k => delete sessionAngleStats[k]);
-  sessionSymmetryWarnings = 0;
+  discardExerciseSession();
 }
 
 // ── Pain check-in ─────────────────────────────────────────────────────────────
@@ -1908,15 +2898,28 @@ const painSkipBtn   = document.getElementById("painSkip");
 const painCheckinContextEl = document.getElementById("painCheckinContext");
 const painCheckinTitleEl = document.getElementById("painCheckinTitle");
 const painLevelChoicesEl = document.getElementById("painLevelChoices");
+const painConfirmationEl = document.getElementById("painConfirmation");
+const painConfirmationSummaryEl = document.getElementById("painConfirmationSummary");
 const recoveryChoicesEl = document.getElementById("recoveryChoices");
+const painSafetyInterviewEl = document.getElementById("painSafetyInterview");
+const painSafetyReassuranceEl = document.getElementById("painSafetyReassurance");
+const painSafetyHeadingEl = document.getElementById("painSafetyHeading");
+const painSafetyMessageEl = document.getElementById("painSafetyMessage");
+const painSafetyQuestionEl = document.getElementById("painSafetyQuestion");
+const painSafetyHelpEl = document.getElementById("painSafetyHelp");
+const painSafetyChoicesEl = document.getElementById("painSafetyChoices");
 const voiceCheckinStatusEl = document.getElementById("voiceCheckinStatus");
 const painVoiceInputBtn = document.getElementById("painVoiceInput");
+const recordedPainEl = document.getElementById("recordedPain");
+const recordedPainContextEl = document.getElementById("recordedPainContext");
+const recordedPainMessageEl = document.getElementById("recordedPainMessage");
+const recordedPainValueEl = document.getElementById("recordedPainValue");
 let painCheckinState = null;
 
 function painQuestion(context) {
   return context === "before"
     ? "Before we begin, what is your pain level right now, from zero to ten?"
-    : "Now that you have finished, what is your pain level, from zero to ten?";
+    : "You marked this exercise as finished. What is your pain level now, from zero to ten?";
 }
 
 function recoveryQuestion(context) {
@@ -1925,41 +2928,301 @@ function recoveryQuestion(context) {
     : "Compared with before this exercise, do you feel better, about the same, worse, or are you not sure?";
 }
 
-function showPainCheckin(context = "after", { startAfter = false } = {}) {
+function painConfirmationQuestion(level) {
+  return `I heard pain level ${level} out of ten. Is that correct?`;
+}
+
+const PAIN_SAFETY_REASSURANCE =
+  "Thank you. Please stop moving and rest somewhere safe. "
+  + "We will proceed only after I have confirmed that you are well enough.";
+
+const PAIN_SAFETY_STEPS = Object.freeze({
+  urgent: {
+    question:
+      "Are you experiencing chest pressure, unusual shortness of breath, "
+      + "dizziness or faintness, sudden weakness or numbness, or have you fallen?",
+    help: "Choose Yes if any one of these applies. If you are not sure, choose Not sure.",
+    choices: [
+      ["no", "No, none of these"],
+      ["yes", "Yes"],
+      ["unsure", "Not sure"],
+    ],
+    field: "urgentSymptoms",
+    next: "location",
+  },
+  location: {
+    question: "Where are you feeling the pain?",
+    help: "Choose the area that best matches what you feel now.",
+    choices: [
+      ["knee", "Knee"],
+      ["hip", "Hip"],
+      ["ankle", "Ankle or foot"],
+      ["back", "Back"],
+      ["shoulder", "Shoulder or arm"],
+      ["other", "Other area"],
+    ],
+    field: "painLocation",
+    next: "side",
+  },
+  side: {
+    question: "Which side is affected?",
+    help: "Choose Not sure if the pain is central or difficult to locate.",
+    choices: [
+      ["left", "Left side"],
+      ["right", "Right side"],
+      ["both", "Both sides"],
+      ["unsure", "Not sure"],
+    ],
+    field: "painSide",
+    next: "familiarity",
+  },
+  familiarity: {
+    question:
+      "Is this new pain, your usual pain becoming stronger, or something different "
+      + "from what you normally feel?",
+    help: "This does not diagnose the pain. It helps record what changed.",
+    choices: [
+      ["new", "New pain"],
+      ["usual-stronger", "Usual pain, but stronger"],
+      ["different", "Something different"],
+      ["unsure", "Not sure"],
+    ],
+    field: "painFamiliarity",
+    next: "timing",
+  },
+  timing: {
+    question: "When did the pain increase?",
+    help:
+      "PhysioVision will record the current exercise, set, and repetition automatically.",
+    choices: [
+      ["before", "Before I started"],
+      ["during", "During this exercise"],
+      ["after", "Immediately after"],
+      ["unsure", "Not sure"],
+    ],
+    field: "onsetTiming",
+    next: "rest",
+  },
+  rest: {
+    question:
+      "Now that you have stopped and rested briefly, is the pain getting better, "
+      + "staying the same, or getting worse?",
+    help: "Stay resting while you answer.",
+    choices: [
+      ["better", "Getting better"],
+      ["same", "Staying the same"],
+      ["worse", "Getting worse"],
+      ["unsure", "Not sure"],
+    ],
+    field: "restTrend",
+    next: "mobility",
+  },
+  mobility: {
+    question: "Can you sit, stand, or move to a safe position without assistance?",
+    help: "Do not test a movement that feels unsafe just to answer this question.",
+    choices: [
+      ["safe", "Yes, safely"],
+      ["nearby", "I need someone nearby"],
+      ["help", "No, I need help"],
+    ],
+    field: "safeMovement",
+    next: "outcome",
+  },
+});
+
+function isPainSafetyStage(stage = painCheckinState?.stage) {
+  return typeof stage === "string" && stage.startsWith("safety-");
+}
+
+function updatePainCheckinPresentation() {
+  const safetyActive = isPainSafetyStage();
+  const safetyOutcome = painCheckinState?.stage === "safety-outcome";
+  painCheckinEl.classList.toggle(
+    "hands-free-checkin",
+    handsFreeVoiceEnabled && !safetyActive
+  );
+  painCheckinEl.classList.toggle("safety-interview-active", safetyActive);
+  painVoiceInputBtn.classList.toggle(
+    "hidden",
+    (handsFreeVoiceEnabled && !safetyActive) || safetyOutcome
+  );
+  painVoiceInputBtn.disabled = !voiceGuidance.canListen;
+}
+
+function continueAfterPainCheckin(completed) {
+  if (completed.continuation === "calibration") {
+    startCalibrationFlow(completed.calibrationTrigger);
+  } else if (completed.continuation === "camera" || completed.startAfter) {
+    activateCameraGuide();
+  }
+}
+
+function renderRecordedPain({ painLevel, context }) {
+  if (!Number.isInteger(painLevel) || painLevel < 0 || painLevel > 10) return;
+
+  recordedPainEl.classList.remove("hidden", "is-moderate", "is-high");
+  if (painLevel >= 7) recordedPainEl.classList.add("is-high");
+  else if (painLevel >= 4) recordedPainEl.classList.add("is-moderate");
+
+  recordedPainContextEl.textContent =
+    context === "after" ? "After exercise pain" : "Before exercise pain";
+  recordedPainMessageEl.textContent = `Pain level ${painLevel} recorded`;
+  recordedPainValueEl.textContent = String(painLevel);
+  recordedPainEl.setAttribute(
+    "aria-label",
+    `${recordedPainContextEl.textContent}: pain level ${painLevel} out of 10 recorded`
+  );
+}
+
+function clearRecordedPain() {
+  recordedPainEl.classList.add("hidden");
+  recordedPainEl.classList.remove("is-moderate", "is-high");
+  recordedPainEl.removeAttribute("aria-label");
+}
+
+function acknowledgeRecordedPain(completed) {
+  renderRecordedPain(completed);
+
+  const level = completed.painLevel;
+  const acknowledgement =
+    `Thank you. I have recorded your pain level as ${level} out of 10. We will continue gently.`;
+  let continued = false;
+  let fallbackTimer = null;
+  const continueOnce = () => {
+    if (continued) return;
+    continued = true;
+    if (fallbackTimer) window.clearTimeout(fallbackTimer);
+    continueAfterPainCheckin(completed);
+  };
+
+  const spoken = voiceGuidance.speak(acknowledgement, {
+    key: `checkin:${completed.context}:recorded:${level}`,
+    interrupt: true,
+    onEnd: continueOnce,
+  });
+
+  if (spoken) fallbackTimer = window.setTimeout(continueOnce, 3500);
+  else window.setTimeout(continueOnce, 200);
+}
+
+function startPainVoiceListening({ expectedStage = null } = {}) {
+  if (
+    !painCheckinState ||
+    (expectedStage && painCheckinState.stage !== expectedStage)
+  ) {
+    return false;
+  }
+
+  return voiceGuidance.listen({
+    onStatus: (status) => {
+      voiceCheckinStatusEl.textContent = status;
+    },
+    onError: (message) => {
+      if (handsFreeVoiceEnabled) {
+        painCheckinEl.classList.remove("hands-free-checkin");
+      }
+      voiceCheckinStatusEl.textContent =
+        `${message} You can also use the large on-screen choices.`;
+    },
+    onResult: (transcript) => {
+      voiceCheckinStatusEl.textContent = `I heard: “${transcript}”`;
+      if (painCheckinState?.stage === "pain") {
+        acceptPainLevel(parsePainLevel(transcript));
+      } else if (painCheckinState?.stage === "confirm-pain") {
+        acceptPainConfirmation(parseConfirmationResponse(transcript));
+      } else if (isPainSafetyStage()) {
+        const stage = painCheckinState.stage.replace("safety-", "");
+        if (stage !== "outcome") {
+          acceptPainSafetyResponse(parsePainSafetyResponse(stage, transcript));
+        }
+      } else {
+        acceptRecoveryStatus(parseRecoveryStatus(transcript));
+      }
+    },
+  });
+}
+
+function speakPainPrompt(question, key, expectedStage) {
+  const beginListening = () => {
+    if (
+      handsFreeVoiceEnabled &&
+      painCheckinState?.stage === expectedStage
+    ) {
+      startPainVoiceListening({ expectedStage });
+    }
+  };
+  const spoken = voiceGuidance.speak(question, {
+    key,
+    interrupt: true,
+    onEnd: beginListening,
+  });
+  if (!spoken && handsFreeVoiceEnabled) {
+    window.setTimeout(beginListening, 200);
+  }
+}
+
+function showPainCheckin(context = "after", {
+  startAfter = false,
+  continuation = "",
+  calibrationTrigger = null,
+} = {}) {
   if (!isLoggedIn()) {
-    if (startAfter) activateCameraGuide();
+    continueAfterPainCheckin({
+      startAfter,
+      continuation,
+      calibrationTrigger,
+    });
     return;
   }
+
+  if (context === "before") clearRecordedPain();
 
   painCheckinState = {
     context,
     startAfter,
+    continuation,
+    calibrationTrigger,
     stage: "pain",
     painLevel: null,
     recoveryStatus: "",
+    safetyAnswers: null,
   };
   painCheckinContextEl.textContent =
     context === "before" ? "Before exercise" : "After exercise";
   painCheckinTitleEl.innerHTML =
     `${escapeHtml(painQuestion(context))} <span>(0 = none, 10 = severe)</span>`;
   painLevelChoicesEl.classList.remove("hidden");
+  painConfirmationEl.classList.add("hidden");
   recoveryChoicesEl.classList.add("hidden");
-  voiceCheckinStatusEl.textContent = voiceGuidance.canListen
-    ? "You can choose a number or answer by voice."
+  painSafetyInterviewEl.classList.add("hidden");
+  painSkipBtn.classList.remove("hidden");
+  voiceCheckinStatusEl.textContent = handsFreeVoiceEnabled
+    ? (
+      "Hands-free voice is on. Listen to the question, then say "
+      + "a number from zero to ten."
+    )
+    : voiceGuidance.canListen
+      ? "Choose a number, or use Answer by voice as a fallback."
     : "Voice input is unavailable in this browser. Choose a button.";
-  painVoiceInputBtn.disabled = !voiceGuidance.canListen;
+  updatePainCheckinPresentation();
   painCheckinEl.classList.remove("hidden");
-  if (startAfter) toggleBtn.disabled = true;
+  if (startAfter || continuation) toggleBtn.disabled = true;
 
-  voiceGuidance.speak(painQuestion(context), {
-    key: `checkin:${context}:pain`,
-    interrupt: true,
-  });
+  speakPainPrompt(
+    painQuestion(context),
+    `checkin:${context}:pain`,
+    "pain"
+  );
 }
 
 function hidePainCheckin() {
   voiceGuidance.cancel();
   painCheckinEl.classList.add("hidden");
+  painCheckinEl.classList.remove(
+    "hands-free-checkin",
+    "safety-interview-active"
+  );
+  painSafetyInterviewEl.classList.add("hidden");
   voiceCheckinStatusEl.textContent = "";
   painCheckinState = null;
   toggleBtn.disabled = false;
@@ -1971,17 +3234,25 @@ function shouldAskRecovery() {
 
 function beginRecoveryQuestion() {
   if (!painCheckinState) return;
+  voiceGuidance.cancel();
   painCheckinState.stage = "recovery";
   painLevelChoicesEl.classList.add("hidden");
+  painConfirmationEl.classList.add("hidden");
   recoveryChoicesEl.classList.remove("hidden");
+  painSafetyInterviewEl.classList.add("hidden");
+  painSkipBtn.classList.remove("hidden");
+  updatePainCheckinPresentation();
   painCheckinTitleEl.textContent = recoveryQuestion(painCheckinState.context);
-  voiceCheckinStatusEl.textContent = voiceGuidance.canListen
-    ? "Choose an answer or say better, same, worse, or not sure."
+  voiceCheckinStatusEl.textContent = handsFreeVoiceEnabled
+    ? "Listening will start after the question. Say better, same, worse, or not sure."
+    : voiceGuidance.canListen
+      ? "Choose an answer, or use Answer by voice as a fallback."
     : "Choose the answer that fits best.";
-  voiceGuidance.speak(recoveryQuestion(painCheckinState.context), {
-    key: `checkin:${painCheckinState.context}:recovery`,
-    interrupt: true,
-  });
+  speakPainPrompt(
+    recoveryQuestion(painCheckinState.context),
+    `checkin:${painCheckinState.context}:recovery`,
+    "recovery"
+  );
 }
 
 function finishPainCheckin() {
@@ -1995,8 +3266,253 @@ function finishPainCheckin() {
     checked_at: new Date().toISOString(),
   }).catch(() => {});
 
+  if (completed.context === "before") {
+    preExerciseCheckinCompleted = true;
+    confirmedPreExercisePain = completed.painLevel;
+  }
   hidePainCheckin();
-  if (completed.startAfter) activateCameraGuide();
+  acknowledgeRecordedPain(completed);
+}
+
+function requiresPainSafetyInterview() {
+  const level = painCheckinState?.painLevel;
+  const increase =
+    painCheckinState?.context === "after" &&
+    Number.isInteger(confirmedPreExercisePain)
+      ? level - confirmedPreExercisePain
+      : 0;
+  return Number.isInteger(level) && (level >= 7 || increase >= 2);
+}
+
+function createPainSafetyAnswers() {
+  return {
+    urgentSymptoms: "",
+    painLocation: "",
+    painSide: "",
+    painFamiliarity: "",
+    onsetTiming: "",
+    restTrend: "",
+    safeMovement: "",
+    outcome: "",
+    reportForPhysiotherapist: false,
+    exerciseId: engine.exercise?.id ?? "",
+    exerciseName: engine.exercise?.name ?? "",
+    repsCompleted: completedSessionReps + (engine.repCount ?? 0),
+    setNumber: completedSetCount + 1,
+  };
+}
+
+function painSafetyStageName() {
+  return isPainSafetyStage()
+    ? painCheckinState.stage.replace("safety-", "")
+    : "";
+}
+
+function renderPainSafetyStage(stageName, { announceReassurance = false } = {}) {
+  if (!painCheckinState || !PAIN_SAFETY_STEPS[stageName]) return;
+  const step = PAIN_SAFETY_STEPS[stageName];
+  painCheckinState.stage = `safety-${stageName}`;
+  painLevelChoicesEl.classList.add("hidden");
+  painConfirmationEl.classList.add("hidden");
+  recoveryChoicesEl.classList.add("hidden");
+  painSafetyInterviewEl.classList.remove("hidden", "is-urgent", "is-outcome");
+  painSkipBtn.classList.add("hidden");
+  painCheckinTitleEl.textContent = "Let’s check that you are safe";
+  painSafetyHeadingEl.textContent = "Please stay resting";
+  painSafetyMessageEl.textContent = PAIN_SAFETY_REASSURANCE;
+  painSafetyQuestionEl.textContent = step.question;
+  painSafetyHelpEl.textContent = step.help;
+  painSafetyChoicesEl.replaceChildren();
+  step.choices.forEach(([value, label]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "pain-safety-choice";
+    button.dataset.painSafetyResponse = value;
+    button.textContent = label;
+    painSafetyChoicesEl.appendChild(button);
+  });
+  voiceCheckinStatusEl.textContent = voiceGuidance.canListen
+    ? "You can answer by voice after the question, or choose a large button."
+    : "Choose the answer that fits best.";
+  updatePainCheckinPresentation();
+  const spokenPrompt = announceReassurance
+    ? `${PAIN_SAFETY_REASSURANCE} ${step.question}`
+    : step.question;
+  speakPainPrompt(
+    spokenPrompt,
+    `checkin:${painCheckinState.context}:safety:${stageName}`,
+    `safety-${stageName}`
+  );
+}
+
+function beginPainSafetyInterview() {
+  if (!painCheckinState) return;
+  voiceGuidance.cancel();
+  if (running) {
+    deactivateCameraGuide({
+      statusMessage: "Camera paused for a pain safety check",
+    });
+  }
+  painCheckinState.startAfter = false;
+  painCheckinState.continuation = "";
+  painCheckinState.calibrationTrigger = null;
+  painCheckinState.safetyAnswers = createPainSafetyAnswers();
+  renderPainSafetyStage("urgent", { announceReassurance: true });
+}
+
+function determinePainSafetyOutcome() {
+  const answers = painCheckinState?.safetyAnswers ?? {};
+  if (answers.urgentSymptoms !== "no" || answers.safeMovement === "help") {
+    return "urgent";
+  }
+  if (
+    painCheckinState.painLevel >= 7 ||
+    answers.restTrend !== "better" ||
+    answers.safeMovement !== "safe"
+  ) {
+    return "professional";
+  }
+  return "monitor";
+}
+
+function renderPainSafetyOutcome(forcedOutcome = "") {
+  if (!painCheckinState?.safetyAnswers) return;
+  voiceGuidance.cancel();
+  const outcome = forcedOutcome || determinePainSafetyOutcome();
+  painCheckinState.safetyAnswers.outcome = outcome;
+  painCheckinState.stage = "safety-outcome";
+  painSafetyInterviewEl.classList.remove("hidden");
+  painSafetyInterviewEl.classList.add("is-outcome");
+  painSafetyInterviewEl.classList.toggle("is-urgent", outcome === "urgent");
+  painSafetyChoicesEl.replaceChildren();
+
+  let heading = "End this exercise for today";
+  let message =
+    "Your pain increase has been recorded. Rest and monitor how you feel before doing more exercise.";
+  let help =
+    "Do not restart this exercise today. This guidance is not a diagnosis.";
+  if (outcome === "urgent") {
+    heading = "Stop exercising and get help now";
+    message =
+      "Do not continue exercising. If these symptoms are severe, new, or worsening, call local emergency services now.";
+    help =
+      "PhysioVision has not contacted an emergency service or another person. Ask someone nearby for help if you can do so safely.";
+  } else if (outcome === "professional") {
+    heading = "Pause today’s programme and seek professional advice";
+    message =
+      "Your pain is substantial, has not improved after resting, or you may need help moving safely.";
+    help =
+      "Please stop today’s exercise and consider contacting a qualified healthcare professional. This is not a diagnosis.";
+  }
+
+  painCheckinTitleEl.textContent = "Your safety check is complete";
+  painSafetyHeadingEl.textContent = heading;
+  painSafetyMessageEl.textContent = message;
+  painSafetyQuestionEl.textContent = "What happens next";
+  painSafetyHelpEl.textContent = profile.carePath === "clinician"
+    ? `${help} You may also save this report for your physiotherapist to review. This does not notify them or change your prescribed plan.`
+    : help;
+
+  if (profile.carePath === "clinician") {
+    const reportButton = document.createElement("button");
+    reportButton.type = "button";
+    reportButton.className = "pain-safety-choice is-primary";
+    reportButton.dataset.painSafetyAction = "save-report";
+    reportButton.textContent = "Save for my physiotherapist to review";
+    painSafetyChoicesEl.appendChild(reportButton);
+  }
+  const finishButton = document.createElement("button");
+  finishButton.type = "button";
+  finishButton.className = "pain-safety-choice";
+  finishButton.dataset.painSafetyAction = "finish";
+  finishButton.textContent = profile.carePath === "clinician"
+    ? "Finish without saving a review report"
+    : "Finish safety check";
+  painSafetyChoicesEl.appendChild(finishButton);
+
+  voiceCheckinStatusEl.textContent =
+    "The camera remains paused. Choose an option below when you are ready.";
+  updatePainCheckinPresentation();
+  voiceGuidance.speak(`${heading}. ${message} ${help}`, {
+    key: `checkin:${painCheckinState.context}:safety-outcome:${outcome}`,
+    interrupt: true,
+  });
+}
+
+function acceptPainSafetyResponse(response) {
+  const stageName = painSafetyStageName();
+  const step = PAIN_SAFETY_STEPS[stageName];
+  if (!painCheckinState?.safetyAnswers || !step) return;
+  const allowed = step.choices.map(([value]) => value);
+  if (!allowed.includes(response)) {
+    voiceCheckinStatusEl.textContent =
+      "I could not match that answer. Please try again or choose a large button.";
+    return;
+  }
+  painCheckinState.safetyAnswers[step.field] = response;
+  if (stageName === "urgent" && response !== "no") {
+    renderPainSafetyOutcome("urgent");
+    return;
+  }
+  if (step.next === "outcome") {
+    renderPainSafetyOutcome();
+    return;
+  }
+  renderPainSafetyStage(step.next);
+}
+
+function finishPainSafetyInterview({ reportForPhysiotherapist = false } = {}) {
+  if (!painCheckinState?.safetyAnswers) return;
+  const completed = {
+    ...painCheckinState,
+    safetyAnswers: {
+      ...painCheckinState.safetyAnswers,
+      reportForPhysiotherapist,
+    },
+  };
+  const answers = completed.safetyAnswers;
+  postPainCheckin({
+    pain_level: completed.painLevel,
+    timing: completed.context,
+    recovery_status: answers.restTrend || completed.recoveryStatus,
+    location_notes: [answers.painSide, answers.painLocation]
+      .filter(Boolean)
+      .join(" "),
+    safety_follow_up: {
+      urgent_symptoms: answers.urgentSymptoms,
+      pain_location: answers.painLocation,
+      pain_side: answers.painSide,
+      pain_familiarity: answers.painFamiliarity,
+      onset_timing: answers.onsetTiming,
+      rest_trend: answers.restTrend,
+      safe_movement: answers.safeMovement,
+      outcome: answers.outcome,
+      report_for_physiotherapist: reportForPhysiotherapist,
+      exercise_id: answers.exerciseId,
+      exercise_name: answers.exerciseName,
+      reps_completed: answers.repsCompleted,
+      set_number: answers.setNumber,
+    },
+    requires_review:
+      answers.outcome !== "monitor" || reportForPhysiotherapist,
+    checked_at: new Date().toISOString(),
+  }).catch(() => {});
+
+  preExerciseCheckinCompleted = false;
+  confirmedPreExercisePain = null;
+  hidePainCheckin();
+  renderRecordedPain(completed);
+  statusEl.textContent = "Exercise paused after pain safety check";
+  cameraSessionHintEl.textContent =
+    "The exercise was not marked finished, but it should not be restarted today.";
+  setFeedbackBanner("tracking", "Rest and follow the safety guidance recorded in your check-in");
+  const savedMessage = reportForPhysiotherapist
+    ? "Your pain and safety answers were saved for your physiotherapist to review. They were not automatically notified."
+    : "Your pain and safety answers were recorded. The camera remains paused.";
+  voiceGuidance.speak(savedMessage, {
+    key: `checkin:${completed.context}:safety-saved:${reportForPhysiotherapist}`,
+    interrupt: true,
+  });
 }
 
 function acceptPainLevel(level) {
@@ -2006,8 +3522,72 @@ function acceptPainLevel(level) {
     return;
   }
   painCheckinState.painLevel = level;
-  voiceCheckinStatusEl.textContent = `Pain level ${level} recorded.`;
-  if (shouldAskRecovery()) beginRecoveryQuestion();
+  beginPainConfirmation();
+}
+
+function beginPainConfirmation() {
+  if (!painCheckinState || !Number.isInteger(painCheckinState.painLevel)) return;
+  voiceGuidance.cancel();
+  painCheckinState.stage = "confirm-pain";
+  painLevelChoicesEl.classList.add("hidden");
+  recoveryChoicesEl.classList.add("hidden");
+  painSafetyInterviewEl.classList.add("hidden");
+  painConfirmationEl.classList.remove("hidden");
+  painSkipBtn.classList.add("hidden");
+  updatePainCheckinPresentation();
+
+  const level = painCheckinState.painLevel;
+  const question = painConfirmationQuestion(level);
+  painCheckinTitleEl.textContent = "Please confirm your pain level";
+  painConfirmationSummaryEl.textContent = `Pain level ${level} out of 10`;
+  voiceCheckinStatusEl.textContent = handsFreeVoiceEnabled
+    ? "Listening will start after the confirmation question. Say yes or change."
+    : voiceGuidance.canListen
+      ? "Select Yes, continue or Change my answer. Voice input is also available."
+      : "Select Yes, continue or Change my answer.";
+  speakPainPrompt(
+    question,
+    `checkin:${painCheckinState.context}:pain-confirmation:${level}`,
+    "confirm-pain"
+  );
+}
+
+function returnToPainQuestion() {
+  if (!painCheckinState) return;
+  voiceGuidance.cancel();
+  painCheckinState.stage = "pain";
+  painCheckinState.painLevel = null;
+  painCheckinTitleEl.innerHTML =
+    `${escapeHtml(painQuestion(painCheckinState.context))} <span>(0 = none, 10 = severe)</span>`;
+  painLevelChoicesEl.classList.remove("hidden");
+  painConfirmationEl.classList.add("hidden");
+  recoveryChoicesEl.classList.add("hidden");
+  painSafetyInterviewEl.classList.add("hidden");
+  painSkipBtn.classList.remove("hidden");
+  updatePainCheckinPresentation();
+  voiceCheckinStatusEl.textContent = handsFreeVoiceEnabled
+    ? "Please say your pain level again, from zero to ten."
+    : "Choose a different number.";
+  speakPainPrompt(
+    painQuestion(painCheckinState.context),
+    `checkin:${painCheckinState.context}:pain:retry`,
+    "pain"
+  );
+}
+
+function acceptPainConfirmation(response) {
+  if (!painCheckinState || painCheckinState.stage !== "confirm-pain") return;
+  if (response === "change") {
+    returnToPainQuestion();
+    return;
+  }
+  if (response !== "confirm") {
+    voiceCheckinStatusEl.textContent =
+      "Please say yes or change, or use one of the confirmation buttons.";
+    return;
+  }
+  if (requiresPainSafetyInterview()) beginPainSafetyInterview();
+  else if (shouldAskRecovery()) beginRecoveryQuestion();
   else finishPainCheckin();
 }
 
@@ -2036,42 +3616,83 @@ painCheckinEl.querySelectorAll("[data-recovery]").forEach((btn) => {
   });
 });
 
-painVoiceInputBtn.addEventListener("click", () => {
-  if (!painCheckinState) return;
-  voiceGuidance.listen({
-    onStatus: (status) => {
-      voiceCheckinStatusEl.textContent = status;
-    },
-    onError: (message) => {
-      voiceCheckinStatusEl.textContent = message;
-    },
-    onResult: (transcript) => {
-      voiceCheckinStatusEl.textContent = `I heard: “${transcript}”`;
-      if (painCheckinState?.stage === "pain") {
-        acceptPainLevel(parsePainLevel(transcript));
-      } else {
-        acceptRecoveryStatus(parseRecoveryStatus(transcript));
-      }
-    },
+painCheckinEl.querySelectorAll("[data-pain-confirmation]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    acceptPainConfirmation(btn.dataset.painConfirmation);
   });
 });
 
-painSkipBtn.addEventListener("click", () => {
-  const startAfter = painCheckinState?.startAfter;
-  hidePainCheckin();
-  if (startAfter) activateCameraGuide();
+painSafetyChoicesEl.addEventListener("click", (event) => {
+  const responseButton = event.target.closest("[data-pain-safety-response]");
+  if (responseButton) {
+    acceptPainSafetyResponse(responseButton.dataset.painSafetyResponse);
+    return;
+  }
+  const actionButton = event.target.closest("[data-pain-safety-action]");
+  if (actionButton?.dataset.painSafetyAction === "save-report") {
+    finishPainSafetyInterview({ reportForPhysiotherapist: true });
+  } else if (actionButton?.dataset.painSafetyAction === "finish") {
+    finishPainSafetyInterview();
+  }
 });
 
-toggleBtn.addEventListener("click", async () => {
+painVoiceInputBtn.addEventListener("click", () => {
+  startPainVoiceListening();
+});
+
+painSkipBtn.addEventListener("click", () => {
+  if (isPainSafetyStage()) return;
+  const completed = painCheckinState ? { ...painCheckinState } : null;
+  if (completed?.context === "before") {
+    preExerciseCheckinCompleted = true;
+    confirmedPreExercisePain = null;
+  }
+  hidePainCheckin();
+  if (completed) continueAfterPainCheckin(completed);
+});
+
+toggleBtn.addEventListener("click", () => {
   if (running) deactivateCameraGuide();
-  else if (!hasPathwayAccess()) return;
-  else if (isLoggedIn()) showPainCheckin("before", { startAfter: true });
-  else await activateCameraGuide();
+});
+
+finishExerciseBtn.addEventListener("click", () => {
+  if (!exerciseSessionActive) return;
+  if (running) {
+    deactivateCameraGuide({
+      statusMessage: "Camera stopped — finishing exercise",
+    });
+  }
+  completeExerciseSession();
+  toggleBtn.classList.add("hidden");
+  toggleBtn.innerHTML = 'Pause camera guide <span aria-hidden="true">Ⅱ</span>';
+  finishExerciseBtn.disabled = true;
+  preExerciseCheckinCompleted = false;
+  confirmedPreExercisePain = null;
+  renderPrimaryCameraAction();
+  cameraSessionHintEl.textContent =
+    "Exercise marked finished. Complete the optional check-in, or skip it.";
+  statusEl.textContent = "Exercise marked finished";
+  setFeedbackBanner("finished");
+  showPainCheckin("after");
 });
 
 handTrackingToggle.addEventListener("click", async () => {
   if (handPreviewMode) stopHandPreview();
   else await startHandPreview();
 });
+
+fallSafetyOkay.addEventListener("click", () => {
+  showFallSafetyResult("okay", activeFallEvent ?? {});
+});
+
+fallSafetyHelp.addEventListener("click", () => {
+  showFallSafetyResult("help", activeFallEvent ?? {});
+});
+
+fallSafetyVoice.addEventListener("click", () => {
+  startFallSafetyVoiceListening();
+});
+
+fallSafetyClose.addEventListener("click", closeFallSafetyCheck);
 
 syncPracticeAccess();

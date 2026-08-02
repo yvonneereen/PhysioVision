@@ -986,6 +986,22 @@ window.addEventListener("physiovision:profile-updated", (event) => {
   configureFallMonitoring(engine.exercise);
 });
 
+window.addEventListener("physiovision:practice-requested", (event) => {
+  const requestedRole = event.detail?.role ?? null;
+  const requestedProfile = event.detail?.profile ?? null;
+
+  if (requestedRole) {
+    authenticatedRole = requestedRole;
+  }
+
+  if (requestedRole === "patient" && requestedProfile) {
+    profile = { ...profile, ...requestedProfile };
+    authenticatedPatientProfile = profile;
+  }
+
+  syncPracticeAccess();
+});
+
 window.addEventListener("physiovision:prescriptions-updated", (event) => {
   preExerciseCheckinCompleted = false;
   confirmedPreExercisePain = null;

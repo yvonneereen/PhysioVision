@@ -241,6 +241,16 @@ function startExercise(exerciseId = firstExerciseId) {
     return;
   }
 
+  window.dispatchEvent(
+    new CustomEvent("physiovision:practice-requested", {
+      detail: {
+        role: currentUser?.role ?? "patient",
+        profile: currentUser?.profile ?? null,
+        exerciseId,
+      },
+    }),
+  );
+
   setView("practice");
   const exerciseSelect = document.getElementById("exerciseSelect");
   if (exerciseSelect) {

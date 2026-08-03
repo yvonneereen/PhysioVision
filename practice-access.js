@@ -6,6 +6,16 @@ export const PRACTICE_VIEWS = Object.freeze({
   CLINICIAN: "clinician",
 });
 
+// auth.js publishes a role only after the backend confirms the current
+// session. Keep accepting the legacy browser token so older sessions remain
+// compatible while cookie-based authentication is in use.
+export function hasAuthenticatedPracticeAccount({
+  loggedIn = false,
+  role = null,
+} = {}) {
+  return Boolean(loggedIn || role === "patient" || role === "clinician");
+}
+
 function profileValue(profile, apiName, browserName) {
   return profile?.[apiName] ?? profile?.[browserName];
 }

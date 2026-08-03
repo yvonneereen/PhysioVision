@@ -35,8 +35,9 @@ import {
 import { isWellnessEligible } from "./wellness-screening.js";
 import {
   PRACTICE_VIEWS,
+  hasAuthenticatedPracticeAccount,
   resolvePracticeAccess,
-} from "./practice-access.js";
+} from "./practice-access.js?v=2";
 import {
   FallMonitor,
   fallMonitoringReadiness,
@@ -241,8 +242,16 @@ let authenticatedPatientProfile =
 let prescriptionsLoaded =
   authenticatedRole !== "patient" ||
   window.sessionStorage.getItem("physiovision.prescriptions.v1") !== null;
+
+function isPracticeAccountAuthenticated() {
+  return hasAuthenticatedPracticeAccount({
+    loggedIn: isLoggedIn(),
+    role: authenticatedRole,
+  });
+}
+
 let practiceDecision = resolvePracticeAccess({
-  loggedIn: isLoggedIn(),
+  loggedIn: isPracticeAccountAuthenticated(),
 });
 let movementModelsPromise = null;
 const fallMonitor = new FallMonitor();
@@ -617,7 +626,7 @@ function ensureMovementModels() {
 
 function syncPracticeAccess() {
   practiceDecision = resolvePracticeAccess({
-    loggedIn: isLoggedIn(),
+    loggedIn: isPracticeAccountAuthenticated(),
     role: authenticatedRole,
     patientProfile: authenticatedPatientProfile,
     activePrescriptionCount: activePrescriptions.size,
@@ -674,11 +683,11 @@ function syncPracticeAccess() {
 
 function hasLivePracticeAccess() {
   if (
-    !isLoggedIn() ||
+    !isPracticeAccountAuthenticated() ||
     authenticatedRole !== "patient" ||
     practiceDecision.view !== PRACTICE_VIEWS.PATIENT_WORKSPACE
   ) {
-    statusEl.textContent = !isLoggedIn()
+    statusEl.textContent = !isPracticeAccountAuthenticated()
       ? "Sign in with a patient account to use the camera guide"
       : "The camera guide is not available for this account or pathway";
     return false;
@@ -1886,7 +1895,11 @@ async function openCalibrationFlow(event) {
     await activateCameraGuide();
     return;
   }
-  if (isLoggedIn() && !exerciseSessionActive && !preExerciseCheckinCompleted) {
+  if (
+    isPracticeAccountAuthenticated() &&
+    !exerciseSessionActive &&
+    !preExerciseCheckinCompleted
+  ) {
     showPainCheckin("before", {
       continuation: "calibration",
       calibrationTrigger: trigger,
@@ -1996,7 +2009,7 @@ calibrationAction.addEventListener("click", () => {
 
   if (calibrationSession.step === "result" && calibrationDraft) {
     saveCalibration(calibrationDraft);
-    if (isLoggedIn()) {
+    if (isPracticeAccountAuthenticated()) {
       postCalibration({
         exercise:             calibrationDraft.exerciseId,
         affected_side:        calibrationDraft.affectedSide,
@@ -2837,7 +2850,7 @@ function completeExerciseSession() {
   );
   const shouldRecord =
     exerciseSessionActive &&
-    isLoggedIn() &&
+    isPracticeAccountAuthenticated() &&
     totalRepsCompleted > 0 &&
     Boolean(sessionStartedAt);
 
@@ -3155,7 +3168,7 @@ function showPainCheckin(context = "after", {
   continuation = "",
   calibrationTrigger = null,
 } = {}) {
-  if (!isLoggedIn()) {
+  if (!isPracticeAccountAuthenticated()) {
     continueAfterPainCheckin({
       startAfter,
       continuation,

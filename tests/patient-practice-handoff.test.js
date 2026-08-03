@@ -11,6 +11,27 @@ const styleSource = fs.readFileSync(
   "utf8",
 );
 
+const presentationStart = dashboardSource.indexOf(
+  "function setPatientPracticePresentation(",
+);
+const presentationEnd = dashboardSource.indexOf(
+  "\n}\n\nfunction setView",
+  presentationStart,
+);
+assert.ok(
+  presentationStart >= 0 && presentationEnd > presentationStart,
+  "patient dashboard should define a Safari-safe practice presentation switch",
+);
+const presentationSource = dashboardSource.slice(
+  presentationStart,
+  presentationEnd + 2,
+);
+assert.match(
+  presentationSource,
+  /style\.setProperty\("display", display, "important"\)/,
+  "the practice handoff should directly enforce display state across browsers",
+);
+
 const setViewStart = dashboardSource.indexOf("function setView(");
 const setViewEnd = dashboardSource.indexOf(
   "\n}\n\nfunction showDashboard",
@@ -23,10 +44,15 @@ assert.ok(
 const setViewSource = dashboardSource.slice(setViewStart, setViewEnd);
 assert.match(
   setViewSource,
-  /delete document\.body\.dataset\.patientPracticeAuthorized/,
+  /setPatientPracticePresentation\(false\)/,
   "returning home should clear the authorized practice handoff",
 );
 
+assert.match(
+  styleSource,
+  /body\.patient-practice-authorized #publicPracticePreview[\s\S]*?display: none !important;/,
+  "the Safari-safe practice class must suppress the signed-out preview",
+);
 assert.match(
   styleSource,
   /body\[data-patient-practice-authorized="true"\] #publicPracticePreview[\s\S]*?display: none !important;/,
@@ -58,7 +84,7 @@ const durableHandoffPosition = startExerciseSource.indexOf(
   "window.physioVisionPendingPracticeRequest = practiceRequest",
 );
 const authorizedViewPosition = startExerciseSource.indexOf(
-  'document.body.dataset.patientPracticeAuthorized = "true"',
+  "setPatientPracticePresentation(true)",
 );
 const directBridgePosition = startExerciseSource.indexOf(
   'typeof window.physioVisionOpenPractice === "function"',
@@ -246,11 +272,45 @@ function makePracticeDocument() {
       selectEvents.push(event);
     },
   };
+  const bodyClasses = new Set();
+  const makeStyle = () => ({
+    display: "",
+    priority: "",
+    setProperty(name, value, priority = "") {
+      if (name !== "display") return;
+      this.display = value;
+      this.priority = priority;
+    },
+    removeProperty(name) {
+      if (name !== "display") return;
+      this.display = "";
+      this.priority = "";
+    },
+  });
+  const presentationElements = {
+    publicPracticePreview: { style: makeStyle() },
+    patientPracticeGate: { style: makeStyle() },
+    clinicianPracticeGate: { style: makeStyle() },
+    patientPracticeWorkspace: { style: makeStyle() },
+  };
+  const body = {
+    dataset: {},
+    classList: {
+      toggle(name, force) {
+        if (force) bodyClasses.add(name);
+        else bodyClasses.delete(name);
+      },
+      contains(name) {
+        return bodyClasses.has(name);
+      },
+    },
+  };
 
   return {
     document: {
-      body: { dataset: {} },
+      body,
       getElementById(id) {
+        if (presentationElements[id]) return presentationElements[id];
         if (id === "exerciseSelect") return exerciseSelect;
         if (id === "practice") {
           return {
@@ -263,9 +323,36 @@ function makePracticeDocument() {
       },
     },
     exerciseSelect,
+    presentationElements,
     selectEvents,
     scrollCalls,
   };
+}
+
+{
+  const practiceDocument = makePracticeDocument();
+  const setPatientPracticePresentation = new Function(
+    "document",
+    `${presentationSource}; return setPatientPracticePresentation;`,
+  )(practiceDocument.document);
+
+  setPatientPracticePresentation(true);
+  setPatientPracticePresentation(false);
+
+  assert.equal(
+    practiceDocument.document.body.dataset.patientPracticeAuthorized,
+    undefined,
+  );
+  assert.equal(
+    practiceDocument.document.body.classList.contains(
+      "patient-practice-authorized",
+    ),
+    false,
+  );
+  Object.values(practiceDocument.presentationElements).forEach((element) => {
+    assert.equal(element.style.display, "");
+    assert.equal(element.style.priority, "");
+  });
 }
 
 const makeStartExercise = new Function(
@@ -280,7 +367,7 @@ const makeStartExercise = new Function(
   "CustomEvent",
   "document",
   "Event",
-  `${startExerciseSource}; return startExercise;`,
+  `${presentationSource}; ${startExerciseSource}; return startExercise;`,
 );
 
 {
@@ -321,6 +408,28 @@ const makeStartExercise = new Function(
   assert.equal(
     practiceDocument.document.body.dataset.patientPracticeAuthorized,
     "true",
+  );
+  assert.equal(
+    practiceDocument.document.body.classList.contains(
+      "patient-practice-authorized",
+    ),
+    true,
+  );
+  assert.equal(
+    practiceDocument.presentationElements.publicPracticePreview.style.display,
+    "none",
+  );
+  assert.equal(
+    practiceDocument.presentationElements.publicPracticePreview.style.priority,
+    "important",
+  );
+  assert.equal(
+    practiceDocument.presentationElements.patientPracticeWorkspace.style.display,
+    "block",
+  );
+  assert.equal(
+    practiceDocument.presentationElements.patientPracticeWorkspace.style.priority,
+    "important",
   );
   assert.equal(bridgeCalls.length, 1);
   assert.equal(fakeWindow.physioVisionPendingPracticeRequest, bridgeCalls[0]);
@@ -373,6 +482,14 @@ const makeStartExercise = new Function(
   assert.equal(
     practiceDocument.document.body.dataset.patientPracticeAuthorized,
     "true",
+  );
+  assert.equal(
+    practiceDocument.presentationElements.publicPracticePreview.style.display,
+    "none",
+  );
+  assert.equal(
+    practiceDocument.presentationElements.patientPracticeWorkspace.style.display,
+    "block",
   );
   assert.equal(dispatchedEvents.length, 1);
   assert.equal(dispatchedEvents[0].type, "physiovision:practice-requested");

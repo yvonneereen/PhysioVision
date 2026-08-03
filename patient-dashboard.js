@@ -203,10 +203,33 @@ function formatDate(value, options = {}) {
   }).format(parsed);
 }
 
+function setPatientPracticePresentation(authorized) {
+  const active = Boolean(authorized);
+  document.body.classList.toggle("patient-practice-authorized", active);
+  if (active) {
+    document.body.dataset.patientPracticeAuthorized = "true";
+  } else {
+    delete document.body.dataset.patientPracticeAuthorized;
+  }
+
+  const forcedDisplays = [
+    ["publicPracticePreview", "none"],
+    ["patientPracticeGate", "none"],
+    ["clinicianPracticeGate", "none"],
+    ["patientPracticeWorkspace", "block"],
+  ];
+  forcedDisplays.forEach(([id, display]) => {
+    const element = document.getElementById(id);
+    if (!element) return;
+    if (active) element.style.setProperty("display", display, "important");
+    else element.style.removeProperty("display");
+  });
+}
+
 function setView(mode) {
   const isPatientDashboard = mode === "dashboard";
   if (isPatientDashboard) {
-    delete document.body.dataset.patientPracticeAuthorized;
+    setPatientPracticePresentation(false);
   }
   dashboard.hidden = !isPatientDashboard;
   publicMain.hidden = isPatientDashboard;
@@ -277,7 +300,7 @@ function startExercise(exerciseId = firstExerciseId) {
   // already resolved a real exercise from an available plan. Keep that
   // authorization attached to the view transition so the signed-out preview
   // cannot flash or remain visible while the larger guide module synchronizes.
-  document.body.dataset.patientPracticeAuthorized = "true";
+  setPatientPracticePresentation(true);
   setView("practice");
 
   if (typeof window.physioVisionOpenPractice === "function") {
@@ -1232,7 +1255,7 @@ window.addEventListener("physiovision:auth-role", (event) => {
     activatePatientDashboard(user);
   } else {
     currentUser = null;
-    delete document.body.dataset.patientPracticeAuthorized;
+    setPatientPracticePresentation(false);
     dashboard.hidden = true;
     publicMain.hidden = false;
     document.body.classList.remove(

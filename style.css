@@ -1179,12 +1179,16 @@ textarea:focus-visible {
    dashboard has resolved an available exercise. Keep the public preview from
    winning a module-loading/auth refresh race during that handoff. Runtime
    camera and session actions remain protected by the guide's access checks. */
+body.patient-practice-authorized #publicPracticePreview,
+body.patient-practice-authorized #patientPracticeGate,
+body.patient-practice-authorized #clinicianPracticeGate,
 body[data-patient-practice-authorized="true"] #publicPracticePreview,
 body[data-patient-practice-authorized="true"] #patientPracticeGate,
 body[data-patient-practice-authorized="true"] #clinicianPracticeGate {
   display: none !important;
 }
 
+body.patient-practice-authorized #patientPracticeWorkspace,
 body[data-patient-practice-authorized="true"] #patientPracticeWorkspace {
   display: block !important;
 }

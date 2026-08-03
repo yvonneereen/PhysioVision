@@ -257,17 +257,20 @@ function startExercise(exerciseId = firstExerciseId) {
   }
 
   const authState = window.physioVisionAuthState ?? null;
+  const authProfile =
+    authState?.role === "patient" ? authState?.user?.profile ?? null : null;
+  const patientProfile = {
+    ...(authProfile ?? {}),
+    ...(currentUser?.profile ?? {}),
+  };
   const practiceRequest = {
-    role: currentUser?.role ?? authState?.role ?? "patient",
-    profile:
-      currentUser?.profile ??
-      (authState?.role === "patient"
-        ? authState?.user?.profile ?? null
-        : null),
+    role: "patient",
+    profile: Object.keys(patientProfile).length ? patientProfile : null,
     exerciseId,
   };
 
   window.physioVisionPendingPracticeRequest = practiceRequest;
+  setView("practice");
 
   if (typeof window.physioVisionOpenPractice === "function") {
     window.physioVisionOpenPractice(practiceRequest);
@@ -279,7 +282,6 @@ function startExercise(exerciseId = firstExerciseId) {
     );
   }
 
-  setView("practice");
   const exerciseSelect = document.getElementById("exerciseSelect");
   if (exerciseSelect) {
     exerciseSelect.value = exerciseId;

@@ -239,19 +239,49 @@ let authenticatedPatientProfile =
   authenticatedRole === "patient"
     ? initialAuthState?.user?.profile ?? null
     : null;
+let practiceIdentityOverride = null;
 let prescriptionsLoaded =
   authenticatedRole !== "patient" ||
   window.sessionStorage.getItem("physiovision.prescriptions.v1") !== null;
 
-function isPracticeAccountAuthenticated() {
-  return hasAuthenticatedPracticeAccount({
-    loggedIn: isLoggedIn(),
-    role: authenticatedRole,
+function currentPracticeIdentity() {
+  const authState = window.physioVisionAuthState ?? null;
+  const role =
+    practiceIdentityOverride?.role ??
+    authState?.role ??
+    authenticatedRole ??
+    null;
+  const mergedPatientProfile =
+    role === "patient"
+      ? {
+          ...(authenticatedPatientProfile ?? {}),
+          ...(authState?.user?.profile ?? {}),
+          ...(practiceIdentityOverride?.profile ?? {}),
+        }
+      : null;
+  const patientProfile =
+    mergedPatientProfile && Object.keys(mergedPatientProfile).length
+      ? mergedPatientProfile
+      : null;
+  const loggedIn = hasAuthenticatedPracticeAccount({
+    loggedIn: Boolean(authState?.user) || isLoggedIn(),
+    role,
   });
+
+  return { loggedIn, role, patientProfile };
 }
 
+function isPracticeAccountAuthenticated() {
+  return currentPracticeIdentity().loggedIn;
+}
+
+const initialPracticeIdentity = currentPracticeIdentity();
 let practiceDecision = resolvePracticeAccess({
-  loggedIn: isPracticeAccountAuthenticated(),
+  loggedIn: initialPracticeIdentity.loggedIn,
+  role: initialPracticeIdentity.role,
+  patientProfile: initialPracticeIdentity.patientProfile,
+  activePrescriptionCount: activePrescriptions.size,
+  prescriptionsLoaded,
 });
 let movementModelsPromise = null;
 const fallMonitor = new FallMonitor();
@@ -625,10 +655,16 @@ function ensureMovementModels() {
 }
 
 function syncPracticeAccess() {
+  const identity = currentPracticeIdentity();
+  authenticatedRole = identity.role;
+  if (identity.role === "patient" && identity.patientProfile) {
+    authenticatedPatientProfile = identity.patientProfile;
+  }
+
   practiceDecision = resolvePracticeAccess({
-    loggedIn: isPracticeAccountAuthenticated(),
-    role: authenticatedRole,
-    patientProfile: authenticatedPatientProfile,
+    loggedIn: identity.loggedIn,
+    role: identity.role,
+    patientProfile: identity.patientProfile,
     activePrescriptionCount: activePrescriptions.size,
     prescriptionsLoaded,
   });
@@ -682,12 +718,13 @@ function syncPracticeAccess() {
 }
 
 function hasLivePracticeAccess() {
+  const identity = currentPracticeIdentity();
   if (
-    !isPracticeAccountAuthenticated() ||
-    authenticatedRole !== "patient" ||
+    !identity.loggedIn ||
+    identity.role !== "patient" ||
     practiceDecision.view !== PRACTICE_VIEWS.PATIENT_WORKSPACE
   ) {
-    statusEl.textContent = !isPracticeAccountAuthenticated()
+    statusEl.textContent = !identity.loggedIn
       ? "Sign in with a patient account to use the camera guide"
       : "The camera guide is not available for this account or pathway";
     return false;
@@ -974,6 +1011,15 @@ window.addEventListener("physiovision:profile-updated", (event) => {
   if (authenticatedRole === "patient") {
     authenticatedPatientProfile = event.detail;
   }
+  if (practiceIdentityOverride?.role === "patient") {
+    practiceIdentityOverride = {
+      ...practiceIdentityOverride,
+      profile: {
+        ...(practiceIdentityOverride.profile ?? {}),
+        ...event.detail,
+      },
+    };
+  }
   refreshExerciseAccess();
   syncPracticeAccess();
   if (exSelect.selectedOptions[0]?.disabled) {
@@ -1001,12 +1047,20 @@ window.addEventListener("physiovision:profile-updated", (event) => {
 
 function handlePracticeRequest(detail = {}) {
   const authState = window.physioVisionAuthState ?? null;
-  const requestedRole = detail.role ?? authState?.role ?? null;
+  const requestedRole =
+    detail.role ?? authState?.role ?? authenticatedRole ?? null;
   const requestedProfile =
     detail.profile ??
     (requestedRole === "patient"
-      ? authState?.user?.profile ?? null
+      ? authState?.user?.profile ?? authenticatedPatientProfile ?? null
       : null);
+
+  practiceIdentityOverride = requestedRole
+    ? {
+        role: requestedRole,
+        profile: requestedRole === "patient" ? requestedProfile : null,
+      }
+    : null;
 
   if (requestedRole) {
     authenticatedRole = requestedRole;
@@ -1060,14 +1114,34 @@ window.addEventListener("physiovision:prescriptions-updated", (event) => {
 });
 
 window.addEventListener("physiovision:auth-role", (event) => {
-  authenticatedRole = event.detail?.role ?? null;
+  const nextRole = event.detail?.role ?? null;
+  const stillLoggedIn = Boolean(event.detail?.user) || isLoggedIn();
+
+  // Auth initialization can briefly publish an empty role while the saved
+  // session is still being restored. Do not let that temporary event replace
+  // the patient identity supplied by the dashboard practice handoff.
+  if (nextRole) {
+    authenticatedRole = nextRole;
+  } else if (!stillLoggedIn) {
+    authenticatedRole = null;
+  }
+
   authenticatedPatientProfile =
     authenticatedRole === "patient"
       ? event.detail?.user?.profile ??
+        practiceIdentityOverride?.profile ??
         authenticatedPatientProfile ??
         window.physioVisionAuthState?.user?.profile ??
         null
       : null;
+  if (
+    !stillLoggedIn ||
+    (nextRole &&
+      practiceIdentityOverride &&
+      practiceIdentityOverride.role !== nextRole)
+  ) {
+    practiceIdentityOverride = null;
+  }
   prescriptionsLoaded =
     authenticatedRole !== "patient" ||
     window.sessionStorage.getItem("physiovision.prescriptions.v1") !== null;

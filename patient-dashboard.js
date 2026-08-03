@@ -256,15 +256,28 @@ function startExercise(exerciseId = firstExerciseId) {
     return;
   }
 
-  window.dispatchEvent(
-    new CustomEvent("physiovision:practice-requested", {
-      detail: {
-        role: currentUser?.role ?? "patient",
-        profile: currentUser?.profile ?? null,
-        exerciseId,
-      },
-    }),
-  );
+  const authState = window.physioVisionAuthState ?? null;
+  const practiceRequest = {
+    role: currentUser?.role ?? authState?.role ?? "patient",
+    profile:
+      currentUser?.profile ??
+      (authState?.role === "patient"
+        ? authState?.user?.profile ?? null
+        : null),
+    exerciseId,
+  };
+
+  window.physioVisionPendingPracticeRequest = practiceRequest;
+
+  if (typeof window.physioVisionOpenPractice === "function") {
+    window.physioVisionOpenPractice(practiceRequest);
+  } else {
+    window.dispatchEvent(
+      new CustomEvent("physiovision:practice-requested", {
+        detail: practiceRequest,
+      }),
+    );
+  }
 
   setView("practice");
   const exerciseSelect = document.getElementById("exerciseSelect");

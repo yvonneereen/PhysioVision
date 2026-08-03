@@ -35,8 +35,9 @@ import {
 import { isWellnessEligible } from "./wellness-screening.js";
 import {
   PRACTICE_VIEWS,
+  hasAuthenticatedPracticeAccount,
   resolvePracticeAccess,
-} from "./practice-access.js";
+} from "./practice-access.js?v=2";
 import {
   FallMonitor,
   fallMonitoringReadiness,
@@ -241,8 +242,16 @@ let authenticatedPatientProfile =
 let prescriptionsLoaded =
   authenticatedRole !== "patient" ||
   window.sessionStorage.getItem("physiovision.prescriptions.v1") !== null;
+
+function isPracticeAccountAuthenticated() {
+  return hasAuthenticatedPracticeAccount({
+    loggedIn: isLoggedIn(),
+    role: authenticatedRole,
+  });
+}
+
 let practiceDecision = resolvePracticeAccess({
-  loggedIn: isLoggedIn(),
+  loggedIn: isPracticeAccountAuthenticated(),
 });
 let movementModelsPromise = null;
 const fallMonitor = new FallMonitor();
@@ -617,7 +626,7 @@ function ensureMovementModels() {
 
 function syncPracticeAccess() {
   practiceDecision = resolvePracticeAccess({
-    loggedIn: isLoggedIn(),
+    loggedIn: isPracticeAccountAuthenticated(),
     role: authenticatedRole,
     patientProfile: authenticatedPatientProfile,
     activePrescriptionCount: activePrescriptions.size,
@@ -674,11 +683,11 @@ function syncPracticeAccess() {
 
 function hasLivePracticeAccess() {
   if (
-    !isLoggedIn() ||
+    !isPracticeAccountAuthenticated() ||
     authenticatedRole !== "patient" ||
     practiceDecision.view !== PRACTICE_VIEWS.PATIENT_WORKSPACE
   ) {
-    statusEl.textContent = !isLoggedIn()
+    statusEl.textContent = !isPracticeAccountAuthenticated()
       ? "Sign in with a patient account to use the camera guide"
       : "The camera guide is not available for this account or pathway";
     return false;
@@ -990,9 +999,14 @@ window.addEventListener("physiovision:profile-updated", (event) => {
   configureFallMonitoring(engine.exercise);
 });
 
-window.addEventListener("physiovision:practice-requested", (event) => {
-  const requestedRole = event.detail?.role ?? null;
-  const requestedProfile = event.detail?.profile ?? null;
+function handlePracticeRequest(detail = {}) {
+  const authState = window.physioVisionAuthState ?? null;
+  const requestedRole = detail.role ?? authState?.role ?? null;
+  const requestedProfile =
+    detail.profile ??
+    (requestedRole === "patient"
+      ? authState?.user?.profile ?? null
+      : null);
 
   if (requestedRole) {
     authenticatedRole = requestedRole;
@@ -1003,8 +1017,23 @@ window.addEventListener("physiovision:practice-requested", (event) => {
     authenticatedPatientProfile = profile;
   }
 
+  if (window.physioVisionPendingPracticeRequest === detail) {
+    window.physioVisionPendingPracticeRequest = null;
+  }
+
   syncPracticeAccess();
+}
+
+window.physioVisionOpenPractice = handlePracticeRequest;
+
+window.addEventListener("physiovision:practice-requested", (event) => {
+  handlePracticeRequest(event.detail);
 });
+
+const pendingPracticeRequest = window.physioVisionPendingPracticeRequest;
+if (pendingPracticeRequest) {
+  handlePracticeRequest(pendingPracticeRequest);
+}
 
 window.addEventListener("physiovision:prescriptions-updated", (event) => {
   preExerciseCheckinCompleted = false;
@@ -1034,7 +1063,10 @@ window.addEventListener("physiovision:auth-role", (event) => {
   authenticatedRole = event.detail?.role ?? null;
   authenticatedPatientProfile =
     authenticatedRole === "patient"
-      ? event.detail?.user?.profile ?? null
+      ? event.detail?.user?.profile ??
+        authenticatedPatientProfile ??
+        window.physioVisionAuthState?.user?.profile ??
+        null
       : null;
   prescriptionsLoaded =
     authenticatedRole !== "patient" ||
@@ -1893,7 +1925,11 @@ async function openCalibrationFlow(event) {
     await activateCameraGuide();
     return;
   }
-  if (isLoggedIn() && !exerciseSessionActive && !preExerciseCheckinCompleted) {
+  if (
+    isPracticeAccountAuthenticated() &&
+    !exerciseSessionActive &&
+    !preExerciseCheckinCompleted
+  ) {
     showPainCheckin("before", {
       continuation: "calibration",
       calibrationTrigger: trigger,
@@ -2003,7 +2039,7 @@ calibrationAction.addEventListener("click", () => {
 
   if (calibrationSession.step === "result" && calibrationDraft) {
     saveCalibration(calibrationDraft);
-    if (isLoggedIn()) {
+    if (isPracticeAccountAuthenticated()) {
       postCalibration({
         exercise:             calibrationDraft.exerciseId,
         affected_side:        calibrationDraft.affectedSide,
@@ -2854,7 +2890,7 @@ function completeExerciseSession() {
   );
   const shouldRecord =
     exerciseSessionActive &&
-    isLoggedIn() &&
+    isPracticeAccountAuthenticated() &&
     totalRepsCompleted > 0 &&
     Boolean(sessionStartedAt);
 
@@ -3173,7 +3209,7 @@ function showPainCheckin(context = "after", {
   continuation = "",
   calibrationTrigger = null,
 } = {}) {
-  if (!isLoggedIn()) {
+  if (!isPracticeAccountAuthenticated()) {
     continueAfterPainCheckin({
       startAfter,
       continuation,

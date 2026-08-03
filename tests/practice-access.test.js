@@ -1,8 +1,18 @@
 import assert from "node:assert/strict";
 import {
   PRACTICE_VIEWS,
+  hasAuthenticatedPracticeAccount,
   resolvePracticeAccess,
 } from "../practice-access.js";
+
+assert.equal(hasAuthenticatedPracticeAccount(), false);
+assert.equal(hasAuthenticatedPracticeAccount({ loggedIn: true }), true);
+assert.equal(hasAuthenticatedPracticeAccount({ role: "patient" }), true);
+assert.equal(hasAuthenticatedPracticeAccount({ role: "clinician" }), true);
+assert.equal(
+  hasAuthenticatedPracticeAccount({ role: "unexpected" }),
+  false
+);
 
 assert.equal(
   resolvePracticeAccess({ loggedIn: false }).view,

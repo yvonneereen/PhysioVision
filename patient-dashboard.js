@@ -205,6 +205,9 @@ function formatDate(value, options = {}) {
 
 function setView(mode) {
   const isPatientDashboard = mode === "dashboard";
+  if (isPatientDashboard) {
+    delete document.body.dataset.patientPracticeAuthorized;
+  }
   dashboard.hidden = !isPatientDashboard;
   publicMain.hidden = isPatientDashboard;
   backToDashboard?.classList.toggle("hidden", isPatientDashboard);
@@ -270,6 +273,11 @@ function startExercise(exerciseId = firstExerciseId) {
   };
 
   window.physioVisionPendingPracticeRequest = practiceRequest;
+  // Reaching this branch means the authenticated patient dashboard has
+  // already resolved a real exercise from an available plan. Keep that
+  // authorization attached to the view transition so the signed-out preview
+  // cannot flash or remain visible while the larger guide module synchronizes.
+  document.body.dataset.patientPracticeAuthorized = "true";
   setView("practice");
 
   if (typeof window.physioVisionOpenPractice === "function") {
@@ -1224,6 +1232,7 @@ window.addEventListener("physiovision:auth-role", (event) => {
     activatePatientDashboard(user);
   } else {
     currentUser = null;
+    delete document.body.dataset.patientPracticeAuthorized;
     dashboard.hidden = true;
     publicMain.hidden = false;
     document.body.classList.remove(

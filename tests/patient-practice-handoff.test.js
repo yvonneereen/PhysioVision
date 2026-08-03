@@ -6,6 +6,37 @@ const dashboardSource = fs.readFileSync(
   "utf8",
 );
 const mainSource = fs.readFileSync(new URL("../main.js", import.meta.url), "utf8");
+const styleSource = fs.readFileSync(
+  new URL("../style.css", import.meta.url),
+  "utf8",
+);
+
+const setViewStart = dashboardSource.indexOf("function setView(");
+const setViewEnd = dashboardSource.indexOf(
+  "\n}\n\nfunction showDashboard",
+  setViewStart,
+);
+assert.ok(
+  setViewStart >= 0 && setViewEnd > setViewStart,
+  "patient dashboard should define a detectable view switcher",
+);
+const setViewSource = dashboardSource.slice(setViewStart, setViewEnd);
+assert.match(
+  setViewSource,
+  /delete document\.body\.dataset\.patientPracticeAuthorized/,
+  "returning home should clear the authorized practice handoff",
+);
+
+assert.match(
+  styleSource,
+  /body\[data-patient-practice-authorized="true"\] #publicPracticePreview[\s\S]*?display: none !important;/,
+  "an authorized dashboard handoff must suppress the signed-out preview",
+);
+assert.match(
+  styleSource,
+  /body\[data-patient-practice-authorized="true"\] #patientPracticeWorkspace[\s\S]*?display: block !important;/,
+  "an authorized dashboard handoff must reveal the patient workspace",
+);
 
 const startExerciseStart = dashboardSource.indexOf("function startExercise(");
 assert.ok(startExerciseStart >= 0, "patient dashboard should define startExercise");
@@ -25,6 +56,9 @@ const startExerciseSource = dashboardSource.slice(
 );
 const durableHandoffPosition = startExerciseSource.indexOf(
   "window.physioVisionPendingPracticeRequest = practiceRequest",
+);
+const authorizedViewPosition = startExerciseSource.indexOf(
+  'document.body.dataset.patientPracticeAuthorized = "true"',
 );
 const directBridgePosition = startExerciseSource.indexOf(
   'typeof window.physioVisionOpenPractice === "function"',
@@ -50,6 +84,11 @@ assert.ok(viewChangePosition >= 0, "starting an exercise should open the practic
 assert.ok(
   durableHandoffPosition < viewChangePosition,
   "patient context must be saved before the practice view becomes visible",
+);
+assert.ok(
+  durableHandoffPosition < authorizedViewPosition &&
+    authorizedViewPosition < viewChangePosition,
+  "the authenticated dashboard must authorize the practice view before revealing it",
 );
 assert.ok(
   viewChangePosition < directBridgePosition,
@@ -210,6 +249,7 @@ function makePracticeDocument() {
 
   return {
     document: {
+      body: { dataset: {} },
       getElementById(id) {
         if (id === "exerciseSelect") return exerciseSelect;
         if (id === "practice") {
@@ -278,6 +318,10 @@ const makeStartExercise = new Function(
   startExercise("half-squats");
 
   assert.deepEqual(viewCalls, ["practice"]);
+  assert.equal(
+    practiceDocument.document.body.dataset.patientPracticeAuthorized,
+    "true",
+  );
   assert.equal(bridgeCalls.length, 1);
   assert.equal(fakeWindow.physioVisionPendingPracticeRequest, bridgeCalls[0]);
   assert.deepEqual(bridgeCalls[0], {
@@ -326,6 +370,10 @@ const makeStartExercise = new Function(
   startExercise("calf-raises");
 
   assert.deepEqual(viewCalls, ["practice"]);
+  assert.equal(
+    practiceDocument.document.body.dataset.patientPracticeAuthorized,
+    "true",
+  );
   assert.equal(dispatchedEvents.length, 1);
   assert.equal(dispatchedEvents[0].type, "physiovision:practice-requested");
   assert.equal(

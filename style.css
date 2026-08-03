@@ -1175,6 +1175,20 @@ textarea:focus-visible {
   box-shadow: 0 40px 80px rgba(4, 19, 20, 0.35);
 }
 
+/* A practice request can only set this state after the authenticated patient
+   dashboard has resolved an available exercise. Keep the public preview from
+   winning a module-loading/auth refresh race during that handoff. Runtime
+   camera and session actions remain protected by the guide's access checks. */
+body[data-patient-practice-authorized="true"] #publicPracticePreview,
+body[data-patient-practice-authorized="true"] #patientPracticeGate,
+body[data-patient-practice-authorized="true"] #clinicianPracticeGate {
+  display: none !important;
+}
+
+body[data-patient-practice-authorized="true"] #patientPracticeWorkspace {
+  display: block !important;
+}
+
 .public-preview-copy {
   display: flex;
   align-items: flex-start;

@@ -4,6 +4,7 @@ import secrets
 import string
 from datetime import timedelta
 
+from django.conf import settings
 from django.core import signing
 from django.db import transaction
 from django.utils import timezone
@@ -1157,6 +1158,9 @@ class SlackLinkCodeView(APIView):
                 "code": raw_code,
                 "expires_at": link.expires_at,
                 "instructions": f"In Slack, send: @Physio Assistant link {raw_code}",
+                "workspace_invite_url": getattr(
+                    settings, "SLACK_WORKSPACE_INVITE_URL", ""
+                ),
             },
             status=status.HTTP_201_CREATED,
         )

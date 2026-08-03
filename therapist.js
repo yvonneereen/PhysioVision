@@ -614,9 +614,14 @@ async function connectSlack() {
   status.textContent = "Generating code…";
   if (btn) btn.disabled = true;
   try {
-    const { code } = await requestSlackLinkCode();
+    const { code, workspace_invite_url } = await requestSlackLinkCode();
+    const joinStep = workspace_invite_url
+      ? `<strong>1.</strong> Not in the Slack workspace yet? `
+        + `<a href="${workspace_invite_url}" target="_blank" rel="noreferrer">Join here ↗</a><br>`
+        + `<strong>2.</strong> `
+      : "";
     status.innerHTML =
-      `In Slack, send:<br><code>@Physio Assistant link ${code}</code><br>` +
+      `${joinStep}In Slack, send:<br><code>@Physio Assistant link ${code}</code><br>` +
       `<small>Code expires in 10 minutes.</small>`;
   } catch (err) {
     status.textContent = err.message || "Could not generate a code.";

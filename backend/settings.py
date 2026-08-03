@@ -249,6 +249,9 @@ SLACK_SIGNING_SECRET = env('SLACK_SIGNING_SECRET', default='')
 # Shared channel for escalations about patients with no linked clinician.
 # The bot must be a member. Leave blank to skip such alerts entirely.
 SLACK_TRIAGE_CHANNEL_ID = env('SLACK_TRIAGE_CHANNEL_ID', default='')
+# Shareable workspace invite link (created manually in Slack) shown to
+# clinicians so they can join the workspace before linking their account.
+SLACK_WORKSPACE_INVITE_URL = env('SLACK_WORKSPACE_INVITE_URL', default='')
 
 # Frontend base URL (used in Slack deep links)
 FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:4173')

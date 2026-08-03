@@ -995,9 +995,14 @@ window.addEventListener("physiovision:profile-updated", (event) => {
   configureFallMonitoring(engine.exercise);
 });
 
-window.addEventListener("physiovision:practice-requested", (event) => {
-  const requestedRole = event.detail?.role ?? null;
-  const requestedProfile = event.detail?.profile ?? null;
+function handlePracticeRequest(detail = {}) {
+  const authState = window.physioVisionAuthState ?? null;
+  const requestedRole = detail.role ?? authState?.role ?? null;
+  const requestedProfile =
+    detail.profile ??
+    (requestedRole === "patient"
+      ? authState?.user?.profile ?? null
+      : null);
 
   if (requestedRole) {
     authenticatedRole = requestedRole;
@@ -1008,8 +1013,23 @@ window.addEventListener("physiovision:practice-requested", (event) => {
     authenticatedPatientProfile = profile;
   }
 
+  if (window.physioVisionPendingPracticeRequest === detail) {
+    window.physioVisionPendingPracticeRequest = null;
+  }
+
   syncPracticeAccess();
+}
+
+window.physioVisionOpenPractice = handlePracticeRequest;
+
+window.addEventListener("physiovision:practice-requested", (event) => {
+  handlePracticeRequest(event.detail);
 });
+
+const pendingPracticeRequest = window.physioVisionPendingPracticeRequest;
+if (pendingPracticeRequest) {
+  handlePracticeRequest(pendingPracticeRequest);
+}
 
 window.addEventListener("physiovision:prescriptions-updated", (event) => {
   preExerciseCheckinCompleted = false;
@@ -1039,7 +1059,10 @@ window.addEventListener("physiovision:auth-role", (event) => {
   authenticatedRole = event.detail?.role ?? null;
   authenticatedPatientProfile =
     authenticatedRole === "patient"
-      ? event.detail?.user?.profile ?? null
+      ? event.detail?.user?.profile ??
+        authenticatedPatientProfile ??
+        window.physioVisionAuthState?.user?.profile ??
+        null
       : null;
   prescriptionsLoaded =
     authenticatedRole !== "patient" ||

@@ -1024,6 +1024,7 @@ class SafetyLanguageInterpretationView(APIView):
         transcript = ' '.join(
             str(request.data.get('transcript', '')).split()
         )
+        locale = str(request.data.get('locale', 'en-SG')).strip()
         if not available_safety_language_stage(stage):
             return Response(
                 {'detail': 'Unsupported safety-language stage.'},
@@ -1035,7 +1036,7 @@ class SafetyLanguageInterpretationView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         try:
-            interpretation = interpret_safety_language(stage, transcript)
+            interpretation = interpret_safety_language(stage, transcript, locale)
         except SafetyLanguageUnavailable:
             logger.exception('Constrained safety-language interpretation failed')
             return Response(

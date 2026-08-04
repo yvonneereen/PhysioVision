@@ -216,7 +216,7 @@ function normalizeWellbeingSpeech(transcript) {
   return String(transcript ?? "")
     .toLowerCase()
     .replace(/[’']/g, "")
-    .replace(/[^a-z\s]/g, " ")
+    .replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -224,6 +224,24 @@ function normalizeWellbeingSpeech(transcript) {
 export function parseWellbeingResponse(transcript) {
   const normalized = normalizeWellbeingSpeech(transcript);
   if (!normalized) return null;
+
+  if (
+    /(不能站|无法站|不能起来|无法移动|需要帮助|非常痛|太痛|呼吸困难|胸痛|头晕|麻木|跌倒了|tidak boleh berdiri|tidak boleh bangun|tidak boleh bergerak|perlukan bantuan|terlalu sakit|sukar bernafas|sakit dada|pening|kebas|saya jatuh|நிற்க முடியாது|எழுந்திருக்க முடியாது|நகர முடியாது|உதவி தேவை|மிகவும் வலி|சுவாசிக்க சிரமம்|மார்பு வலி|தலைச்சுற்றல்|உணர்வின்மை|விழுந்துவிட்டேன்)/u.test(normalized)
+  ) {
+    return "help";
+  }
+
+  if (
+    /(不用帮助|不需要帮助|不要叫人|tidak perlu bantuan|tak perlu bantuan|jangan hubungi sesiapa|உதவி வேண்டாம்|யாரையும் அழைக்க வேண்டாம்)/u.test(normalized)
+  ) {
+    return "confirm-okay";
+  }
+
+  if (
+    /(我没事|我很好|我可以站|我可以移动|saya okay|saya okey|saya baik|saya boleh berdiri|saya boleh bergerak|நான் நலமாக இருக்கிறேன்|நான் சரியாக இருக்கிறேன்|நான் நிற்க முடியும்|நான் நகர முடியும்)/u.test(normalized)
+  ) {
+    return "okay";
+  }
 
   const strongDistress = [
     /\b(cannot|cant|unable to|struggling to) (stand|stand up|get up|move|walk|breathe|catch my breath)\b/,

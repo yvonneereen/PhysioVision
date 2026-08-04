@@ -21,6 +21,7 @@ const frontendEntries = [
   "fall-monitoring.js",
   "geometry.js",
   "hand-geometry.js",
+  "i18n.js",
   "img",
   "main.js",
   "movement-measurements.js",

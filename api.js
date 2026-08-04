@@ -246,6 +246,7 @@ export async function interpretSafetyLanguage({ stage, transcript }) {
   return request("POST", "/auth/agent/safety-language/", {
     stage,
     transcript,
+    locale: runtimeWindow.document?.documentElement?.lang || "en-SG",
   });
 }
 

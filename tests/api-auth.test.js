@@ -236,6 +236,7 @@ assert.deepEqual(
   {
     stage: "fall-wellbeing",
     transcript: "I cannot stand anymore",
+    locale: "en-SG",
   }
 );
 

@@ -16,18 +16,27 @@ assert.equal(parsePainLevel("I would say ten"), 10);
 assert.equal(parsePainLevel("pain level four"), 4);
 assert.equal(parsePainLevel("I feel fine"), null);
 assert.equal(parsePainLevel("17"), null);
+assert.equal(parsePainLevel("我的疼痛是七分"), 7);
+assert.equal(parsePainLevel("tahap sakit saya lapan"), 8);
+assert.equal(parsePainLevel("என் வலி ஏழு"), 7);
 
 assert.equal(parseRecoveryStatus("I feel better this week"), "better");
 assert.equal(parseRecoveryStatus("About the same"), "same");
 assert.equal(parseRecoveryStatus("It feels worse today"), "worse");
 assert.equal(parseRecoveryStatus("I am not sure"), "unsure");
 assert.equal(parseRecoveryStatus("fine"), null);
+assert.equal(parseRecoveryStatus("越来越好"), "better");
+assert.equal(parseRecoveryStatus("semakin teruk"), "worse");
+assert.equal(parseRecoveryStatus("மாற்றமில்லை"), "same");
 
 assert.equal(parseConfirmationResponse("Yes, that is correct"), "confirm");
 assert.equal(parseConfirmationResponse("Continue"), "confirm");
 assert.equal(parseConfirmationResponse("No, change my answer"), "change");
 assert.equal(parseConfirmationResponse("That is wrong"), "change");
 assert.equal(parseConfirmationResponse("maybe"), null);
+assert.equal(parseConfirmationResponse("是的，正确"), "confirm");
+assert.equal(parseConfirmationResponse("Ya, betul"), "confirm");
+assert.equal(parseConfirmationResponse("இல்லை, மாற்று"), "change");
 
 assert.equal(parsePainSafetyResponse("urgent", "No symptoms"), "no");
 assert.equal(parsePainSafetyResponse("urgent", "None"), "no");
@@ -38,6 +47,9 @@ assert.equal(
   "no"
 );
 assert.equal(parsePainSafetyResponse("urgent", "not really"), "");
+assert.equal(parsePainSafetyResponse("urgent", "没有以上情况"), "no");
+assert.equal(parsePainSafetyResponse("urgent", "Ya"), "yes");
+assert.equal(parsePainSafetyResponse("urgent", "உறுதியாக தெரியவில்லை"), "unsure");
 assert.equal(
   parsePainSafetyResponse("urgent-chest", "I have chest tightness"),
   "yes"
@@ -55,6 +67,9 @@ assert.equal(
   "yes"
 );
 assert.equal(parsePainSafetyResponse("location", "My right knee"), "knee");
+assert.equal(parsePainSafetyResponse("location", "我的膝盖"), "knee");
+assert.equal(parsePainSafetyResponse("location", "sakit di buku lali"), "ankle");
+assert.equal(parsePainSafetyResponse("location", "முதுகு வலி"), "back");
 assert.equal(parsePainSafetyResponse("side", "Both sides"), "both");
 assert.equal(
   parsePainSafetyResponse("familiarity", "My usual pain is stronger"),
@@ -71,6 +86,10 @@ assert.equal(
 );
 assert.equal(
   parsePainSafetyResponse("mobility", "It is too painful to stand"),
+  "help"
+);
+assert.equal(
+  parsePainSafetyResponse("mobility", "我不能站，需要帮助"),
   "help"
 );
 

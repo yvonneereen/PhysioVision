@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=75" />
+  <link rel="stylesheet" href="style.css?v=76" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -37,6 +37,19 @@
     </nav>
 
     <div class="header-actions">
+      <label class="language-picker">
+        <span aria-hidden="true">🌐</span>
+        <span class="language-picker-label">Language</span>
+        <select
+          data-language-selector
+          aria-label="Choose language"
+        >
+          <option value="en-SG">English</option>
+          <option value="zh-SG">华语</option>
+          <option value="ms-SG">Bahasa Melayu</option>
+          <option value="ta-SG">தமிழ்</option>
+        </select>
+      </label>
       <button
         class="text-button profile-header-button"
         id="headerSignIn"
@@ -92,6 +105,19 @@
   </header>
 
   <nav class="mobile-nav" id="mobile-nav" aria-label="Mobile navigation">
+    <label class="language-picker language-picker-mobile">
+      <span aria-hidden="true">🌐</span>
+      <span class="language-picker-label">Language</span>
+      <select
+        data-language-selector
+        aria-label="Choose language"
+      >
+        <option value="en-SG">English</option>
+        <option value="zh-SG">华语</option>
+        <option value="ms-SG">Bahasa Melayu</option>
+        <option value="ta-SG">தமிழ்</option>
+      </select>
+    </label>
     <a href="#how-it-works">How it works</a>
     <a href="#practice">Exercise guide</a>
     <a href="#library">Library</a>
@@ -140,6 +166,7 @@
       Create my plan
     </button>
   </nav>
+  <p id="languageStatus" class="sr-only" role="status" aria-live="polite"></p>
 
   <main
     class="patient-dashboard"
@@ -2623,13 +2650,14 @@
   </div>
 
   <script src="runtime-config.js"></script>
+  <script type="module" src="i18n.js?v=1"></script>
   <script type="module" src="auth.js?v=29"></script>
   <script type="module" src="ui.js?v=23"></script>
   <script type="module" src="patient-dashboard.js?v=28"></script>
   <script type="module" src="therapist.js?v=25"></script>
   <script type="module" src="exercise-library.js?v=15"></script>
-  <script type="module" src="main.js?v=84"></script>
-  <script type="module" src="agent-chat.js?v=19"></script>
+  <script type="module" src="main.js?v=85"></script>
+  <script type="module" src="agent-chat.js?v=20"></script>
   <script type="module" src="care-workflow.js?v=18"></script>
 </body>
 </html>

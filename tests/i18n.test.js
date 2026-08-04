@@ -1,0 +1,46 @@
+import assert from "node:assert/strict";
+
+import {
+  getSpeechLocale,
+  setLocale,
+  SUPPORTED_LANGUAGES,
+  translateText,
+} from "../i18n.js";
+
+assert.deepEqual(
+  SUPPORTED_LANGUAGES.map(({ code }) => code),
+  ["en-SG", "zh-SG", "ms-SG", "ta-SG"],
+  "the selector should prioritize Singapore's four official languages"
+);
+
+setLocale("zh-SG", { persist: false, announce: false });
+assert.equal(getSpeechLocale(), "zh-CN");
+assert.equal(translateText("Start camera guide"), "开始摄像头指导");
+assert.equal(
+  translateText("A patient-specific note that has no bundled translation"),
+  "A patient-specific note that has no bundled translation",
+  "untranslated clinical or user-authored text must never disappear"
+);
+assert.equal(
+  translateText("I heard that your pain is 7 out of 10. Is that correct?"),
+  "我听到您的疼痛程度是10分中的7分。正确吗？"
+);
+assert.equal(
+  translateText(
+    "Thank you. I will ask a few short questions to help check whether it is safe for you to proceed. Please stop moving and rest somewhere safe. Where are you feeling the pain?"
+  ),
+  "谢谢。我会问几个简短的问题，以确认您是否适合继续。请停止动作，并在安全的地方休息。 您哪里感到疼痛？"
+);
+
+setLocale("ms-SG", { persist: false, announce: false });
+assert.equal(getSpeechLocale(), "ms-MY");
+assert.equal(translateText("I need help"), "Saya perlukan bantuan");
+
+setLocale("ta-SG", { persist: false, announce: false });
+assert.equal(getSpeechLocale(), "ta-IN");
+assert.equal(translateText("Call 995 now"), "இப்போது 995-ஐ அழைக்கவும்");
+
+setLocale("en-SG", { persist: false, announce: false });
+assert.equal(translateText("Start camera guide"), "Start camera guide");
+
+console.log("internationalization tests passed");

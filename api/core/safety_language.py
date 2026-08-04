@@ -104,6 +104,8 @@ STAGES = {
     },
 }
 
+SUPPORTED_LOCALES = frozenset({"en-SG", "zh-SG", "ms-SG", "ta-SG"})
+
 
 def available_safety_language_stage(stage):
     return str(stage or "").strip() in STAGES
@@ -208,7 +210,7 @@ def validate_safety_language_interpretation(stage, payload):
     }
 
 
-def interpret_safety_language(stage, transcript):
+def interpret_safety_language(stage, transcript, locale="en-SG"):
     from django.conf import settings
 
     rule = STAGES.get(stage)
@@ -219,6 +221,7 @@ def interpret_safety_language(stage, transcript):
         raise ValueError("Transcript is required.")
     if not settings.GEMINI_API_KEY:
         raise SafetyLanguageUnavailable("GEMINI_API_KEY is not configured.")
+    locale = locale if locale in SUPPORTED_LOCALES else "en-SG"
 
     from google import genai
 
@@ -237,13 +240,14 @@ to a reassuring answer. Return JSON only with exactly these fields:
   "response": "one allowed response or uncertain",
   "confidence": "high, medium, or low",
   "facts": ["zero or more allowed fact labels"],
-  "summary": "short neutral paraphrase with no diagnosis"
+  "summary": "short neutral English paraphrase with no diagnosis"
 }
 """.strip()
     prompt = json.dumps({
         "question_context": rule["question"],
         "allowed_responses": list(rule["allowed"]),
         "allowed_fact_labels": sorted(FACTS),
+        "expected_transcript_locale": locale,
         "transcript": transcript,
     }, ensure_ascii=True)
     try:

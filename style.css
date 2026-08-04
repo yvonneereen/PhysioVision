@@ -119,6 +119,17 @@ textarea:focus-visible {
   transform: translateY(0);
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .site-header {
   position: absolute;
   top: 0;
@@ -224,6 +235,54 @@ textarea:focus-visible {
   align-items: center;
   justify-content: flex-end;
   gap: 17px;
+}
+
+.language-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 5px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 999px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.language-picker select {
+  min-width: 86px;
+  max-width: 132px;
+  padding: 5px 22px 5px 7px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--ink);
+  background: var(--white);
+  font: inherit;
+  cursor: pointer;
+}
+
+.site-header.is-scrolled .language-picker {
+  border-color: rgba(25, 56, 58, 0.24);
+  background: rgba(25, 56, 58, 0.06);
+}
+
+.language-picker-mobile {
+  display: none;
+}
+
+html[lang="zh-SG"] body {
+  font-family: "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+}
+
+html[lang="ta-SG"] body {
+  font-family: "Noto Sans Tamil", "Tamil Sangam MN", Latha, sans-serif;
+}
+
+html[lang="ms-SG"] body,
+html[lang="en-SG"] body {
+  font-family: var(--font-body);
 }
 
 .text-button,
@@ -6883,6 +6942,10 @@ details.metrics summary {
     display: none;
   }
 
+  .header-actions > .language-picker {
+    display: none;
+  }
+
   .menu-toggle {
     display: block;
   }
@@ -6908,6 +6971,15 @@ details.metrics summary {
     opacity: 0;
     transform: translateY(-20px);
     transition: all .25s ease;
+  }
+
+  .mobile-nav .language-picker-mobile {
+    display: flex;
+    align-self: flex-start;
+    margin-bottom: 10px;
+    color: var(--ink);
+    border-color: var(--line);
+    background: var(--soft);
   }
 
   .mobile-nav.is-open {

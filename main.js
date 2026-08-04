@@ -31,7 +31,7 @@ import {
   postPainCheckin,
   postSession,
   respondEmergencyAlert,
-} from "./api.js?v=27";
+} from "./api.js?v=28";
 import { DRAFT_EXERCISES } from "./exercises/catalog.js";
 import {
   parseConfirmationResponse,
@@ -39,7 +39,7 @@ import {
   parsePainSafetyResponse,
   parseRecoveryStatus,
   voiceGuidance,
-} from "./voice-guidance.js?v=8";
+} from "./voice-guidance.js?v=9";
 import { isWellnessEligible } from "./wellness-screening.js";
 import {
   PRACTICE_VIEWS,

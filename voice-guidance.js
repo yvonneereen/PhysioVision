@@ -1,3 +1,8 @@
+import {
+  getSpeechLocale,
+  translateText,
+} from "./i18n.js?v=1";
+
 const VOICE_PREFERENCE_KEY = "physiovision.voice.enabled.v1";
 const DEFAULT_SPEECH_VOLUME = 1;
 const MICROPHONE_RELEASE_SETTLE_MS = 1200;
@@ -30,39 +35,98 @@ const NUMBER_WORDS = Object.freeze({
   ten: 10,
 });
 
+const LOCALIZED_NUMBER_WORDS = Object.freeze({
+  "零": 0,
+  "〇": 0,
+  "一": 1,
+  "二": 2,
+  "两": 2,
+  "三": 3,
+  "四": 4,
+  "五": 5,
+  "六": 6,
+  "七": 7,
+  "八": 8,
+  "九": 9,
+  "十": 10,
+  kosong: 0,
+  sifar: 0,
+  satu: 1,
+  dua: 2,
+  tiga: 3,
+  empat: 4,
+  lima: 5,
+  enam: 6,
+  tujuh: 7,
+  lapan: 8,
+  sembilan: 9,
+  sepuluh: 10,
+  "பூஜ்ஜியம்": 0,
+  "சுழியம்": 0,
+  "ஒன்று": 1,
+  "இரண்டு": 2,
+  "மூன்று": 3,
+  "நான்கு": 4,
+  "ஐந்து": 5,
+  "ஆறு": 6,
+  "ஏழு": 7,
+  "எட்டு": 8,
+  "ஒன்பது": 9,
+  "பத்து": 10,
+});
+
 function normalizeSpeech(transcript) {
   return String(transcript ?? "")
     .trim()
     .toLowerCase()
     .replace(/[’]/g, "'")
-    .replace(/[^a-z0-9'\s]/g, " ")
+    .replace(/[^\p{L}\p{M}\p{N}'\s]/gu, " ")
     .replace(/\s+/g, " ");
 }
 
 export function parsePainLevel(transcript) {
-  const text = String(transcript ?? "").trim().toLowerCase();
+  const text = String(transcript ?? "").normalize("NFKC").trim().toLowerCase();
   const digitMatch = text.match(/(?:^|\D)(10|[0-9])(?:\D|$)/);
   if (digitMatch) return Number(digitMatch[1]);
 
-  const words = text.replace(/[^a-z\s]/g, " ").split(/\s+/);
+  const words = text.replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ").split(/\s+/);
   for (const word of words) {
     if (Object.hasOwn(NUMBER_WORDS, word)) return NUMBER_WORDS[word];
+    if (Object.hasOwn(LOCALIZED_NUMBER_WORDS, word)) {
+      return LOCALIZED_NUMBER_WORDS[word];
+    }
+  }
+  const chineseNumber = text.match(/[零〇一二两三四五六七八九十]/)?.[0];
+  if (chineseNumber && Object.hasOwn(LOCALIZED_NUMBER_WORDS, chineseNumber)) {
+    return LOCALIZED_NUMBER_WORDS[chineseNumber];
   }
   return null;
 }
 
 export function parseRecoveryStatus(transcript) {
   const text = String(transcript ?? "").trim().toLowerCase();
-  if (/\b(better|improving|improved|stronger|recovering well)\b/.test(text)) {
+  if (
+    /\b(better|improving|improved|stronger|recovering well)\b/.test(text)
+    || /(好转|好多了|改善|越来越好|semakin baik|lebih baik|pulih|மேம்பட்ட|நன்றாக)/u.test(text)
+  ) {
     return "better";
   }
-  if (/\b(worse|declining|more painful|not as good)\b/.test(text)) {
+  if (
+    /\b(worse|declining|more painful|not as good)\b/.test(text)
+    || /(更糟|更痛|恶化|semakin teruk|lebih teruk|lebih sakit|மோச|அதிக வலி)/u.test(text)
+  ) {
     return "worse";
   }
-  if (/\b(same|similar|unchanged|no change|about the same)\b/.test(text)) {
+  if (
+    /\b(same|similar|unchanged|no change|about the same)\b/.test(text)
+    || /(一样|差不多|没变化|没有变化|sama|tiada perubahan|அதே|மாற்றமில்லை)/u.test(text)
+  ) {
     return "same";
   }
-  if (/\b(unsure|not sure|don't know|do not know)\b/.test(text)) {
+  if (
+    /\b(unsure|not sure|don't know|do not know)\b/.test(text)
+    || /(不确定|不知道|tidak pasti|tak pasti|tidak tahu|tak tahu|தெரியவில்லை|உறுதியாகத் தெரியவில்லை)/u.test(text)
+  ) {
     return "unsure";
   }
   return null;
@@ -72,12 +136,14 @@ export function parseConfirmationResponse(transcript) {
   const text = String(transcript ?? "").trim().toLowerCase();
   if (
     /\b(change|incorrect|wrong|try again|start again|go back)\b/.test(text) ||
-    /^(no|nope)\b/.test(text)
+    /^(no|nope)\b/.test(text) ||
+    /(更改|修改|不对|错误|重来|不是|tukar|ubah|salah|tidak betul|cuba lagi|மாற்று|தவறு|மீண்டும்|இல்லை)/u.test(text)
   ) {
     return "change";
   }
   if (
     /\b(yes|correct|confirm|continue|that's right|that is right|right answer)\b/.test(text)
+    || /(是的|正确|对的|没错|确认|ya|betul|tepat|sahkan|teruskan|ஆம்|சரி|உறுதி)/u.test(text)
   ) {
     return "confirm";
   }
@@ -98,7 +164,16 @@ export function parsePainSafetyResponse(stage, transcript) {
         "unsure",
         "i don't know",
         "i do not know",
-        "maybe"
+        "maybe",
+        "不确定",
+        "不知道",
+        "也许",
+        "tidak pasti",
+        "tak pasti",
+        "tidak tahu",
+        "mungkin",
+        "தெரியவில்லை",
+        "உறுதியாக தெரியவில்லை"
       )
     ) {
       return "unsure";
@@ -112,7 +187,12 @@ export function parsePainSafetyResponse(stage, transcript) {
           "i don't have",
           "i am not experiencing",
           "i'm not experiencing",
-          "breathing is normal"
+          "breathing is normal",
+          "没有",
+          "不是",
+          "tiada",
+          "tidak",
+          "இல்லை"
         );
       if (focusedNegative) return "no";
 
@@ -125,6 +205,13 @@ export function parsePainSafetyResponse(stage, transcript) {
           "tight chest",
           "squeezing",
           "heaviness",
+          "胸口受压",
+          "胸痛",
+          "胸闷",
+          "tekanan dada",
+          "sakit dada",
+          "மார்பு அழுத்தம்",
+          "மார்பு வலி",
         ],
         "urgent-breathing": [
           "yes",
@@ -135,6 +222,12 @@ export function parsePainSafetyResponse(stage, transcript) {
           "can't breathe",
           "hard to breathe",
           "difficulty breathing",
+          "呼吸困难",
+          "呼吸急促",
+          "sesak nafas",
+          "sukar bernafas",
+          "மூச்சுத்திணறல்",
+          "சுவாசிக்க சிரமம்",
         ],
         "urgent-neurologic": [
           "yes",
@@ -147,8 +240,21 @@ export function parsePainSafetyResponse(stage, transcript) {
           "weak",
           "numb",
           "numbness",
+          "头晕",
+          "晕眩",
+          "无力",
+          "麻木",
+          "pening",
+          "hendak pitam",
+          "lemah",
+          "kebas",
+          "தலைச்சுற்றல்",
+          "மயக்கம்",
+          "பலவீனம்",
+          "உணர்வின்மை",
         ],
       };
+      if (includesAny("是", "有", "ya", "ஆம்")) return "yes";
       if (includesAny(...(focusedTerms[stage] ?? []))) return "yes";
       return "";
     }
@@ -165,7 +271,18 @@ export function parsePainSafetyResponse(stage, transcript) {
         "i am okay",
         "i'm okay",
         "i feel okay",
-        "no symptoms"
+        "no symptoms",
+        "没有",
+        "没有以上情况",
+        "都没有",
+        "没有这些症状",
+        "tiada satu pun",
+        "tiada gejala",
+        "tiada",
+        "tidak",
+        "எதுவுமில்லை",
+        "இந்த அறிகுறிகள் இல்லை",
+        "இல்லை"
       )
     ) {
       return "no";
@@ -173,6 +290,10 @@ export function parsePainSafetyResponse(stage, transcript) {
     if (
       includesAny(
         "yes",
+        "是",
+        "有",
+        "ya",
+        "ஆம்",
         "chest",
         "shortness of breath",
         "cannot breathe",
@@ -184,7 +305,23 @@ export function parsePainSafetyResponse(stage, transcript) {
         "numb",
         "fell",
         "fallen",
-        "fall"
+        "fall",
+        "胸口",
+        "胸痛",
+        "呼吸困难",
+        "头晕",
+        "麻木",
+        "跌倒",
+        "tekanan dada",
+        "sesak nafas",
+        "pening",
+        "kebas",
+        "jatuh",
+        "மார்பு",
+        "மூச்சுத்திணறல்",
+        "தலைச்சுற்றல்",
+        "உணர்வின்மை",
+        "விழுந்த"
       )
     ) {
       return "yes";
@@ -193,42 +330,42 @@ export function parsePainSafetyResponse(stage, transcript) {
   }
 
   if (stage === "location") {
-    if (includesAny("knee", "knees")) return "knee";
-    if (includesAny("hip", "hips")) return "hip";
-    if (includesAny("ankle", "ankles", "foot", "feet")) return "ankle";
-    if (includesAny("back", "spine")) return "back";
-    if (includesAny("shoulder", "shoulders", "arm", "arms")) return "shoulder";
-    if (includesAny("other", "somewhere else")) return "other";
+    if (includesAny("knee", "knees", "膝盖", "lutut", "முழங்கால்")) return "knee";
+    if (includesAny("hip", "hips", "髋部", "pinggul", "இடுப்பு")) return "hip";
+    if (includesAny("ankle", "ankles", "foot", "feet", "脚踝", "脚", "buku lali", "kaki", "கணுக்கால்", "பாதம்")) return "ankle";
+    if (includesAny("back", "spine", "背部", "belakang", "முதுகு")) return "back";
+    if (includesAny("shoulder", "shoulders", "arm", "arms", "肩膀", "手臂", "bahu", "lengan", "தோள்", "கை")) return "shoulder";
+    if (includesAny("other", "somewhere else", "其他", "lain", "வேறு")) return "other";
     return "";
   }
 
   if (stage === "side") {
-    if (includesAny("both", "either side", "both sides")) return "both";
-    if (includesAny("left")) return "left";
-    if (includesAny("right")) return "right";
-    if (includesAny("not sure", "unsure", "i don't know", "i do not know")) {
+    if (includesAny("both", "either side", "both sides", "两侧", "两边", "kedua-dua", "இரு பக்க")) return "both";
+    if (includesAny("left", "左", "kiri", "இடது")) return "left";
+    if (includesAny("right", "右", "kanan", "வலது")) return "right";
+    if (includesAny("not sure", "unsure", "i don't know", "i do not know", "不确定", "tidak pasti", "தெரியவில்லை")) {
       return "unsure";
     }
     return "";
   }
 
   if (stage === "familiarity") {
-    if (includesAny("usual", "familiar", "same pain", "stronger")) {
+    if (includesAny("usual", "familiar", "same pain", "stronger", "平时", "更强", "biasa", "lebih kuat", "வழக்கமான", "அதிக")) {
       return "usual-stronger";
     }
-    if (includesAny("different", "not the same")) return "different";
-    if (includesAny("new", "never felt")) return "new";
-    if (includesAny("not sure", "unsure", "i don't know", "i do not know")) {
+    if (includesAny("different", "not the same", "不同", "berbeza", "வேறுபட்ட")) return "different";
+    if (includesAny("new", "never felt", "新的", "baharu", "புதிய")) return "new";
+    if (includesAny("not sure", "unsure", "i don't know", "i do not know", "不确定", "tidak pasti", "தெரியவில்லை")) {
       return "unsure";
     }
     return "";
   }
 
   if (stage === "timing") {
-    if (includesAny("before", "already hurting")) return "before";
-    if (includesAny("during", "while exercising", "while moving")) return "during";
-    if (includesAny("after", "when i finished", "when I finished")) return "after";
-    if (includesAny("not sure", "unsure", "i don't know", "i do not know")) {
+    if (includesAny("before", "already hurting", "开始前", "sebelum", "முன்")) return "before";
+    if (includesAny("during", "while exercising", "while moving", "运动时", "semasa", "போது")) return "during";
+    if (includesAny("after", "when i finished", "when I finished", "结束后", "selepas", "பிறகு")) return "after";
+    if (includesAny("not sure", "unsure", "i don't know", "i do not know", "不确定", "tidak pasti", "தெரியவில்லை")) {
       return "unsure";
     }
     return "";
@@ -251,15 +388,27 @@ export function parsePainSafetyResponse(stage, transcript) {
         "too painful",
         "so painful",
         "need help",
-        "unable"
+        "unable",
+        "不能站",
+        "无法移动",
+        "需要帮助",
+        "太痛",
+        "tidak boleh berdiri",
+        "tidak boleh bergerak",
+        "perlukan bantuan",
+        "terlalu sakit",
+        "நிற்க முடியாது",
+        "நகர முடியாது",
+        "உதவி தேவை",
+        "மிகவும் வலி"
       )
     ) {
       return "help";
     }
-    if (includesAny("someone nearby", "need someone", "with assistance")) {
+    if (includesAny("someone nearby", "need someone", "with assistance", "有人在旁边", "seseorang berdekatan", "அருகில் ஒருவர்")) {
       return "nearby";
     }
-    if (includesAny("yes", "safely", "i can move", "i am safe")) return "safe";
+    if (includesAny("yes", "safely", "i can move", "i am safe", "可以", "安全", "ya", "selamat", "boleh bergerak", "ஆம்", "பாதுகாப்பாக", "நகர முடியும்")) return "safe";
     return "";
   }
 
@@ -358,8 +507,7 @@ export class VoiceGuidance {
     this.voiceSelectionLocked = false;
     this.refreshPreferredVoice = () => {
       if (this.voiceSelectionLocked) return this.preferredVoice;
-      const language =
-        this.window?.document?.documentElement?.lang || "en-US";
+      const language = getSpeechLocale();
       this.preferredVoice = selectGentleVoice(
         this.synthesis?.getVoices?.() ?? [],
         language
@@ -371,6 +519,13 @@ export class VoiceGuidance {
       "voiceschanged",
       this.refreshPreferredVoice
     );
+    this.window?.addEventListener?.("physiovision:language-change", (event) => {
+      this.voiceSelectionLocked = false;
+      this.preferredVoice = selectGentleVoice(
+        this.synthesis?.getVoices?.() ?? [],
+        event.detail?.speechLocale || getSpeechLocale()
+      );
+    });
   }
 
   get canSpeak() {
@@ -488,7 +643,7 @@ export class VoiceGuidance {
     pitch = null,
     volume = DEFAULT_SPEECH_VOLUME,
   } = {}) {
-    const message = prepareGentleSpeech(text);
+    const message = prepareGentleSpeech(translateText(text));
     if (!message || !this.enabled || !this.canSpeak) return false;
 
     const now = Date.now();
@@ -503,8 +658,7 @@ export class VoiceGuidance {
     this.voiceSelectionLocked = true;
     utterance.lang =
       this.preferredVoice?.lang ||
-      this.window.document?.documentElement?.lang ||
-      "en-US";
+      getSpeechLocale();
     const naturalProsody = conversationalProsody(message);
     const requestedRate = rate === null || rate === undefined
       ? naturalProsody.rate
@@ -557,12 +711,7 @@ export class VoiceGuidance {
     this.synthesis?.cancel();
     const schedule = this.window?.setTimeout?.bind(this.window)
       ?? globalThis.setTimeout;
-    const browserLanguage = this.window?.navigator?.language ?? "";
-    const documentLanguage =
-      this.window?.document?.documentElement?.lang || "en-SG";
-    const recognitionLanguage = /^en(?:-|$)/i.test(browserLanguage)
-      ? browserLanguage
-      : documentLanguage;
+    const recognitionLanguage = getSpeechLocale();
     const allowedRetries = Math.max(0, Number(maxNoSpeechRetries) || 0);
     let retryCount = 0;
     let sessionComplete = false;

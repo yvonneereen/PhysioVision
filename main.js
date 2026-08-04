@@ -38,7 +38,7 @@ import {
   parsePainSafetyResponse,
   parseRecoveryStatus,
   voiceGuidance,
-} from "./voice-guidance.js?v=4";
+} from "./voice-guidance.js?v=5";
 import { isWellnessEligible } from "./wellness-screening.js";
 import {
   PRACTICE_VIEWS,
@@ -48,8 +48,9 @@ import {
 import {
   FallMonitor,
   fallMonitoringReadiness,
+  parseWellbeingClarificationResponse,
   parseWellbeingResponse,
-} from "./fall-monitoring.js?v=3";
+} from "./fall-monitoring.js?v=4";
 
 let PoseLandmarker;
 let HandLandmarker;
@@ -308,7 +309,9 @@ let fallSafetySecondsRemaining = FALL_SAFETY_COUNTDOWN_SECONDS;
 let fallSafetyPreviousFocus = null;
 let activeFallEvent = null;
 let activeFallAlertPromise = null;
+let fallSafetyClarificationMode = "";
 let handsFreeVoiceEnabled = false;
+const VOICE_LISTENING_ARM_DELAY_MS = 400;
 let voiceModeChosenThisSession = false;
 let voiceModeChoicePromise = null;
 let resolveVoiceModeChoice = null;
@@ -320,6 +323,10 @@ const exerciseContent = new Map(
 );
 
 voiceGuidance.attachToggle(soundToggle);
+
+function armVoiceListening(callback) {
+  window.setTimeout(callback, VOICE_LISTENING_ARM_DELAY_MS);
+}
 
 function finishVoiceModeChoice(handsFree) {
   handsFreeVoiceEnabled = Boolean(handsFree);
@@ -624,6 +631,7 @@ async function submitFallEmergencyResponse(response) {
 
 function showFallSafetyResult(response, event = {}) {
   clearFallSafetyTimer();
+  fallSafetyClarificationMode = "";
   recordLocalSafetyIncident(response, event);
   deactivateCameraGuide({
     statusMessage: "Exercise stopped for a safety check",
@@ -679,6 +687,54 @@ function showFallSafetyResult(response, event = {}) {
     .focus({ preventScroll: true });
 }
 
+function requestFallSafetyOkayClarification() {
+  fallSafetyClarificationMode = "confirm-okay";
+  const clarification =
+    "I heard that you may not need help. To make sure, are you okay and able "
+    + "to move safely? Say yes, I’m okay, or say no, I need help.";
+  fallSafetyVoiceStatus.textContent = clarification;
+  const listenAfterQuestion = () => {
+    if (
+      safetyCheckActive &&
+      fallSafetyClarificationMode === "confirm-okay" &&
+      !fallSafetyQuestion.classList.contains("hidden")
+    ) {
+      startFallSafetyVoiceListening();
+    }
+  };
+  const spoken = voiceGuidance.speak(clarification, {
+    key: "possible-fall-clarify-okay",
+    interrupt: true,
+    onEnd: () => armVoiceListening(listenAfterQuestion),
+  });
+  if (!spoken) window.setTimeout(listenAfterQuestion, 200);
+}
+
+function requestFallSafetyUnknownClarification(transcript) {
+  fallSafetyVoiceStatus.textContent =
+    `I heard: “${transcript}”, but I could not tell whether you are safe. `
+    + "Tell me what happened, whether you can stand or move, and how much pain you feel.";
+  const listenAfterQuestion = () => {
+    if (
+      safetyCheckActive &&
+      !fallSafetyQuestion.classList.contains("hidden")
+    ) {
+      startFallSafetyVoiceListening();
+    }
+  };
+  const spoken = voiceGuidance.speak(
+    "I could not tell whether you are safe. Tell me what happened, whether you "
+    + "can stand or move, and how much pain you feel. You can also use one of "
+    + "the large buttons.",
+    {
+      key: "possible-fall-clarify-unknown",
+      interrupt: true,
+      onEnd: () => armVoiceListening(listenAfterQuestion),
+    }
+  );
+  if (!spoken) window.setTimeout(listenAfterQuestion, 200);
+}
+
 function startFallSafetyVoiceListening() {
   if (!safetyCheckActive || fallSafetyQuestion.classList.contains("hidden")) {
     return false;
@@ -692,13 +748,16 @@ function startFallSafetyVoiceListening() {
         `${message} You can also use one of the two large buttons.`;
     },
     onResult: (transcript) => {
-      const response = parseWellbeingResponse(transcript);
+      const response = fallSafetyClarificationMode === "confirm-okay"
+        ? parseWellbeingClarificationResponse(transcript)
+        : parseWellbeingResponse(transcript);
       fallSafetyVoiceStatus.textContent = `I heard: “${transcript}”`;
-      if (response) {
+      if (response === "okay" || response === "help") {
         showFallSafetyResult(response, activeFallEvent ?? {});
+      } else if (response === "confirm-okay") {
+        requestFallSafetyOkayClarification();
       } else {
-        fallSafetyVoiceStatus.textContent =
-          `I heard: “${transcript}”. Please say “I’m okay” or “I need help”, or use a large button.`;
+        requestFallSafetyUnknownClarification(transcript);
       }
     },
   });
@@ -707,6 +766,7 @@ function startFallSafetyVoiceListening() {
 function beginFallSafetyCheck(event) {
   if (safetyCheckActive) return;
   safetyCheckActive = true;
+  fallSafetyClarificationMode = "";
   activeFallEvent = event;
   fallSafetyPreviousFocus = document.activeElement;
   clearHoldTimer(activeDose(engine.exercise).holdSeconds);
@@ -724,9 +784,9 @@ function beginFallSafetyCheck(event) {
   fallSafetyCountdownLabel.textContent =
     "seconds to answer before the safety check escalates";
   fallSafetyVoiceStatus.textContent = handsFreeVoiceEnabled
-    ? "Hands-free voice is on. Listening will start after the question."
+    ? "Hands-free voice is on. Answer naturally after the question."
     : voiceGuidance.canListen
-      ? "Use a large button, or choose Answer by voice as a fallback."
+      ? "You can answer naturally by voice, or use a large button."
     : "Voice input is unavailable in this browser. Use a large button.";
   fallSafetyVoice.disabled = !voiceGuidance.canListen;
   fallSafetySecondsRemaining = FALL_SAFETY_COUNTDOWN_SECONDS;
@@ -737,14 +797,16 @@ function beginFallSafetyCheck(event) {
   fallSafetyOkay.focus({ preventScroll: true });
 
   const spoken = voiceGuidance.speak(
-    "We noticed a possible fall and stopped the exercise. Are you okay? Select I’m okay or I need help.",
+    "We noticed a possible fall and stopped the exercise. Are you okay? Tell me how you feel, or use one of the large buttons.",
     {
       key: "possible-fall-check",
       interrupt: true,
       onEnd: () => {
-        if (handsFreeVoiceEnabled && safetyCheckActive) {
-          startFallSafetyVoiceListening();
-        }
+        armVoiceListening(() => {
+          if (handsFreeVoiceEnabled && safetyCheckActive) {
+            startFallSafetyVoiceListening();
+          }
+        });
       },
     }
   );
@@ -794,6 +856,7 @@ function closeFallSafetyCheck() {
   fallSafetyPreviousFocus = null;
   activeFallEvent = null;
   activeFallAlertPromise = null;
+  fallSafetyClarificationMode = "";
 }
 
 function processFallMonitoring(landmarks, timestampMs) {
@@ -3624,7 +3687,7 @@ function speakPainPrompt(question, key, expectedStage) {
   const spoken = voiceGuidance.speak(question, {
     key,
     interrupt: true,
-    onEnd: beginListening,
+    onEnd: () => armVoiceListening(beginListening),
   });
   if (!spoken && handsFreeVoiceEnabled) {
     window.setTimeout(beginListening, 200);

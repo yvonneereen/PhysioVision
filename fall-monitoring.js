@@ -212,26 +212,71 @@ function poseMovement(previous, current) {
   return average(points.map((key) => distance(previous[key], current[key])));
 }
 
-export function parseWellbeingResponse(transcript) {
-  const normalized = String(transcript ?? "")
+function normalizeWellbeingSpeech(transcript) {
+  return String(transcript ?? "")
     .toLowerCase()
     .replace(/[’']/g, "")
     .replace(/[^a-z\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
 
+export function parseWellbeingResponse(transcript) {
+  const normalized = normalizeWellbeingSpeech(transcript);
   if (!normalized) return null;
+
+  const strongDistress = [
+    /\b(cannot|cant|unable to|struggling to) (stand|stand up|get up|move|walk|breathe|catch my breath)\b/,
+    /\b(so|very|really|too|extremely|unbearably|severely) (painful|sore|hurt|hurting)\b/,
+    /\b(severe|terrible|unbearable|excruciating|intense) pain\b/,
+    /\b(hurts|hurting) (a lot|bad|badly|so much)\b/,
+    /\b(chest pressure|chest pain|short of breath|breathless|difficulty breathing)\b/,
+    /\b(dizzy|dizziness|faint|fainting|weakness|numb|numbness|confused|bleeding)\b/,
+    /\b(i fell|ive fallen|on the floor|im stuck|something is wrong)\b/,
+    /\b(call|contact|get|send|bring|fetch) (an ambulance|someone|somebody|my family|my daughter|my son|my contact|a doctor|help)\b/,
+  ].some((pattern) => pattern.test(normalized));
+  if (strongDistress) return "help";
+
   if (
-    /\b(help|need help|hurt|injured|cannot move|cant move|not okay|not ok)\b/.test(
+    /\b(no need|dont need help|do not need help|no help needed|leave me alone|dont call anyone|do not call anyone)\b/.test(
       normalized
     )
   ) {
-    return "help";
+    return "confirm-okay";
   }
-  if (
-    /\b(im okay|i am okay|im ok|i am ok|okay|ok|im fine|i am fine|fine|all good)\b/.test(
+
+  const explicitlyUnhurt =
+    /\b(im not hurt|i am not hurt|im not injured|i am not injured|no pain|nothing hurts)\b/.test(
       normalized
-    )
+    );
+  const clearlyOkay =
+    /\b(im okay|i am okay|im ok|i am ok|okay|ok|im fine|i am fine|fine|im alright|i am alright|all right|all good|no problem|nothing happened|false alarm|i can get up|i can stand|i can move|not hurt|not injured|no pain)\b/.test(
+      normalized
+    ) || /^(yes|yeah|yep|correct)\b/.test(normalized);
+  const bareNegative =
+    /^(no|nope|definitely not)\b/.test(normalized)
+    && !/^(no problem|no pain)\b/.test(normalized);
+  const clearlyNeedsHelp =
+    (
+      !explicitlyUnhurt
+      && /\b(help|need help|hurt|hurting|injured|pain|painful|cannot move|cant move|not okay|not ok|not fine|not alright)\b/.test(
+        normalized
+      )
+    ) || bareNegative;
+
+  // When a response contains reassuring and concerning language, use the
+  // safer interpretation. Example: “I’m okay, but I cannot stand.”
+  if (clearlyNeedsHelp) return "help";
+  if (clearlyOkay) return "okay";
+  return null;
+}
+
+export function parseWellbeingClarificationResponse(transcript) {
+  const response = parseWellbeingResponse(transcript);
+  if (response === "okay" || response === "help") return response;
+  if (
+    response === "confirm-okay"
+    && /^(yes|yeah|yep|correct)\b/.test(normalizeWellbeingSpeech(transcript))
   ) {
     return "okay";
   }

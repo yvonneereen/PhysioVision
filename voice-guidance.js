@@ -337,6 +337,7 @@ export class VoiceGuidance {
     this.enabled = browserWindow ? readStoredPreference(browserWindow) : false;
     this.lastSpoken = new Map();
     this.activeRecognition = null;
+    this.listeningGeneration = 0;
     this.preferredVoice = null;
     this.voiceSelectionLocked = false;
     this.refreshPreferredVoice = () => {
@@ -467,6 +468,7 @@ export class VoiceGuidance {
   }
 
   cancel() {
+    this.listeningGeneration += 1;
     this.synthesis?.cancel();
     if (this.activeRecognition) {
       this.activeRecognition.abort();
@@ -474,84 +476,208 @@ export class VoiceGuidance {
     }
   }
 
-  listen({ onResult, onError, onStatus } = {}) {
+  listen({
+    onResult,
+    onError,
+    onStatus,
+    maxNoSpeechRetries = 1,
+    retryDelayMs = 350,
+  } = {}) {
     if (!this.canListen) {
       onError?.("Speech input is not supported in this browser. Use the buttons instead.");
       return false;
     }
 
+    this.listeningGeneration += 1;
+    const listeningGeneration = this.listeningGeneration;
     this.activeRecognition?.abort();
     this.synthesis?.cancel();
-    const recognition = new this.Recognition();
-    recognition.lang = this.window.document?.documentElement?.lang || "en-US";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    recognition.continuous = false;
-    this.activeRecognition = recognition;
-    let pendingTranscript = null;
-    let resultDelivered = false;
-    let resultFallbackTimer = null;
-    let settlingRecognizedResult = false;
     const schedule = this.window?.setTimeout?.bind(this.window)
       ?? globalThis.setTimeout;
-    const clearScheduled = this.window?.clearTimeout?.bind(this.window)
-      ?? globalThis.clearTimeout;
-    const clearResultFallback = () => {
-      if (resultFallbackTimer === null) return;
-      clearScheduled(resultFallbackTimer);
-      resultFallbackTimer = null;
-    };
-    const deliverRecognizedResult = () => {
-      if (resultDelivered || pendingTranscript === null) return;
-      resultDelivered = true;
-      const transcript = pendingTranscript;
-      pendingTranscript = null;
-      onResult?.(transcript);
-    };
+    const browserLanguage = this.window?.navigator?.language ?? "";
+    const documentLanguage =
+      this.window?.document?.documentElement?.lang || "en-SG";
+    const recognitionLanguage = /^en(?:-|$)/i.test(browserLanguage)
+      ? browserLanguage
+      : documentLanguage;
+    const allowedRetries = Math.max(0, Number(maxNoSpeechRetries) || 0);
+    let retryCount = 0;
+    let sessionComplete = false;
 
-    recognition.addEventListener("start", () => onStatus?.("Listening…"));
-    recognition.addEventListener("result", (event) => {
-      pendingTranscript = event.results?.[0]?.[0]?.transcript?.trim() ?? "";
-      settlingRecognizedResult = true;
-      clearResultFallback();
-      resultFallbackTimer = schedule(() => {
-        if (this.activeRecognition === recognition) {
-          this.activeRecognition = null;
-          try {
-            recognition.abort();
-          } catch (_) {
-            // The recognizer may already have stopped while Safari catches up.
+    const isCurrentSession = () =>
+      !sessionComplete && this.listeningGeneration === listeningGeneration;
+
+    const startAttempt = () => {
+      if (!isCurrentSession()) return;
+
+      const recognition = new this.Recognition();
+      recognition.lang = recognitionLanguage;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 3;
+      recognition.continuous = false;
+      this.activeRecognition = recognition;
+
+      let pendingTranscript = "";
+      let pendingAlternatives = [];
+      let resultDelivered = false;
+      let retryScheduled = false;
+      let recognizerStoppedForResult = false;
+
+      const extractResult = (event) => {
+        const results = event?.results;
+        if (!results?.length) {
+          return { transcript: "", alternatives: [], isFinal: false };
+        }
+
+        const parts = [];
+        const alternatives = [];
+        let isFinal = false;
+        for (let index = 0; index < results.length; index += 1) {
+          const result = results[index];
+          const primary = result?.[0]?.transcript?.trim() ?? "";
+          if (primary) parts.push(primary);
+          isFinal ||= result?.isFinal !== false;
+          for (let choice = 0; choice < (result?.length ?? 0); choice += 1) {
+            const alternative = result[choice]?.transcript?.trim() ?? "";
+            if (alternative && !alternatives.includes(alternative)) {
+              alternatives.push(alternative);
+            }
           }
         }
-        schedule(deliverRecognizedResult, 0);
-      }, 450);
-      try {
-        recognition.stop();
-      } catch (_) {
-        clearResultFallback();
+        const transcript = parts.join(" ").trim();
+        if (transcript && !alternatives.includes(transcript)) {
+          alternatives.unshift(transcript);
+        }
+        return { transcript, alternatives, isFinal };
+      };
+
+      const deliverRecognizedResult = () => {
+        if (
+          resultDelivered ||
+          !pendingTranscript ||
+          this.listeningGeneration !== listeningGeneration
+        ) {
+          return;
+        }
+        resultDelivered = true;
+        sessionComplete = true;
         if (this.activeRecognition === recognition) {
           this.activeRecognition = null;
         }
-        schedule(deliverRecognizedResult, 0);
+        onResult?.(pendingTranscript, pendingAlternatives);
+      };
+
+      const retryOrFail = (message) => {
+        if (!isCurrentSession() || retryScheduled || resultDelivered) return;
+        if (pendingTranscript) {
+          deliverRecognizedResult();
+          return;
+        }
+        if (retryCount < allowedRetries) {
+          retryCount += 1;
+          retryScheduled = true;
+          if (this.activeRecognition === recognition) {
+            this.activeRecognition = null;
+          }
+          onStatus?.(
+            "I didn’t hear an answer. Listening again — speak normally near your device."
+          );
+          schedule(startAttempt, Math.max(0, Number(retryDelayMs) || 0));
+          return;
+        }
+        sessionComplete = true;
+        if (this.activeRecognition === recognition) {
+          this.activeRecognition = null;
+        }
+        onError?.(message);
+      };
+
+      recognition.addEventListener("start", () => {
+        if (!isCurrentSession()) return;
+        onStatus?.(
+          retryCount > 0
+            ? "Listening again… Speak normally near your device."
+            : "Listening… Speak normally near your device."
+        );
+      });
+      recognition.addEventListener("result", (event) => {
+        if (!isCurrentSession()) return;
+        const result = extractResult(event);
+        if (result.transcript) {
+          pendingTranscript = result.transcript;
+          pendingAlternatives = result.alternatives;
+        }
+        if (!result.isFinal) {
+          onStatus?.(
+            pendingTranscript
+              ? `I can hear you: “${pendingTranscript}” — keep speaking.`
+              : "Listening… Speak normally near your device."
+          );
+          return;
+        }
+
+        recognizerStoppedForResult = true;
+        try {
+          recognition.stop();
+        } catch (_) {
+          deliverRecognizedResult();
+        }
+        // Safari may not always dispatch `end` promptly after a final result.
+        schedule(deliverRecognizedResult, 450);
+      });
+      recognition.addEventListener("nomatch", () => {
+        retryOrFail(
+          "I did not understand that. Please try again or use the buttons."
+        );
+      });
+      recognition.addEventListener("error", (event) => {
+        if (
+          this.listeningGeneration !== listeningGeneration ||
+          (recognizerStoppedForResult && event.error === "aborted")
+        ) {
+          return;
+        }
+        if (event.error === "no-speech") {
+          retryOrFail(
+            "I could not hear an answer. Please try again or use the buttons."
+          );
+          return;
+        }
+        sessionComplete = true;
+        if (this.activeRecognition === recognition) {
+          this.activeRecognition = null;
+        }
+        const message = event.error === "not-allowed"
+          ? "Microphone access was not allowed. Use the buttons or allow microphone access."
+          : event.error === "audio-capture"
+            ? "No working microphone was found. Check your microphone or use the buttons."
+            : "Speech recognition stopped. Please try again or use the buttons.";
+        onError?.(message);
+      });
+      recognition.addEventListener("end", () => {
+        if (this.listeningGeneration !== listeningGeneration) return;
+        if (this.activeRecognition === recognition) {
+          this.activeRecognition = null;
+        }
+        if (pendingTranscript) {
+          deliverRecognizedResult();
+        } else if (!retryScheduled && !sessionComplete) {
+          retryOrFail(
+            "I could not hear an answer. Please try again or use the buttons."
+          );
+        }
+      });
+
+      try {
+        recognition.start();
+      } catch (_) {
+        retryOrFail(
+          "Speech recognition could not start. Please try again or use the buttons."
+        );
       }
-    });
-    recognition.addEventListener("nomatch", () => {
-      onError?.("I did not understand that. Please try again or use the buttons.");
-    });
-    recognition.addEventListener("error", (event) => {
-      if (settlingRecognizedResult && event.error === "aborted") return;
-      clearResultFallback();
-      const message = event.error === "not-allowed"
-        ? "Microphone access was not allowed. Use the buttons or allow microphone access."
-        : "I could not hear an answer. Please try again or use the buttons.";
-      onError?.(message);
-    });
-    recognition.addEventListener("end", () => {
-      if (this.activeRecognition === recognition) this.activeRecognition = null;
-      clearResultFallback();
-      deliverRecognizedResult();
-    });
-    recognition.start();
+    };
+
+    startAttempt();
     return true;
   }
 }

@@ -176,11 +176,13 @@ assert.equal(delayedSpoken[1].voice, gentleVoice);
 assert.equal(delayedSpoken[1].volume, 1);
 
 let activeRecognitionInstance = null;
+const recognitionInstances = [];
 class MockRecognition {
   constructor() {
     this.listeners = {};
     this.stopCalled = false;
     activeRecognitionInstance = this;
+    recognitionInstances.push(this);
   }
 
   addEventListener(event, callback) {
@@ -205,10 +207,21 @@ class MockRecognition {
       results: [[{ transcript }]],
     });
   }
+
+  emitInterimResult(transcript) {
+    const result = [{ transcript }];
+    result.isFinal = false;
+    this.listeners.result?.({ results: [result] });
+  }
+
+  emitError(error) {
+    this.listeners.error?.({ error });
+  }
 }
 
 const listeningWindow = {
   ...mockWindow,
+  navigator: { language: "en-SG" },
   SpeechRecognition: MockRecognition,
 };
 const listeningGuidance = new VoiceGuidance(listeningWindow);
@@ -226,10 +239,47 @@ assert.equal(
   }),
   true
 );
+assert.equal(activeRecognitionInstance.interimResults, true);
+assert.equal(activeRecognitionInstance.maxAlternatives, 3);
+assert.equal(activeRecognitionInstance.lang, "en-SG");
 activeRecognitionInstance.emitResult("None");
 assert.equal(activeRecognitionInstance.stopCalled, true);
 assert.equal(deliveredTranscript, "None");
 assert.equal(recognitionAtDelivery, null);
 assert.equal(spoken.at(-1).text, "Where are you feeling the pain?");
+
+let interimTranscript = "";
+listeningGuidance.listen({
+  onResult: (transcript) => {
+    interimTranscript = transcript;
+  },
+});
+activeRecognitionInstance.emitInterimResult("seven");
+assert.equal(interimTranscript, "");
+activeRecognitionInstance.listeners.end?.();
+assert.equal(interimTranscript, "seven");
+
+const retryStatuses = [];
+let retryError = "";
+let retryTranscript = "";
+const instancesBeforeRetry = recognitionInstances.length;
+listeningGuidance.listen({
+  retryDelayMs: 0,
+  onStatus: (status) => retryStatuses.push(status),
+  onError: (message) => {
+    retryError = message;
+  },
+  onResult: (transcript) => {
+    retryTranscript = transcript;
+  },
+});
+const firstRetryAttempt = activeRecognitionInstance;
+firstRetryAttempt.emitError("no-speech");
+await new Promise((resolve) => globalThis.setTimeout(resolve, 5));
+assert.equal(recognitionInstances.length, instancesBeforeRetry + 2);
+assert.match(retryStatuses.join(" "), /Listening again/i);
+assert.equal(retryError, "");
+activeRecognitionInstance.emitResult("four");
+assert.equal(retryTranscript, "four");
 
 console.log("voice-guidance tests passed");

@@ -31,6 +31,10 @@ assert.match(main, /It will not call 995 automatically/);
 assert.match(main, /FALL_SAFETY_COUNTDOWN_SECONDS = 60/);
 assert.match(main, /fallSafetySecondsRemaining === 30/);
 assert.match(main, /Thirty seconds left to answer/);
+assert.match(main, /response === "confirm-okay"/);
+assert.match(main, /requestFallSafetyOkayClarification\(\)/);
+assert.match(main, /requestFallSafetyUnknownClarification\(transcript\)/);
+assert.match(main, /are you okay and able [\s\S]*to move safely/);
 assert.doesNotMatch(
   main,
   /respondEmergencyAlert\([^)]*,\s*"995"/,

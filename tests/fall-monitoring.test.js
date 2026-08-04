@@ -3,6 +3,7 @@ import {
   FALL_MONITORING_MODES,
   FallMonitor,
   fallMonitoringModeForExercise,
+  parseWellbeingClarificationResponse,
   parseWellbeingResponse,
 } from "../fall-monitoring.js";
 
@@ -137,6 +138,23 @@ assert.equal(parseWellbeingResponse("I'm okay"), "okay");
 assert.equal(parseWellbeingResponse("I am fine"), "okay");
 assert.equal(parseWellbeingResponse("I need help"), "help");
 assert.equal(parseWellbeingResponse("I can't move"), "help");
+assert.equal(parseWellbeingResponse("No need"), "confirm-okay");
+assert.equal(parseWellbeingResponse("I don't need help"), "confirm-okay");
+assert.equal(parseWellbeingResponse("I can't stand up anymore"), "help");
+assert.equal(parseWellbeingResponse("It is so painful"), "help");
+assert.equal(parseWellbeingResponse("Please call my daughter"), "help");
+assert.equal(parseWellbeingResponse("Something is wrong"), "help");
+assert.equal(parseWellbeingResponse("I feel dizzy"), "help");
+assert.equal(parseWellbeingResponse("No, I am not okay"), "help");
+assert.equal(parseWellbeingResponse("I am okay but I cannot stand"), "help");
+assert.equal(parseWellbeingResponse("False alarm, I can get up"), "okay");
+assert.equal(parseWellbeingResponse("No problem, I am fine"), "okay");
+assert.equal(parseWellbeingResponse("I am not hurt"), "okay");
+assert.equal(parseWellbeingResponse("No pain"), "okay");
+assert.equal(parseWellbeingClarificationResponse("Yes, I am okay"), "okay");
+assert.equal(parseWellbeingClarificationResponse("Yes, no need"), "okay");
+assert.equal(parseWellbeingClarificationResponse("No, get someone"), "help");
+assert.equal(parseWellbeingClarificationResponse("No need"), null);
 assert.equal(parseWellbeingResponse("maybe"), null);
 
 console.log("fall-monitoring tests passed");

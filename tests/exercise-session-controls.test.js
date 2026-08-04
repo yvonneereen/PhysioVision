@@ -196,8 +196,13 @@ const speakPainSource = functionSource(
 );
 assert.match(
   speakPainSource,
-  /onEnd:\s*beginListening/,
-  "hands-free listening should begin automatically after the spoken question"
+  /onEnd:\s*\(\)\s*=>\s*armVoiceListening\(beginListening\)/,
+  "hands-free listening should arm automatically after the spoken question"
+);
+assert.match(
+  source,
+  /const VOICE_LISTENING_ARM_DELAY_MS = 400/,
+  "recognition should wait briefly for spoken audio to release the microphone"
 );
 assert.match(
   speakPainSource,

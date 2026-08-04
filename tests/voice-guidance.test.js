@@ -29,6 +29,7 @@ assert.equal(parseConfirmationResponse("That is wrong"), "change");
 assert.equal(parseConfirmationResponse("maybe"), null);
 
 assert.equal(parsePainSafetyResponse("urgent", "No symptoms"), "no");
+assert.equal(parsePainSafetyResponse("urgent", "None"), "no");
 assert.equal(parsePainSafetyResponse("urgent", "I am not sure"), "unsure");
 assert.equal(parsePainSafetyResponse("urgent", "I feel numb"), "yes");
 assert.equal(parsePainSafetyResponse("urgent", "not really"), "");
@@ -109,5 +110,62 @@ assert.equal(spoken[0].text, "You are ready. take your time.");
 assert.equal(spoken[0].rate, 0.84);
 assert.equal(spoken[0].pitch, 1.04);
 assert.equal(spoken[0].volume, 0.92);
+
+let activeRecognitionInstance = null;
+class MockRecognition {
+  constructor() {
+    this.listeners = {};
+    this.stopCalled = false;
+    activeRecognitionInstance = this;
+  }
+
+  addEventListener(event, callback) {
+    this.listeners[event] = callback;
+  }
+
+  start() {
+    this.listeners.start?.();
+  }
+
+  stop() {
+    this.stopCalled = true;
+    this.listeners.end?.();
+  }
+
+  abort() {
+    this.listeners.end?.();
+  }
+
+  emitResult(transcript) {
+    this.listeners.result?.({
+      results: [[{ transcript }]],
+    });
+  }
+}
+
+const listeningWindow = {
+  ...mockWindow,
+  SpeechRecognition: MockRecognition,
+};
+const listeningGuidance = new VoiceGuidance(listeningWindow);
+let deliveredTranscript = "";
+let recognitionAtDelivery = undefined;
+assert.equal(
+  listeningGuidance.listen({
+    onResult: (transcript) => {
+      deliveredTranscript = transcript;
+      recognitionAtDelivery = listeningGuidance.activeRecognition;
+      listeningGuidance.speak("Where are you feeling the pain?", {
+        interrupt: true,
+      });
+    },
+  }),
+  true
+);
+activeRecognitionInstance.emitResult("None");
+assert.equal(activeRecognitionInstance.stopCalled, true);
+assert.equal(deliveredTranscript, "None");
+assert.equal(recognitionAtDelivery, null);
+assert.equal(spoken.at(-1).text, "Where are you feeling the pain?");
 
 console.log("voice-guidance tests passed");

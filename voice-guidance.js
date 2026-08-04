@@ -380,16 +380,59 @@ export class VoiceGuidance {
     recognition.maxAlternatives = 1;
     recognition.continuous = false;
     this.activeRecognition = recognition;
+    let pendingTranscript = null;
+    let resultDelivered = false;
+    let resultFallbackTimer = null;
+    let settlingRecognizedResult = false;
+    const schedule = this.window?.setTimeout?.bind(this.window)
+      ?? globalThis.setTimeout;
+    const clearScheduled = this.window?.clearTimeout?.bind(this.window)
+      ?? globalThis.clearTimeout;
+    const clearResultFallback = () => {
+      if (resultFallbackTimer === null) return;
+      clearScheduled(resultFallbackTimer);
+      resultFallbackTimer = null;
+    };
+    const deliverRecognizedResult = () => {
+      if (resultDelivered || pendingTranscript === null) return;
+      resultDelivered = true;
+      const transcript = pendingTranscript;
+      pendingTranscript = null;
+      onResult?.(transcript);
+    };
 
     recognition.addEventListener("start", () => onStatus?.("Listening…"));
     recognition.addEventListener("result", (event) => {
-      const transcript = event.results?.[0]?.[0]?.transcript?.trim() ?? "";
-      onResult?.(transcript);
+      pendingTranscript = event.results?.[0]?.[0]?.transcript?.trim() ?? "";
+      settlingRecognizedResult = true;
+      clearResultFallback();
+      resultFallbackTimer = schedule(() => {
+        if (this.activeRecognition === recognition) {
+          this.activeRecognition = null;
+          try {
+            recognition.abort();
+          } catch (_) {
+            // The recognizer may already have stopped while Safari catches up.
+          }
+        }
+        schedule(deliverRecognizedResult, 0);
+      }, 450);
+      try {
+        recognition.stop();
+      } catch (_) {
+        clearResultFallback();
+        if (this.activeRecognition === recognition) {
+          this.activeRecognition = null;
+        }
+        schedule(deliverRecognizedResult, 0);
+      }
     });
     recognition.addEventListener("nomatch", () => {
       onError?.("I did not understand that. Please try again or use the buttons.");
     });
     recognition.addEventListener("error", (event) => {
+      if (settlingRecognizedResult && event.error === "aborted") return;
+      clearResultFallback();
       const message = event.error === "not-allowed"
         ? "Microphone access was not allowed. Use the buttons or allow microphone access."
         : "I could not hear an answer. Please try again or use the buttons.";
@@ -397,6 +440,8 @@ export class VoiceGuidance {
     });
     recognition.addEventListener("end", () => {
       if (this.activeRecognition === recognition) this.activeRecognition = null;
+      clearResultFallback();
+      deliverRecognizedResult();
     });
     recognition.start();
     return true;

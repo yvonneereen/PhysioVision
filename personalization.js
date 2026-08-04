@@ -387,8 +387,8 @@ export function createCalibration(
 ) {
   const config = exercise.calibration;
   if (!config) throw new Error("This exercise does not support calibration yet.");
-  if (!Array.isArray(targetCaptures) || targetCaptures.length < 3) {
-    throw new Error("Three comfortable movement samples are required.");
+  if (!Array.isArray(targetCaptures) || targetCaptures.length < 1) {
+    throw new Error("One comfortable movement sample is required.");
   }
 
   const start = validateCalibrationCapture(exercise, startFrames, "start");
@@ -403,10 +403,17 @@ export function createCalibration(
       .filter(Number.isFinite);
     if (numericValues.length === targetSummaries.length) {
       const centre = median(numericValues);
+      const captureVariability = targetSummaries
+        .map((summary) => summary[key]?.variability)
+        .filter(Number.isFinite);
+      const withinCaptureVariability = captureVariability.length
+        ? median(captureVariability)
+        : 0;
       target[key] = {
         median: round(centre),
-        variability: round(median(
-          numericValues.map((value) => Math.abs(value - centre))
+        variability: round(Math.max(
+          withinCaptureVariability,
+          median(numericValues.map((value) => Math.abs(value - centre))) ?? 0
         )),
         repetitions: numericValues.length,
       };

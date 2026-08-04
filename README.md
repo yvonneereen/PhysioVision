@@ -10,7 +10,7 @@ connected to progress trends.
 - Editorial landing page and product story
 - Three-step AI plan intake based on goals and profile information
 - On-device personal profile for goals, focus side, mobility, and coaching style
-- Guided per-exercise calibration using a starting position and three comfortable movement samples
+- Guided per-exercise calibration using a starting position and one comfortable movement capture
 - MediaPipe-powered pose tracking with live form cues and repetition counting
 - Searchable library of 23 supplied exercises, all connected to selectable recognition prototypes
 - Pose phase tracking for lower-limb, balance, gait, spine and shoulder exercises

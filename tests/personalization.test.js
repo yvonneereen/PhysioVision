@@ -70,6 +70,18 @@ const targetCaptures = [
   const calibration = createCalibration(halfSquat, {
     affectedSide: "right",
     startFrames: standing,
+    targetCaptures: [targetCaptures[1]],
+  });
+
+  assert.equal(calibration.target.leftKnee.median, 128);
+  assert.equal(calibration.target.leftKnee.repetitions, 1);
+  assert.ok(calibration.target.leftKnee.variability > 0);
+}
+
+{
+  const calibration = createCalibration(halfSquat, {
+    affectedSide: "right",
+    startFrames: standing,
     targetCaptures,
   });
 

@@ -18,7 +18,7 @@ import {
   loadProfile,
   saveCalibration,
   validateCalibrationCapture,
-} from "./personalization.js?v=9";
+} from "./personalization.js?v=10";
 import {
   buildCalibrationSafetyContext,
   evaluateCalibrationReuse,
@@ -1108,6 +1108,7 @@ let holdTotal     = 0;
 // ── Personal calibration state ───────────────────────────────────────────────
 const CALIBRATION_CAPTURE_MS = 1200;
 const CALIBRATION_POSITION_STABLE_MS = 500;
+const CALIBRATION_TARGET_MOVEMENTS = 1;
 const CALIBRATION_RETURN_STABLE_MS = 350;
 // Calibration is a deliberate hold, so accept lower-confidence landmarks than
 // live tracking (0.5). This lets occluded side-lying/floor poses (e.g. clamshell,
@@ -2458,8 +2459,7 @@ function renderCalibrationStep() {
         + "automatically when you hold the position."
       );
   } else if (calibrationSession.step === "target") {
-    const nextRep = calibrationSession.targetCaptures.length + 1;
-    calibrationStepLabel.textContent = `Step 2 · Comfortable sample ${nextRep} of 3`;
+    calibrationStepLabel.textContent = "Step 2 · One comfortable movement";
     calibrationTitle.textContent = engine.exercise.calibration.targetTitle
       ?? `Move to ${engine.exercise.calibration.targetPhase.replaceAll("_", " ")}`;
     calibrationInstructions.textContent =
@@ -2671,7 +2671,10 @@ function finishCalibrationCapture(capture) {
       announceCalibrationStage("target");
     } else {
       calibrationSession.targetCaptures.push(capture.frames);
-      if (calibrationSession.targetCaptures.length >= 3) {
+      if (
+        calibrationSession.targetCaptures.length
+        >= CALIBRATION_TARGET_MOVEMENTS
+      ) {
         calibrationDraft = createCalibration(engine.exercise, {
           affectedSide: sideSelect.value,
           startFrames: calibrationSession.startFrames,
@@ -2777,15 +2780,14 @@ function announceCalibrationStage(type, { afterReturn = false } = {}) {
     return;
   }
 
-  const sample = calibrationSession.targetCaptures.length + 1;
   const targetInstruction = config.targetInstruction
     ?? `Move into a comfortable ${config.targetPhase.replaceAll("_", " ")} position.`;
   voiceGuidance.speak(
     `${afterReturn ? "Starting position found. " : "Starting position saved. "}`
-    + `${targetInstruction} This is sample ${sample} of 3. Hold the position; `
+    + `${targetInstruction} This is your only calibration movement. Hold the position; `
     + "I will measure automatically.",
     {
-      key: `calibration:${engine.exercise.id}:target:${sample}:${afterReturn ? "return" : "first"}`,
+      key: `calibration:${engine.exercise.id}:target:${calibrationSession.targetCaptures.length + 1}:${afterReturn ? "return" : "first"}`,
       interrupt: true,
     }
   );

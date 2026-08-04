@@ -146,6 +146,16 @@ assert.ok(
     calibrationPosition > preCheckPosition,
   "voice choice and the pre-exercise pain check should happen before calibration"
 );
+assert.match(
+  source,
+  /const CALIBRATION_TARGET_MOVEMENTS = 1/,
+  "personal calibration should require only one comfortable movement"
+);
+assert.doesNotMatch(
+  source,
+  /sample \$\{[^}]+\} of 3|Comfortable sample \$\{[^}]+\} of 3/,
+  "calibration instructions should not ask an elderly patient for three movements"
+);
 
 assert.match(
   markup,

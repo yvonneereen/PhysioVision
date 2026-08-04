@@ -3,6 +3,28 @@ import fs from "node:fs";
 
 const source = fs.readFileSync(new URL("../main.js", import.meta.url), "utf8");
 const markup = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
+const styles = fs.readFileSync(new URL("../style.css", import.meta.url), "utf8");
+
+assert.match(
+  markup,
+  /class="feedback-symbol" aria-hidden="true">●<\/span>[\s\S]*?class="feedback-title">Get into position<\/strong>[\s\S]*?class="feedback-detail">Live guidance appears here<\/span>/,
+  "live guidance should use separately styled icon, title and detail elements"
+);
+assert.match(
+  source,
+  /querySelector\("\.feedback-title"\)[\s\S]*?querySelector\("\.feedback-detail"\)/,
+  "live guidance updates should target the explicit copy elements"
+);
+assert.match(
+  styles,
+  /\.feedback-banner\s*\{[\s\S]*?display: grid;[\s\S]*?grid-template-columns: 38px minmax\(0, 1fr\);[\s\S]*?overflow: hidden;/,
+  "the guidance banner should isolate its badge from wrapping copy"
+);
+assert.match(
+  styles,
+  /\.feedback-detail\s*\{[\s\S]*?color: #3d6d53;[\s\S]*?overflow-wrap: break-word;/,
+  "guidance detail should use readable dark text and safe word wrapping"
+);
 
 function functionSource(name, nextName) {
   const start = source.indexOf(`function ${name}(`);
@@ -242,13 +264,13 @@ const finishPainSource = functionSource(
 );
 assert.match(
   finishPainSource,
-  /hidePainCheckin\(\);[\s\S]*?acknowledgeRecordedPain\(completed\)/,
-  "a completed pain check-in should show and speak an acknowledgement"
+  /hidePainCheckin\(\);[\s\S]*?renderRecordedPain\(completed\)[\s\S]*?completed\.continuation \|\| completed\.startAfter[\s\S]*?continueAfterPainCheckin\(completed\)/,
+  "a pre-exercise pain confirmation should immediately continue camera setup"
 );
-assert.doesNotMatch(
+assert.match(
   finishPainSource,
-  /continueAfterPainCheckin\(completed\)/,
-  "camera setup should wait for the pain acknowledgement"
+  /else \{\s*acknowledgeRecordedPain\(completed\);\s*\}/,
+  "a completed check-in with no pending camera action may still be acknowledged"
 );
 
 const acknowledgementSource = functionSource(
@@ -260,10 +282,10 @@ assert.match(
   /recorded your pain level as \$\{level\} out of 10/,
   "the acknowledgement should repeat the recorded pain level"
 );
-assert.match(
+assert.doesNotMatch(
   acknowledgementSource,
-  /onEnd:\s*continueOnce/,
-  "the next step should begin after the spoken acknowledgement"
+  /onEnd|setTimeout|continueAfterPainCheckin/,
+  "camera setup must not depend on Safari completing a speech callback"
 );
 
 const voiceVisibilitySource = functionSource(

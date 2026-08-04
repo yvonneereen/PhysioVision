@@ -2624,8 +2624,8 @@ function renderStaticPhaseFlow(activeEngine) {
 function setFeedbackBanner(state, cue = "") {
   if (!feedbackEl) return;
   const symbol = feedbackEl.querySelector(".feedback-symbol");
-  const title = feedbackEl.querySelector("strong");
-  const detail = feedbackEl.querySelector("div > span");
+  const title = feedbackEl.querySelector(".feedback-title");
+  const detail = feedbackEl.querySelector(".feedback-detail");
   feedbackEl.classList.toggle("needs-adjustment", state === "adjust");
   feedbackEl.classList.toggle(
     "tracking-uncertain",
@@ -3198,28 +3198,13 @@ function clearRecordedPain() {
 }
 
 function acknowledgeRecordedPain(completed) {
-  renderRecordedPain(completed);
-
   const level = completed.painLevel;
   const acknowledgement =
-    `Thank you. I have recorded your pain level as ${level} out of 10. We will continue gently.`;
-  let continued = false;
-  let fallbackTimer = null;
-  const continueOnce = () => {
-    if (continued) return;
-    continued = true;
-    if (fallbackTimer) window.clearTimeout(fallbackTimer);
-    continueAfterPainCheckin(completed);
-  };
-
-  const spoken = voiceGuidance.speak(acknowledgement, {
+    `Thank you. I have recorded your pain level as ${level} out of 10.`;
+  voiceGuidance.speak(acknowledgement, {
     key: `checkin:${completed.context}:recorded:${level}`,
     interrupt: true,
-    onEnd: continueOnce,
   });
-
-  if (spoken) fallbackTimer = window.setTimeout(continueOnce, 3500);
-  else window.setTimeout(continueOnce, 200);
 }
 
 function startPainVoiceListening({ expectedStage = null } = {}) {
@@ -3388,7 +3373,17 @@ function finishPainCheckin() {
     confirmedPreExercisePain = completed.painLevel;
   }
   hidePainCheckin();
-  acknowledgeRecordedPain(completed);
+  renderRecordedPain(completed);
+  if (completed.continuation || completed.startAfter) {
+    statusEl.textContent = "Pain level confirmed — starting camera setup";
+    setFeedbackBanner(
+      "position",
+      "Pain level recorded. Camera setup is continuing automatically."
+    );
+    continueAfterPainCheckin(completed);
+  } else {
+    acknowledgeRecordedPain(completed);
+  }
 }
 
 function requiresPainSafetyInterview() {

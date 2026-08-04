@@ -2586,43 +2586,54 @@ body.fall-safety-open {
 }
 
 .feedback-banner {
-  display: flex;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
   align-items: center;
   gap: 13px;
+  width: 100%;
   min-width: 0;
   min-height: 69px;
   margin-bottom: 18px;
   padding: 11px 14px;
+  border: 1px solid #bddfca;
   border-radius: 11px;
-  color: #255a3d;
+  color: #194f33;
   background: var(--green-light);
-  transition: background 0.2s ease, color 0.2s ease;
+  overflow: hidden;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
 }
 
-.feedback-banner > div {
-  flex: 1 1 auto;
+.feedback-copy {
+  display: grid;
+  gap: 2px;
   min-width: 0;
 }
 
 .feedback-banner.needs-adjustment {
+  border-color: #edc883;
   color: #744113;
   background: #fff0d4;
 }
 
 .feedback-banner.tracking-uncertain {
-  color: var(--ink-soft);
+  border-color: #cbd8d3;
+  color: #284d45;
   background: #e7eeeb;
 }
 
 .feedback-symbol {
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 38px;
   height: 38px;
-  flex: 0 0 38px;
   border-radius: 50%;
   color: var(--white);
   background: var(--green);
+  font-size: 16px;
+  font-weight: 850;
+  line-height: 1;
+  overflow: hidden;
 }
 
 .needs-adjustment .feedback-symbol {
@@ -2633,21 +2644,33 @@ body.fall-safety-open {
   background: var(--muted);
 }
 
-.feedback-banner strong,
-.feedback-banner span {
+.feedback-title,
+.feedback-detail {
   display: block;
+  min-width: 0;
 }
 
-.feedback-banner strong {
-  margin-bottom: 2px;
+.feedback-title {
+  color: inherit;
   font-size: 14px;
+  line-height: 1.3;
+  overflow-wrap: break-word;
 }
 
-.feedback-banner div > span {
-  opacity: 0.72;
+.feedback-detail {
+  color: #3d6d53;
   font-size: 11px;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
+  line-height: 1.4;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.needs-adjustment .feedback-detail {
+  color: #714b24;
+}
+
+.tracking-uncertain .feedback-detail {
+  color: #4c665e;
 }
 
 .phase-flow {
@@ -2680,6 +2703,36 @@ body.fall-safety-open {
 .phase-arrow {
   color: var(--muted);
   font-size: 10px;
+}
+
+@media (max-width: 560px) {
+  .feedback-banner {
+    grid-template-columns: 32px minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+    min-height: 0;
+    padding: 12px;
+  }
+
+  .feedback-symbol {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+  }
+
+  .phase-flow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .phase-chip {
+    width: 100%;
+    text-align: center;
+  }
+
+  .phase-arrow {
+    display: none;
+  }
 }
 
 .progress-wrap {

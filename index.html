@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=70" />
+  <link rel="stylesheet" href="style.css?v=71" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -1174,11 +1174,17 @@
             <span id="setCompleteBadge" class="set-complete-badge hidden">✓ Set complete</span>
           </div>
 
-          <div id="feedbackBanner" class="feedback-banner is-ready" aria-live="polite">
-            <span class="feedback-symbol">●</span>
-            <div>
-              <strong>Get into position</strong>
-              <span>Live guidance appears here</span>
+          <div
+            id="feedbackBanner"
+            class="feedback-banner is-ready"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <span class="feedback-symbol" aria-hidden="true">●</span>
+            <div class="feedback-copy">
+              <strong class="feedback-title">Get into position</strong>
+              <span class="feedback-detail">Live guidance appears here</span>
             </div>
           </div>
 
@@ -2498,7 +2504,7 @@
   <script type="module" src="patient-dashboard.js?v=26"></script>
   <script type="module" src="therapist.js?v=22"></script>
   <script type="module" src="exercise-library.js?v=15"></script>
-  <script type="module" src="main.js?v=64"></script>
+  <script type="module" src="main.js?v=66"></script>
   <script type="module" src="agent-chat.js?v=16"></script>
   <script type="module" src="care-workflow.js?v=16"></script>
 </body>

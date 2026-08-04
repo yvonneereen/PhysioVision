@@ -87,7 +87,7 @@ export function parsePainSafetyResponse(stage, transcript) {
   const includesAny = (...phrases) =>
     phrases.some((phrase) => normalized.includes(phrase));
 
-  if (stage === "urgent") {
+  if (stage === "urgent" || stage.startsWith("urgent-")) {
     if (
       includesAny(
         "not sure",
@@ -99,10 +99,78 @@ export function parsePainSafetyResponse(stage, transcript) {
     ) {
       return "unsure";
     }
+
+    if (stage !== "urgent") {
+      const focusedNegative =
+        /^(no|none|nope|not at all)(\b|$)/.test(normalized)
+        || includesAny(
+          "i do not have",
+          "i don't have",
+          "i am not experiencing",
+          "i'm not experiencing",
+          "did not fall",
+          "didn't fall",
+          "breathing is normal",
+          "i can get up"
+        );
+      if (focusedNegative) return "no";
+
+      const focusedTerms = {
+        "urgent-chest": [
+          "yes",
+          "chest pressure",
+          "chest pain",
+          "chest tightness",
+          "tight chest",
+          "squeezing",
+          "heaviness",
+        ],
+        "urgent-breathing": [
+          "yes",
+          "shortness of breath",
+          "short of breath",
+          "breathless",
+          "cannot breathe",
+          "can't breathe",
+          "hard to breathe",
+          "difficulty breathing",
+        ],
+        "urgent-neurologic": [
+          "yes",
+          "dizzy",
+          "dizziness",
+          "faint",
+          "lightheaded",
+          "light headed",
+          "weakness",
+          "weak",
+          "numb",
+          "numbness",
+        ],
+        "urgent-fall": [
+          "yes",
+          "fell",
+          "fallen",
+          "fall",
+          "cannot get up",
+          "can't get up",
+          "unable to get up",
+          "on the floor",
+        ],
+      };
+      if (includesAny(...(focusedTerms[stage] ?? []))) return "yes";
+      return "";
+    }
+
     if (
       /^(no|none|nope)(\b|$)/.test(normalized) ||
       includesAny(
         "none of these",
+        "none of those",
+        "i don't have any of these",
+        "i do not have any of these",
+        "i don't have any of those",
+        "i do not have any of those",
         "i am okay",
         "i'm okay",
         "i feel okay",
@@ -185,6 +253,12 @@ export function parsePainSafetyResponse(stage, transcript) {
         "no i need help",
         "cannot move",
         "can't move",
+        "cannot stand",
+        "can't stand",
+        "cannot get up",
+        "can't get up",
+        "too painful",
+        "so painful",
         "need help",
         "unable"
       )

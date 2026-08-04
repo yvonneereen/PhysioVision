@@ -32,7 +32,35 @@ assert.equal(parsePainSafetyResponse("urgent", "No symptoms"), "no");
 assert.equal(parsePainSafetyResponse("urgent", "None"), "no");
 assert.equal(parsePainSafetyResponse("urgent", "I am not sure"), "unsure");
 assert.equal(parsePainSafetyResponse("urgent", "I feel numb"), "yes");
+assert.equal(
+  parsePainSafetyResponse("urgent", "I don't have any of those"),
+  "no"
+);
 assert.equal(parsePainSafetyResponse("urgent", "not really"), "");
+assert.equal(
+  parsePainSafetyResponse("urgent-chest", "I have chest tightness"),
+  "yes"
+);
+assert.equal(
+  parsePainSafetyResponse("urgent-chest", "I don't have chest pressure"),
+  "no"
+);
+assert.equal(
+  parsePainSafetyResponse("urgent-breathing", "It is hard to breathe"),
+  "yes"
+);
+assert.equal(
+  parsePainSafetyResponse("urgent-neurologic", "My arm feels numb"),
+  "yes"
+);
+assert.equal(
+  parsePainSafetyResponse("urgent-fall", "I can't get up"),
+  "yes"
+);
+assert.equal(
+  parsePainSafetyResponse("urgent-fall", "I did not fall"),
+  "no"
+);
 assert.equal(parsePainSafetyResponse("location", "My right knee"), "knee");
 assert.equal(parsePainSafetyResponse("side", "Both sides"), "both");
 assert.equal(
@@ -47,6 +75,10 @@ assert.equal(parsePainSafetyResponse("rest", "It is getting worse"), "worse");
 assert.equal(
   parsePainSafetyResponse("mobility", "I need someone nearby"),
   "nearby"
+);
+assert.equal(
+  parsePainSafetyResponse("mobility", "It is too painful to stand"),
+  "help"
 );
 
 const noveltyVoice = {

@@ -232,6 +232,21 @@ assert.match(
   /id="painSafetyInterview"[\s\S]*?id="painSafetyQuestion"[\s\S]*?id="painSafetyChoices"/,
   "the pain check-in should provide a step-by-step safety follow-up"
 );
+assert.match(
+  source,
+  /"urgent-chest"[\s\S]*?"urgent-breathing"[\s\S]*?"urgent-neurologic"[\s\S]*?"urgent-fall"/,
+  "an unsure combined warning-sign answer should be clarified symptom by symptom"
+);
+assert.match(
+  source,
+  /stageName === "urgent"[\s\S]*?response === "unsure"[\s\S]*?renderPainSafetyStage\("urgent-chest"\)/,
+  "not sure must open clarification instead of immediately showing an urgent outcome"
+);
+assert.match(
+  source,
+  /answers\.urgentSymptoms === "yes" \|\| answers\.safeMovement === "help"/,
+  "only a confirmed warning sign or inability to move safely should force the urgent outcome"
+);
 
 const acceptPainSource = functionSource(
   "acceptPainLevel",

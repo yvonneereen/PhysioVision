@@ -38,7 +38,7 @@ import {
   parsePainSafetyResponse,
   parseRecoveryStatus,
   voiceGuidance,
-} from "./voice-guidance.js?v=3";
+} from "./voice-guidance.js?v=4";
 import { isWellnessEligible } from "./wellness-screening.js";
 import {
   PRACTICE_VIEWS,
@@ -3284,13 +3284,63 @@ const PAIN_SAFETY_STEPS = Object.freeze({
     question:
       "Are you experiencing chest pressure, unusual shortness of breath, "
       + "dizziness, faintness, sudden weakness or numbness, or have you fallen?",
-    help: "Choose Yes if any one of these applies. If you are not sure, choose Not sure.",
+    help:
+      "Choose Yes if any one of these applies. Choose Not sure and I will ask "
+      + "about each warning sign separately.",
     choices: [
       ["no", "No, none of these"],
       ["yes", "Yes"],
       ["unsure", "Not sure"],
     ],
     field: "urgentSymptoms",
+    next: "location",
+  },
+  "urgent-chest": {
+    question:
+      "Right now, do you have chest pressure, squeezing, tightness, heaviness, "
+      + "or chest pain?",
+    help: "Answer only about what you feel now. Choose Not sure if it is unclear.",
+    choices: [
+      ["no", "No"],
+      ["yes", "Yes"],
+      ["unsure", "Not sure"],
+    ],
+    field: "urgentChest",
+    next: "urgent-breathing",
+  },
+  "urgent-breathing": {
+    question:
+      "Are you unusually short of breath or having difficulty breathing right now?",
+    help: "Compare this with the breathing you normally expect from this activity.",
+    choices: [
+      ["no", "No"],
+      ["yes", "Yes"],
+      ["unsure", "Not sure"],
+    ],
+    field: "urgentBreathing",
+    next: "urgent-neurologic",
+  },
+  "urgent-neurologic": {
+    question:
+      "Do you feel dizzy or faint, or have sudden weakness or numbness right now?",
+    help: "Choose Yes if any one of these applies.",
+    choices: [
+      ["no", "No"],
+      ["yes", "Yes"],
+      ["unsure", "Not sure"],
+    ],
+    field: "urgentNeurologic",
+    next: "urgent-fall",
+  },
+  "urgent-fall": {
+    question: "Have you fallen, fainted, or become unable to get up safely?",
+    help: "Do not try to stand just to test this. Answer from your current position.",
+    choices: [
+      ["no", "No"],
+      ["yes", "Yes"],
+      ["unsure", "Not sure"],
+    ],
+    field: "urgentFall",
     next: "location",
   },
   location: {
@@ -3725,6 +3775,10 @@ function requiresPainSafetyInterview() {
 function createPainSafetyAnswers() {
   return {
     urgentSymptoms: "",
+    urgentChest: "",
+    urgentBreathing: "",
+    urgentNeurologic: "",
+    urgentFall: "",
     painLocation: "",
     painLocationDescription: "",
     painSide: "",
@@ -3879,10 +3933,11 @@ function beginPainSafetyInterview() {
 
 function determinePainSafetyOutcome() {
   const answers = painCheckinState?.safetyAnswers ?? {};
-  if (answers.urgentSymptoms !== "no" || answers.safeMovement === "help") {
+  if (answers.urgentSymptoms === "yes" || answers.safeMovement === "help") {
     return "urgent";
   }
   if (
+    answers.urgentSymptoms === "unsure" ||
     painCheckinState.painLevel >= 7 ||
     answers.restTrend !== "better" ||
     answers.safeMovement !== "safe"
@@ -3917,11 +3972,19 @@ function renderPainSafetyOutcome(forcedOutcome = "") {
     help =
       "PhysioVision has not contacted emergency services or your saved emergency contact. Use your phone or ask someone nearby for help if you can do so safely.";
   } else if (outcome === "professional") {
-    heading = "Pause today’s programme and seek professional advice";
-    message =
-      "The pain has not improved after stopping, is substantial, or you may need help moving safely.";
-    help =
-      "Please pause today’s programme and consider contacting a qualified healthcare professional. This is not a diagnosis.";
+    if (painCheckinState.safetyAnswers.urgentSymptoms === "unsure") {
+      heading = "Pause today’s programme and seek prompt advice";
+      message =
+        "Your follow-up answers did not confirm an emergency warning sign, but one or more signs could not be ruled out.";
+      help =
+        "Do not continue exercising today. Contact a qualified healthcare professional. If you develop chest pressure, difficulty breathing, fainting, sudden weakness or numbness, or cannot get up safely, call 995 now.";
+    } else {
+      heading = "Pause today’s programme and seek professional advice";
+      message =
+        "The pain has not improved after stopping, is substantial, or you may need help moving safely.";
+      help =
+        "Please pause today’s programme and consider contacting a qualified healthcare professional. This is not a diagnosis.";
+    }
   }
 
   painCheckinTitleEl.textContent = "Your safety check is complete";
@@ -3971,8 +4034,35 @@ function acceptPainSafetyResponse(response) {
     return;
   }
   painCheckinState.safetyAnswers[step.field] = response;
-  if (stageName === "urgent" && response !== "no") {
-    renderPainSafetyOutcome("urgent");
+  if (stageName === "urgent") {
+    if (response === "yes") {
+      renderPainSafetyOutcome("urgent");
+    } else if (response === "unsure") {
+      renderPainSafetyStage("urgent-chest");
+    } else {
+      renderPainSafetyStage(step.next);
+    }
+    return;
+  }
+  if (stageName.startsWith("urgent-")) {
+    if (response === "yes") {
+      painCheckinState.safetyAnswers.urgentSymptoms = "yes";
+      renderPainSafetyOutcome("urgent");
+      return;
+    }
+    if (step.next === "location") {
+      const clarificationAnswers = [
+        "urgentChest",
+        "urgentBreathing",
+        "urgentNeurologic",
+        "urgentFall",
+      ].map((field) => painCheckinState.safetyAnswers[field]);
+      painCheckinState.safetyAnswers.urgentSymptoms =
+        clarificationAnswers.every((answer) => answer === "no")
+          ? "no"
+          : "unsure";
+    }
+    renderPainSafetyStage(step.next);
     return;
   }
   if (step.next === "outcome") {
@@ -4005,6 +4095,12 @@ function finishPainSafetyInterview({ reportForPhysiotherapist = false } = {}) {
       .join(" "),
     safety_follow_up: {
       urgent_symptoms: answers.urgentSymptoms,
+      urgent_symptom_details: {
+        chest: answers.urgentChest,
+        breathing: answers.urgentBreathing,
+        neurologic: answers.urgentNeurologic,
+        fall: answers.urgentFall,
+      },
       pain_location: answers.painLocation,
       pain_location_description: answers.painLocationDescription,
       pain_side: answers.painSide,

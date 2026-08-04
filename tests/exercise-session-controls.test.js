@@ -4,6 +4,10 @@ import fs from "node:fs";
 const source = fs.readFileSync(new URL("../main.js", import.meta.url), "utf8");
 const markup = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const styles = fs.readFileSync(new URL("../style.css", import.meta.url), "utf8");
+const therapistSource = fs.readFileSync(
+  new URL("../therapist.js", import.meta.url),
+  "utf8"
+);
 
 assert.match(
   markup,
@@ -104,6 +108,11 @@ assert.match(
   voiceChoiceSource,
   /finishVoiceModeChoice\(true\)/,
   "successful microphone setup should enable hands-free responses"
+);
+assert.match(
+  voiceChoiceSource,
+  /permissionStream\.getTracks\(\)\.forEach\(\(track\) => track\.stop\(\)\)[\s\S]*?prepareSpeechAfterMicrophoneRelease\(\)[\s\S]*?finishVoiceModeChoice\(true\)/,
+  "the first spoken prompt should wait for Safari to leave microphone-capture mode"
 );
 
 const calibrationFlowStart = source.indexOf(
@@ -239,13 +248,23 @@ assert.match(
 );
 assert.match(
   source,
-  /"urgent-chest"[\s\S]*?"urgent-breathing"[\s\S]*?"urgent-neurologic"[\s\S]*?"urgent-fall"/,
+  /"urgent-chest"[\s\S]*?"urgent-breathing"[\s\S]*?"urgent-neurologic"/,
   "an unsure combined warning-sign answer should be clarified symptom by symptom"
+);
+assert.doesNotMatch(
+  source,
+  /Have you fallen, fainted, or become unable to get up safely\?/,
+  "the removed fall follow-up question should not be shown or spoken"
 );
 assert.match(
   source,
   /stageName === "urgent"[\s\S]*?response === "unsure"[\s\S]*?renderPainSafetyStage\("urgent-chest"\)/,
   "not sure must open clarification instead of immediately showing an urgent outcome"
+);
+assert.match(
+  source,
+  /stageName === "familiarity"[\s\S]*?painCheckinState\.context === "before"[\s\S]*?onsetTiming = "before"[\s\S]*?renderPainSafetyStage\("mobility"\)/,
+  "a pre-exercise safety check should skip redundant timing and five-second rest questions"
 );
 assert.match(
   source,
@@ -453,7 +472,7 @@ const outcomeSource = functionSource(
 );
 assert.match(
   outcomeSource,
-  /Do not continue exercising[\s\S]*?call local emergency services now/,
+  /Do not continue exercising[\s\S]*?call 995 now/,
   "urgent warning signs should end the exercise and show emergency instructions"
 );
 assert.match(
@@ -463,8 +482,23 @@ assert.match(
 );
 assert.match(
   outcomeSource,
-  /Would you like me to prepare this report for your physiotherapist\?[\s\S]*?does not notify them or change your prescribed plan/,
-  "a connected patient should be offered a report without implying plan changes or notification"
+  /being saved and flagged for \$\{connection\.name\} to review[\s\S]*?not monitoring this in real time[\s\S]*?will not be changed automatically/,
+  "a linked patient should be told that a severe report is flagged without implying real-time monitoring or plan changes"
+);
+assert.match(
+  outcomeSource,
+  /not currently linked to a physiotherapist[\s\S]*?Do not continue this programme[\s\S]*?qualified physiotherapist/,
+  "a wellness patient should be told to stop and obtain professional advice before restarting"
+);
+assert.match(
+  outcomeSource,
+  /call 995 now[\s\S]*?emergency contact[\s\S]*?Do not use an emergency contact instead of 995/,
+  "urgent guidance should distinguish emergency help from contact-person support"
+);
+assert.match(
+  outcomeSource,
+  /needsProfessionalReview[\s\S]*?persistPainSafetyInterview/,
+  "a concerning safety outcome should be saved even if the patient leaves to seek help"
 );
 assert.doesNotMatch(
   outcomeSource,
@@ -478,18 +512,29 @@ const finishSafetySource = functionSource(
 );
 assert.match(
   finishSafetySource,
-  /safety_follow_up:[\s\S]*?requires_review:/,
-  "the completed safety interview should be stored with its review flag"
+  /persistPainSafetyInterview/,
+  "finishing the safety interview should retry or complete persistence"
 );
 assert.doesNotMatch(
   finishSafetySource,
   /activateCameraGuide|continueAfterPainCheckin/,
   "finishing a safety interview must not resume the exercise automatically"
 );
+
+assert.match(
+  therapistSource,
+  /function painSafetyReview\([\s\S]*?safety_follow_up[\s\S]*?requires_review/,
+  "the physiotherapist view should identify safety check-ins requiring review"
+);
+assert.match(
+  therapistSource,
+  /painSafetyReview\(p\)/,
+  "the physiotherapist pain diary should show the recorded safety outcome"
+);
 assert.match(
   finishSafetySource,
-  /not automatically notified/,
-  "a therapist report must not falsely claim that a notification was sent"
+  /does not confirm that they have seen it[\s\S]*?do not wait for a reply/,
+  "a therapist report must not imply real-time review or a response"
 );
 
 assert.match(

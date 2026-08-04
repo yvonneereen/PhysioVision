@@ -1,9 +1,13 @@
 const VOICE_PREFERENCE_KEY = "physiovision.voice.enabled.v1";
 const DEFAULT_SPEECH_VOLUME = 1;
+const MICROPHONE_RELEASE_SETTLE_MS = 800;
 
 const GENTLE_VOICE_NAME =
-  /\b(samantha|karen|moira|tessa|serena|fiona|ava|aria|jenny|sonia)\b|google (us|uk) english/i;
-const NATURAL_VOICE_NAME = /\b(natural|neural|enhanced|premium|siri)\b/i;
+  /\b(samantha|karen|moira|tessa|serena|fiona|ava|aria|jenny|sonia|allison|zoe|jamie)\b|google (us|uk) english/i;
+const NATURAL_VOICE_NAME =
+  /\b(natural|neural|enhanced|premium|siri|personal voice)\b/i;
+const SYNTHETIC_VOICE_NAME =
+  /\b(compact|eloquence|espeak|festival|robot|classic)\b/i;
 const NOVELTY_VOICE_NAME =
   /\b(albert|bad news|bells|boing|bubbles|cellos|deranged|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox)\b/i;
 
@@ -108,10 +112,7 @@ export function parsePainSafetyResponse(stage, transcript) {
           "i don't have",
           "i am not experiencing",
           "i'm not experiencing",
-          "did not fall",
-          "didn't fall",
-          "breathing is normal",
-          "i can get up"
+          "breathing is normal"
         );
       if (focusedNegative) return "no";
 
@@ -146,16 +147,6 @@ export function parsePainSafetyResponse(stage, transcript) {
           "weak",
           "numb",
           "numbness",
-        ],
-        "urgent-fall": [
-          "yes",
-          "fell",
-          "fallen",
-          "fall",
-          "cannot get up",
-          "can't get up",
-          "unable to get up",
-          "on the floor",
         ],
       };
       if (includesAny(...(focusedTerms[stage] ?? []))) return "yes";
@@ -279,19 +270,29 @@ function voiceScore(voice, requestedLanguage) {
   const language = String(voice?.lang ?? "").toLowerCase();
   const requested = String(requestedLanguage ?? "en-US").toLowerCase();
   const requestedBase = requested.split("-")[0];
-  const name = String(voice?.name ?? "");
+  const name = `${voice?.name ?? ""} ${voice?.voiceURI ?? ""}`;
 
   if (language && !language.startsWith(requestedBase)) return -Infinity;
 
   let score = 0;
   if (language === requested) score += 80;
   else if (language.startsWith(requestedBase)) score += 55;
-  if (NATURAL_VOICE_NAME.test(name)) score += 45;
-  if (GENTLE_VOICE_NAME.test(name)) score += 35;
+  if (NATURAL_VOICE_NAME.test(name)) score += 75;
+  if (GENTLE_VOICE_NAME.test(name)) score += 40;
   if (voice?.default) score += 8;
   if (voice?.localService) score += 4;
+  if (SYNTHETIC_VOICE_NAME.test(name)) score -= 80;
   if (NOVELTY_VOICE_NAME.test(name)) score -= 200;
   return score;
+}
+
+function isConversationalVoice(voice) {
+  const name = `${voice?.name ?? ""} ${voice?.voiceURI ?? ""}`;
+  return (
+    (NATURAL_VOICE_NAME.test(name) || GENTLE_VOICE_NAME.test(name))
+    && !SYNTHETIC_VOICE_NAME.test(name)
+    && !NOVELTY_VOICE_NAME.test(name)
+  );
 }
 
 export function selectGentleVoice(voices, requestedLanguage = "en-US") {
@@ -312,10 +313,25 @@ export function selectGentleVoice(voices, requestedLanguage = "en-US") {
 
 export function prepareGentleSpeech(text) {
   return String(text ?? "")
-    .replace(/\s*[—–]\s*/g, ". ")
-    .replace(/;\s*/g, ". ")
+    .replace(/\s*[—–]\s*/g, ", ")
+    .replace(/\s*;\s*/g, "; ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+export function conversationalProsody(text) {
+  const message = String(text ?? "").trim();
+  const wordCount = message ? message.split(/\s+/).length : 0;
+  const isQuestion = /\?/.test(message);
+  const isUrgent =
+    /\b(stop exercising|get help now|call 995|emergency|cannot get up)\b/i
+      .test(message);
+
+  if (isUrgent) return { rate: 0.87, pitch: 0.98 };
+  if (isQuestion) return { rate: 0.91, pitch: 1.02 };
+  if (wordCount > 34) return { rate: 0.89, pitch: 1 };
+  if (wordCount <= 8) return { rate: 0.94, pitch: 1.01 };
+  return { rate: 0.92, pitch: 1 };
 }
 
 function readStoredPreference(browserWindow) {
@@ -370,7 +386,9 @@ export class VoiceGuidance {
       return Promise.resolve(this.preferredVoice);
     }
     const selected = this.refreshPreferredVoice();
-    if (selected) return Promise.resolve(selected);
+    if (selected && isConversationalVoice(selected)) {
+      return Promise.resolve(selected);
+    }
 
     const schedule = this.window?.setTimeout?.bind(this.window)
       ?? globalThis.setTimeout;
@@ -378,7 +396,10 @@ export class VoiceGuidance {
     return new Promise((resolve) => {
       const checkVoices = () => {
         const voice = this.refreshPreferredVoice();
-        if (voice || Date.now() - startedAt >= timeoutMs) {
+        if (
+          isConversationalVoice(voice)
+          || Date.now() - startedAt >= timeoutMs
+        ) {
           resolve(voice);
           return;
         }
@@ -386,6 +407,19 @@ export class VoiceGuidance {
       };
       schedule(checkVoices, pollMs);
     });
+  }
+
+  async prepareSpeechAfterMicrophoneRelease({
+    settleMs = MICROPHONE_RELEASE_SETTLE_MS,
+  } = {}) {
+    const schedule = this.window?.setTimeout?.bind(this.window)
+      ?? globalThis.setTimeout;
+    const safeSettleMs = Math.max(0, Number(settleMs) || 0);
+    const [voice] = await Promise.all([
+      this.preparePreferredVoice(),
+      new Promise((resolve) => schedule(resolve, safeSettleMs)),
+    ]);
+    return voice;
   }
 
   setEnabled(enabled) {
@@ -435,8 +469,8 @@ export class VoiceGuidance {
     cooldownMs = 0,
     interrupt = false,
     onEnd = null,
-    rate = 0.84,
-    pitch = 1.04,
+    rate = null,
+    pitch = null,
     volume = DEFAULT_SPEECH_VOLUME,
   } = {}) {
     const message = prepareGentleSpeech(text);
@@ -455,8 +489,21 @@ export class VoiceGuidance {
       this.preferredVoice?.lang ||
       this.window.document?.documentElement?.lang ||
       "en-US";
-    utterance.rate = Math.min(Math.max(Number(rate) || 0.84, 0.5), 1.25);
-    utterance.pitch = Math.min(Math.max(Number(pitch) || 1.04, 0.75), 1.3);
+    const naturalProsody = conversationalProsody(message);
+    const requestedRate = rate === null || rate === undefined
+      ? naturalProsody.rate
+      : Number(rate);
+    const requestedPitch = pitch === null || pitch === undefined
+      ? naturalProsody.pitch
+      : Number(pitch);
+    utterance.rate = Math.min(
+      Math.max(Number.isFinite(requestedRate) ? requestedRate : naturalProsody.rate, 0.5),
+      1.25
+    );
+    utterance.pitch = Math.min(
+      Math.max(Number.isFinite(requestedPitch) ? requestedPitch : naturalProsody.pitch, 0.75),
+      1.3
+    );
     utterance.volume = Math.min(
       Math.max(Number(volume) || DEFAULT_SPEECH_VOLUME, 0.2),
       1

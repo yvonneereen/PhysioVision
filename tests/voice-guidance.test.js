@@ -5,6 +5,7 @@ import {
   parsePainLevel,
   parsePainSafetyResponse,
   parseRecoveryStatus,
+  conversationalProsody,
   prepareGentleSpeech,
   selectGentleVoice,
   VoiceGuidance,
@@ -53,14 +54,6 @@ assert.equal(
   parsePainSafetyResponse("urgent-neurologic", "My arm feels numb"),
   "yes"
 );
-assert.equal(
-  parsePainSafetyResponse("urgent-fall", "I can't get up"),
-  "yes"
-);
-assert.equal(
-  parsePainSafetyResponse("urgent-fall", "I did not fall"),
-  "no"
-);
 assert.equal(parsePainSafetyResponse("location", "My right knee"), "knee");
 assert.equal(parsePainSafetyResponse("side", "Both sides"), "both");
 assert.equal(
@@ -105,7 +98,15 @@ assert.equal(
 );
 assert.equal(
   prepareGentleSpeech("Set one complete — please rest; begin when ready."),
-  "Set one complete. please rest. begin when ready."
+  "Set one complete, please rest; begin when ready."
+);
+assert.deepEqual(
+  conversationalProsody("How is your pain right now?"),
+  { rate: 0.91, pitch: 1.02 }
+);
+assert.deepEqual(
+  conversationalProsody("Stop exercising and call 995 now."),
+  { rate: 0.87, pitch: 0.98 }
 );
 
 class MockUtterance {
@@ -138,10 +139,26 @@ const mockWindow = {
 const guidance = new VoiceGuidance(mockWindow);
 assert.equal(guidance.speak("You are ready — take your time."), true);
 assert.equal(spoken[0].voice, gentleVoice);
-assert.equal(spoken[0].text, "You are ready. take your time.");
-assert.equal(spoken[0].rate, 0.84);
-assert.equal(spoken[0].pitch, 1.04);
+assert.equal(spoken[0].text, "You are ready, take your time.");
+assert.equal(spoken[0].rate, 0.94);
+assert.equal(spoken[0].pitch, 1.01);
 assert.equal(spoken[0].volume, 1);
+
+guidance.speak("How is your pain right now?", {
+  key: "conversational-question",
+  interrupt: true,
+});
+assert.equal(spoken[1].rate, 0.91);
+assert.equal(spoken[1].pitch, 1.02);
+
+guidance.speak("Custom pace", {
+  key: "custom-prosody",
+  interrupt: true,
+  rate: 1.05,
+  pitch: 0.95,
+});
+assert.equal(spoken[2].rate, 1.05);
+assert.equal(spoken[2].pitch, 0.95);
 
 let delayedVoiceList = [];
 let delayedVoicesChanged = null;
@@ -174,6 +191,26 @@ delayedVoicesChanged?.();
 preparedGuidance.speak("Second prompt", { interrupt: true });
 assert.equal(delayedSpoken[1].voice, gentleVoice);
 assert.equal(delayedSpoken[1].volume, 1);
+
+let microphoneReleaseDelay = null;
+const settlingWindow = {
+  ...mockWindow,
+  setTimeout: (callback, delay) => {
+    microphoneReleaseDelay = delay;
+    callback();
+    return 1;
+  },
+};
+const settlingGuidance = new VoiceGuidance(settlingWindow);
+assert.equal(
+  await settlingGuidance.prepareSpeechAfterMicrophoneRelease(),
+  gentleVoice
+);
+assert.equal(
+  microphoneReleaseDelay,
+  800,
+  "the first prompt should wait for Safari to release microphone audio mode"
+);
 
 let activeRecognitionInstance = null;
 const recognitionInstances = [];

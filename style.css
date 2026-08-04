@@ -6312,6 +6312,21 @@ details.metrics summary {
   font-size: 13px;
 }
 
+.pain-review-summary strong,
+.pain-review-summary small {
+  display: block;
+}
+
+.pain-review-summary strong {
+  color: var(--coral-dark);
+}
+
+.pain-review-summary small {
+  margin-top: 2px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
 /* Programmes */
 .programme-grid {
   display: grid;

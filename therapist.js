@@ -51,6 +51,41 @@ function painBadge(level) {
   return `<span class="pain-badge ${cls}">${level}/10</span>`;
 }
 
+function painSafetyReview(checkin) {
+  const safety = checkin?.safety_follow_up ?? {};
+  if (!checkin?.requires_review && !safety.outcome) return "";
+  const outcomeLabels = {
+    urgent: "Urgent stop",
+    professional: "Professional review",
+    monitor: "Monitor",
+  };
+  const restLabels = {
+    better: "improving after rest",
+    same: "unchanged after rest",
+    worse: "worse after rest",
+    unsure: "change after rest unclear",
+  };
+  const movementLabels = {
+    safe: "can move safely",
+    nearby: "needs someone nearby",
+    help: "needs help to move safely",
+  };
+  const painArea = [safety.pain_side, safety.pain_location]
+    .filter(Boolean)
+    .join(" ");
+  const details = [
+    safety.exercise_name,
+    painArea,
+    restLabels[safety.rest_trend],
+    movementLabels[safety.safe_movement],
+  ].filter(Boolean);
+  return `
+    <span class="pain-review-summary">
+      <strong>${escapeHtml(outcomeLabels[safety.outcome] || "Review requested")}</strong>
+      <small>${escapeHtml(details.join(" · ") || "Safety follow-up recorded")}</small>
+    </span>`;
+}
+
 function statusText(patient) {
   if (patient.open_escalations_count > 0) return { label: "Review now", cls: "status-pill-review" };
   if (patient.trend === "declining") return { label: "Monitor", cls: "status-pill-watch" };
@@ -193,6 +228,7 @@ async function showPatientDetail(patientId) {
         <span>${painBadge(p.pain_level)}</span>
         <span>${escapeHtml(p.timing || "")}</span>
         <span>${escapeHtml(p.location_notes || "")}</span>
+        ${painSafetyReview(p)}
       </div>`).join("") || `<p class="empty-state">No pain check-ins.</p>`;
 
     const rx = patient.active_prescription

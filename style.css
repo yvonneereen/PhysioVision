@@ -7387,6 +7387,68 @@ details.metrics summary {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.55rem;
 }
+.pain-safety-choices.is-body-map {
+  grid-template-columns: minmax(112px, 0.72fr) repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+.pain-body-diagram {
+  position: relative;
+  grid-row: 1 / span 3;
+  min-height: 188px;
+  overflow: hidden;
+  border: 1.5px solid #b9cec4;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #eef8f3, #dcefe7);
+}
+.pain-body-diagram span {
+  position: absolute;
+  display: block;
+  border-radius: 999px;
+  background: #4b8e76;
+  transform-origin: center top;
+}
+.pain-body-head {
+  top: 18px;
+  left: calc(50% - 15px);
+  width: 30px;
+  height: 30px;
+  border: 4px solid #4b8e76;
+  background: transparent !important;
+}
+.pain-body-torso {
+  top: 51px;
+  left: calc(50% - 4px);
+  width: 8px;
+  height: 66px;
+}
+.pain-body-arm,
+.pain-body-leg {
+  width: 7px;
+}
+.pain-body-arm {
+  top: 57px;
+  height: 58px;
+}
+.pain-body-arm-left {
+  left: calc(50% - 4px);
+  transform: rotate(47deg);
+}
+.pain-body-arm-right {
+  right: calc(50% - 4px);
+  transform: rotate(-47deg);
+}
+.pain-body-leg {
+  top: 111px;
+  height: 66px;
+}
+.pain-body-leg-left {
+  left: calc(50% - 4px);
+  transform: rotate(22deg);
+}
+.pain-body-leg-right {
+  right: calc(50% - 4px);
+  transform: rotate(-22deg);
+}
 .pain-safety-choices button {
   min-height: 52px;
   padding: 0.75rem 0.9rem;
@@ -7440,6 +7502,14 @@ details.metrics summary {
 @media (max-width: 620px) {
   .pain-safety-choices {
     grid-template-columns: 1fr;
+  }
+  .pain-safety-choices.is-body-map {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .pain-body-diagram {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    min-height: 168px;
   }
 }
 .pain-safety-note {

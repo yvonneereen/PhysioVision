@@ -76,6 +76,11 @@ assert.match(
   /showPainCheckin\("after"\)/,
   "the after-exercise check-in should follow explicit completion"
 );
+assert.doesNotMatch(
+  finishHandlerSource,
+  /confirmedPreExercisePain = null/,
+  "the pre-exercise score must remain available for the after-exercise confirmation"
+);
 
 const voiceChoiceStart = source.indexOf(
   'voiceSetupHandsFree.addEventListener("click"'
@@ -211,6 +216,11 @@ assert.match(
   /id="painConfirmation"[\s\S]*?data-pain-confirmation="confirm"[\s\S]*?data-pain-confirmation="change"/,
   "the pain check-in should show explicit confirm and change actions"
 );
+assert.match(
+  markup,
+  /data-pain-confirmation="confirm">\s*Yes, that’s correct[\s\S]*?data-pain-confirmation="change">\s*Change my answer/,
+  "pain confirmation should use the requested unambiguous actions"
+);
 
 assert.match(
   markup,
@@ -282,6 +292,50 @@ assert.match(
   /recorded your pain level as \$\{level\} out of 10/,
   "the acknowledgement should repeat the recorded pain level"
 );
+
+const painConfirmationQuestionSource = functionSource(
+  "painConfirmationQuestion",
+  "isPainSafetyStage"
+);
+assert.match(
+  painConfirmationQuestionSource,
+  /context === "after"[\s\S]*?Before it was \$\{confirmedPreExercisePain\}/,
+  "after-exercise confirmation should compare the new score with the confirmed pre-exercise score"
+);
+
+const countdownSource = functionSource(
+  "continueAfterPainCheckin",
+  "renderRecordedPain"
+);
+assert.match(
+  countdownSource,
+  /secondsRemaining: 3[\s\S]*?setInterval[\s\S]*?startCameraSetupAfterCountdown/,
+  "a safe confirmed score should start camera setup automatically after a visible three-second countdown"
+);
+assert.match(
+  countdownSource,
+  /Pain level confirmed\. Camera setup will begin in three seconds\. Step back so your full body is visible\./,
+  "the countdown should announce what will happen before the camera permission step"
+);
+const cancelCountdownSource = functionSource(
+  "cancelCameraSetupCountdown",
+  "startCameraSetupAfterCountdown"
+);
+assert.match(
+  cancelCountdownSource,
+  /clearInterval[\s\S]*?Camera setup cancelled/,
+  "patients should be able to cancel pending automatic camera setup"
+);
+
+const recoveryRuleSource = functionSource(
+  "shouldAskRecovery",
+  "beginRecoveryQuestion"
+);
+assert.match(
+  recoveryRuleSource,
+  /context === "after"/,
+  "a safe pre-exercise confirmation should not stall on an extra recovery question"
+);
 assert.doesNotMatch(
   acknowledgementSource,
   /onEnd|setTimeout|continueAfterPainCheckin/,
@@ -331,6 +385,66 @@ assert.match(
   beginSafetySource,
   /startAfter = false[\s\S]*?continuation = ""/,
   "a concerning pain report must cancel automatic exercise continuation"
+);
+assert.match(
+  beginSafetySource,
+  /cancelCameraSetupCountdown/,
+  "the high-pain branch should clear any pending camera countdown"
+);
+
+assert.match(
+  source,
+  /classList\.toggle\("is-body-map", stageName === "location"\)[\s\S]*?appendPainBodyDiagram/,
+  "the pain-location step should include a simple body diagram with selectable regions"
+);
+assert.match(
+  styles,
+  /\.pain-body-diagram\s*\{[\s\S]*?\.pain-body-head[\s\S]*?\.pain-body-torso/,
+  "the body-location selector should render a clear figure"
+);
+assert.match(
+  source,
+  /stage === "location" && !parsedResponse[\s\S]*?painLocationDescription[\s\S]*?acceptPainSafetyResponse\("other"\)/,
+  "an unmatched spoken body-area description should be recorded as Other"
+);
+assert.match(
+  source,
+  /Recorded during \$\{movement\}, set \$\{answers\.setNumber\}, after \$\{answers\.repsCompleted\} completed repetitions/,
+  "the safety interview should record known exercise, set and repetition details without asking again"
+);
+const restPauseSource = functionSource(
+  "beginPainSafetyRestPause",
+  "appendPainBodyDiagram"
+);
+assert.match(
+  restPauseSource,
+  /secondsRemaining = 5[\s\S]*?setInterval[\s\S]*?renderPainSafetyStage\("rest"\)/,
+  "the pain-trend question should follow a short visible rest pause"
+);
+
+const outcomeSource = functionSource(
+  "renderPainSafetyOutcome",
+  "acceptPainSafetyResponse"
+);
+assert.match(
+  outcomeSource,
+  /Do not continue exercising[\s\S]*?call local emergency services now/,
+  "urgent warning signs should end the exercise and show emergency instructions"
+);
+assert.match(
+  outcomeSource,
+  /recommend ending this exercise for today and monitoring how you feel/,
+  "improving pain should still end the current exercise for the day"
+);
+assert.match(
+  outcomeSource,
+  /Would you like me to prepare this report for your physiotherapist\?[\s\S]*?does not notify them or change your prescribed plan/,
+  "a connected patient should be offered a report without implying plan changes or notification"
+);
+assert.doesNotMatch(
+  outcomeSource,
+  /continue exercise|resume exercise|activateCameraGuide/,
+  "the safety outcome must never offer or trigger continued exercise"
 );
 
 const finishSafetySource = functionSource(

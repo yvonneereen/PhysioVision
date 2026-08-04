@@ -193,8 +193,10 @@ assert.equal(delayedSpoken[1].voice, gentleVoice);
 assert.equal(delayedSpoken[1].volume, 1);
 
 let microphoneReleaseDelay = null;
+const safariAudioSession = { type: "play-and-record" };
 const settlingWindow = {
   ...mockWindow,
+  navigator: { audioSession: safariAudioSession },
   setTimeout: (callback, delay) => {
     microphoneReleaseDelay = delay;
     callback();
@@ -208,8 +210,22 @@ assert.equal(
 );
 assert.equal(
   microphoneReleaseDelay,
-  800,
+  1200,
   "the first prompt should wait for Safari to release microphone audio mode"
+);
+assert.equal(
+  safariAudioSession.type,
+  "playback",
+  "spoken guidance should restore Safari's full-volume playback audio mode"
+);
+safariAudioSession.type = "play-and-record";
+settlingGuidance.speak("Please give me a number from zero to ten.", {
+  interrupt: true,
+});
+assert.equal(
+  safariAudioSession.type,
+  "playback",
+  "every prompt should restore playback mode after Safari microphone use"
 );
 
 let activeRecognitionInstance = null;

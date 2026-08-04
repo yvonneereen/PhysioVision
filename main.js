@@ -38,7 +38,7 @@ import {
   parsePainSafetyResponse,
   parseRecoveryStatus,
   voiceGuidance,
-} from "./voice-guidance.js?v=7";
+} from "./voice-guidance.js?v=8";
 import { isWellnessEligible } from "./wellness-screening.js";
 import {
   PRACTICE_VIEWS,

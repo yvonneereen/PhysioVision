@@ -1,6 +1,6 @@
 const VOICE_PREFERENCE_KEY = "physiovision.voice.enabled.v1";
 const DEFAULT_SPEECH_VOLUME = 1;
-const MICROPHONE_RELEASE_SETTLE_MS = 800;
+const MICROPHONE_RELEASE_SETTLE_MS = 1200;
 
 const GENTLE_VOICE_NAME =
   /\b(samantha|karen|moira|tessa|serena|fiona|ava|aria|jenny|sonia|allison|zoe|jamie)\b|google (us|uk) english/i;
@@ -409,12 +409,27 @@ export class VoiceGuidance {
     });
   }
 
+  usePlaybackAudioSession() {
+    const audioSession = this.window?.navigator?.audioSession;
+    if (!audioSession || !("type" in audioSession)) return false;
+    try {
+      // Safari can leave output ducked after microphone permission or speech
+      // recognition. Explicit playback mode prevents the volume from changing
+      // part-way through the following utterance.
+      audioSession.type = "playback";
+      return audioSession.type === "playback";
+    } catch (_) {
+      return false;
+    }
+  }
+
   async prepareSpeechAfterMicrophoneRelease({
     settleMs = MICROPHONE_RELEASE_SETTLE_MS,
   } = {}) {
     const schedule = this.window?.setTimeout?.bind(this.window)
       ?? globalThis.setTimeout;
     const safeSettleMs = Math.max(0, Number(settleMs) || 0);
+    this.usePlaybackAudioSession();
     const [voice] = await Promise.all([
       this.preparePreferredVoice(),
       new Promise((resolve) => schedule(resolve, safeSettleMs)),
@@ -480,6 +495,7 @@ export class VoiceGuidance {
     if (now - (this.lastSpoken.get(key) ?? 0) < cooldownMs) return false;
     if (this.synthesis.speaking && !interrupt) return false;
 
+    this.usePlaybackAudioSession();
     if (interrupt) this.synthesis.cancel();
     const utterance = new this.window.SpeechSynthesisUtterance(message);
     if (!this.preferredVoice) this.refreshPreferredVoice();

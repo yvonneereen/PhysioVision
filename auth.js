@@ -13,7 +13,8 @@ import {
   verifyEmail,
   verifyLogin,
   verifyPasswordResetCode,
-} from "./api.js?v=25";
+  warmApi,
+} from "./api.js?v=26";
 import { getRoleNavigationState } from "./role-ui.js?v=17";
 
 const shell        = document.getElementById("auth-modal");
@@ -68,6 +69,10 @@ let pendingPasswordResetEmail = "";
 let pendingPasswordResetToken = "";
 let loginRequestInProgress = false;
 let logoutRequestInProgress = false;
+
+// Start waking the hosted API while the visitor reads the landing page so a
+// free-tier cold start is less likely to delay the first sign-in attempt.
+warmApi();
 
 function publishAuthState(role, user = null) {
   const detail = { role, user };
@@ -249,6 +254,7 @@ function selectPasswordResetConfirm(resetToken) {
 // registration form. The backend still decides the user's role after login.
 document.querySelectorAll("[data-open='auth-modal']").forEach((button) => {
   button.addEventListener("click", () => {
+    warmApi();
     if (button.dataset.authMode === "register") {
       selectRegisterTab(button.dataset.authRole || "patient");
     } else {
@@ -270,9 +276,19 @@ loginForm.addEventListener("submit", async (e) => {
   loginRequestInProgress = true;
   const submitButton = loginForm.querySelector("[type='submit']");
   submitButton.disabled = true;
-  submitButton.textContent = "Sending code…";
+  submitButton.textContent = "Checking details…";
   clearError(loginError);
   clearError(loginStatus);
+  loginStatus.textContent = "Connecting securely…";
+  loginStatus.style.display = "block";
+  const preparingCodeTimer = window.setTimeout(() => {
+    submitButton.textContent = "Preparing code…";
+    loginStatus.textContent = "Your password is confirmed. Preparing your sign-in code…";
+  }, 1200);
+  const slowServiceTimer = window.setTimeout(() => {
+    loginStatus.textContent =
+      "The secure email service is taking longer than usual. Please keep this window open.";
+  }, 7000);
   const data = new FormData(loginForm);
   try {
     const result = await login({
@@ -299,12 +315,15 @@ loginForm.addEventListener("submit", async (e) => {
     updateAuthButtons(true, user);
     routeAfterAuthentication(user);
   } catch (err) {
+    clearError(loginStatus);
     if (err.data?.code === "email_not_verified") {
       selectVerification(err.data.email ?? data.get("email"));
       return;
     }
     showError(loginError, err.data?.non_field_errors?.[0] ?? err.message ?? "Login failed.");
   } finally {
+    window.clearTimeout(preparingCodeTimer);
+    window.clearTimeout(slowServiceTimer);
     loginRequestInProgress = false;
     submitButton.disabled = false;
     submitButton.textContent = "Sign in →";

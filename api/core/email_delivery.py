@@ -1,6 +1,7 @@
 import base64
 from email.message import EmailMessage
 from email.utils import formataddr
+from threading import Lock
 
 from django.conf import settings
 from django.core.mail import send_mail
@@ -11,6 +12,47 @@ GMAIL_SEND_SCOPE = 'https://www.googleapis.com/auth/gmail.send'
 
 class EmailDeliveryError(Exception):
     """Raised when the selected email provider cannot deliver a message."""
+
+
+_gmail_service = None
+_gmail_service_signature = None
+_gmail_service_lock = Lock()
+
+
+def _configured_gmail_service():
+    """Reuse Gmail discovery and OAuth state within each web worker."""
+    global _gmail_service, _gmail_service_signature
+
+    signature = (
+        settings.GMAIL_CLIENT_ID,
+        settings.GMAIL_CLIENT_SECRET,
+        settings.GMAIL_REFRESH_TOKEN,
+        settings.GMAIL_SENDER_EMAIL,
+    )
+    if _gmail_service is not None and signature == _gmail_service_signature:
+        return _gmail_service
+
+    # Lazy imports let local console/locmem email work without initializing
+    # Google's client library.
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build
+
+    credentials = Credentials(
+        token=None,
+        refresh_token=settings.GMAIL_REFRESH_TOKEN,
+        token_uri='https://oauth2.googleapis.com/token',
+        client_id=settings.GMAIL_CLIENT_ID,
+        client_secret=settings.GMAIL_CLIENT_SECRET,
+        scopes=[GMAIL_SEND_SCOPE],
+    )
+    _gmail_service = build(
+        'gmail',
+        'v1',
+        credentials=credentials,
+        cache_discovery=False,
+    )
+    _gmail_service_signature = signature
+    return _gmail_service
 
 
 def _send_with_gmail_api(*, subject, message, recipient):
@@ -26,20 +68,6 @@ def _send_with_gmail_api(*, subject, message, recipient):
             f"Missing Gmail API settings: {', '.join(missing)}"
         )
 
-    # Lazy imports let local console/locmem email work without initializing
-    # Google's client library.
-    from google.oauth2.credentials import Credentials
-    from googleapiclient.discovery import build
-
-    credentials = Credentials(
-        token=None,
-        refresh_token=settings.GMAIL_REFRESH_TOKEN,
-        token_uri='https://oauth2.googleapis.com/token',
-        client_id=settings.GMAIL_CLIENT_ID,
-        client_secret=settings.GMAIL_CLIENT_SECRET,
-        scopes=[GMAIL_SEND_SCOPE],
-    )
-
     email = EmailMessage()
     email['To'] = recipient
     email['From'] = formataddr((
@@ -50,18 +78,16 @@ def _send_with_gmail_api(*, subject, message, recipient):
     email.set_content(message)
     raw_message = base64.urlsafe_b64encode(email.as_bytes()).decode('ascii')
 
-    service = build(
-        'gmail',
-        'v1',
-        credentials=credentials,
-        cache_discovery=False,
-    )
-    result = (
-        service.users()
-        .messages()
-        .send(userId='me', body={'raw': raw_message})
-        .execute()
-    )
+    # googleapiclient's underlying HTTP object is not thread-safe. Serializing
+    # these short sends lets us safely reuse its access token and connection.
+    with _gmail_service_lock:
+        service = _configured_gmail_service()
+        result = (
+            service.users()
+            .messages()
+            .send(userId='me', body={'raw': raw_message})
+            .execute()
+        )
     if not result.get('id'):
         raise EmailDeliveryError('Gmail API did not return a message ID.')
 

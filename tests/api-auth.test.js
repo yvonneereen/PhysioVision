@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 
 function createStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -210,5 +211,17 @@ assert.equal(
   JSON.parse(requests[13].options.body).response,
   "no_response"
 );
+
+responses.push({ status: 200, body: { status: "ok" } });
+assert.equal(await api.warmApi(), true);
+assert.match(requests.at(-1).url, /\/api\/health\/$/);
+
+const authSource = fs.readFileSync(
+  new URL("../auth.js", import.meta.url),
+  "utf8"
+);
+assert.match(authSource, /warmApi\(\)/);
+assert.match(authSource, /const preparingCodeTimer = window\.setTimeout/);
+assert.match(authSource, /secure email service is taking longer than usual/i);
 
 console.log("API authentication storage tests passed");

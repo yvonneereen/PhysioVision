@@ -15,7 +15,7 @@ import {
   patchMe,
   postWellnessScreening,
   startEmergencyContactVerification,
-} from "./api.js?v=25";
+} from "./api.js?v=26";
 
 const GOAL_API_VALUES = Object.freeze({
   "Stronger knees": "stronger_knees",

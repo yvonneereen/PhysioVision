@@ -3,9 +3,10 @@ import secrets
 from datetime import timedelta
 
 from django.conf import settings
-from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth.hashers import check_password
 from django.db import transaction
 from django.utils import timezone
+from django.utils.crypto import constant_time_compare, salted_hmac
 
 from .email_delivery import EmailDeliveryError, deliver_email
 from .models import LoginVerificationChallenge, User
@@ -21,10 +22,33 @@ class LoginVerificationDeliveryError(Exception):
     pass
 
 
+LOGIN_CODE_HASH_PREFIX = "hmac_sha256$"
+
+
+def _encode_login_code(challenge, code):
+    """Key a short OTP with the server secret without a slow password hash."""
+    digest = salted_hmac(
+        key_salt=f"physiovision.login-code.{challenge.pk}",
+        value=code,
+        secret=settings.SECRET_KEY,
+        algorithm="sha256",
+    ).hexdigest()
+    return f"{LOGIN_CODE_HASH_PREFIX}{digest}"
+
+
+def _login_code_matches(challenge, code):
+    encoded = challenge.code_hash or ""
+    if encoded.startswith(LOGIN_CODE_HASH_PREFIX):
+        expected = _encode_login_code(challenge, code)
+        return constant_time_compare(encoded, expected)
+    # Keep challenges created immediately before deployment usable.
+    return check_password(code, encoded)
+
+
 def _replace_code_and_deliver(challenge, user, now):
     """Store and email one new code for the supplied challenge."""
     code = f"{secrets.randbelow(1_000_000):06d}"
-    challenge.code_hash = make_password(code)
+    challenge.code_hash = _encode_login_code(challenge, code)
     challenge.expires_at = now + timedelta(
         minutes=settings.EMAIL_VERIFICATION_CODE_TTL_MINUTES
     )
@@ -145,7 +169,7 @@ def verify_login_code(challenge_id, code):
         return None, "expired"
     if challenge.attempts_remaining == 0:
         return None, "attempts_exhausted"
-    if not check_password(code, challenge.code_hash):
+    if not _login_code_matches(challenge, code):
         challenge.attempts_remaining -= 1
         challenge.save(update_fields=[
             "attempts_remaining",

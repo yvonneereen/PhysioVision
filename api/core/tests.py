@@ -385,7 +385,11 @@ class ProductionReadinessTests(APITestCase):
     )
     @patch('googleapiclient.discovery.build')
     def test_gmail_api_provider_builds_and_sends_message(self, build):
-        from .email_delivery import deliver_email
+        from . import email_delivery
+
+        email_delivery._gmail_service = None
+        email_delivery._gmail_service_signature = None
+        deliver_email = email_delivery.deliver_email
 
         send = (
             build.return_value.users.return_value
@@ -398,10 +402,15 @@ class ProductionReadinessTests(APITestCase):
             message='Test message',
             recipient='recipient@example.com',
         )
+        deliver_email(
+            subject='Second subject',
+            message='Second message',
+            recipient='second@example.com',
+        )
 
         build.assert_called_once()
-        send.assert_called_once()
-        kwargs = send.call_args.kwargs
+        self.assertEqual(send.call_count, 2)
+        kwargs = send.call_args_list[0].kwargs
         self.assertEqual(kwargs['userId'], 'me')
         decoded = base64.urlsafe_b64decode(kwargs['body']['raw']).decode()
         self.assertIn('From: PhysioVision <sender@gmail.com>', decoded)
@@ -526,6 +535,10 @@ class ProductionReadinessTests(APITestCase):
         self.assertEqual(started.status_code, 202)
         self.assertNotIn('token', started.data)
         self.assertIn('sign-in code', mail.outbox[-1].subject.lower())
+        challenge = LoginVerificationChallenge.objects.get(
+            pk=started.data['challenge_id'],
+        )
+        self.assertTrue(challenge.code_hash.startswith('hmac_sha256$'))
         valid_code = self.verification_code()
         wrong_code = (
             valid_code[:-1]

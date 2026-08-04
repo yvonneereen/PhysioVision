@@ -34,6 +34,22 @@ services:
         value: PhysioVision
       - key: AUTH_TOKEN_TTL_HOURS
         value: "12"
+      - key: EMERGENCY_ALERT_PROVIDER
+        value: twilio
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM_NUMBER
+        sync: false
+      - key: EMERGENCY_ALERT_DELAY_SECONDS
+        value: "60"
+      - key: EMERGENCY_CONTACT_VERIFICATION_TTL_MINUTES
+        value: "10"
+      - key: EMERGENCY_CONTACT_VERIFICATION_COOLDOWN_SECONDS
+        value: "60"
+      - key: EMERGENCY_CONTACT_VERIFICATION_MAX_ATTEMPTS
+        value: "5"
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_MODEL

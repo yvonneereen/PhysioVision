@@ -9,6 +9,7 @@ const BASE = runtimeWindow.PHYSIOVISION_API_BASE ?? (
     : "/api"
 );
 const TOKEN_KEY = "physiovision.token";
+let apiWarmupPromise = null;
 
 function getToken() {
   return runtimeWindow.sessionStorage?.getItem(TOKEN_KEY) ?? null;
@@ -65,6 +66,25 @@ async function request(method, path, body, { skipAuth = false } = {}) {
   }
 
   return res.status === 204 ? null : res.json();
+}
+
+export function warmApi() {
+  if (apiWarmupPromise) return apiWarmupPromise;
+
+  apiWarmupPromise = fetch(`${BASE}/health/`, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  })
+    .then((response) => {
+      if (!response.ok) apiWarmupPromise = null;
+      return response.ok;
+    })
+    .catch(() => {
+      apiWarmupPromise = null;
+      return false;
+    });
+  return apiWarmupPromise;
 }
 
 // ── Auth ──────────────────────────────────────────────────────

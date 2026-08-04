@@ -12,6 +12,7 @@ assert.match(markup, /id="emergencyContactCode"/);
 assert.match(markup, /id="emergencyContactVerifyCode"/);
 assert.match(markup, /href="tel:995"/);
 assert.match(markup, /It never calls 995/i);
+assert.match(markup, /id="fallSafetyCountdown">60</);
 
 assert.match(ui, /startEmergencyContactVerification\(\)/);
 assert.match(ui, /confirmEmergencyContactVerification\(code\)/);
@@ -27,6 +28,9 @@ assert.match(
 assert.match(main, /respondEmergencyAlert\(alert\.id, response\)/);
 assert.match(main, /response !== "okay"[\s\S]*renderFallAlertDelivery/);
 assert.match(main, /It will not call 995 automatically/);
+assert.match(main, /FALL_SAFETY_COUNTDOWN_SECONDS = 60/);
+assert.match(main, /fallSafetySecondsRemaining === 30/);
+assert.match(main, /Thirty seconds left to answer/);
 assert.doesNotMatch(
   main,
   /respondEmergencyAlert\([^)]*,\s*"995"/,

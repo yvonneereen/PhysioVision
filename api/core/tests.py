@@ -269,7 +269,7 @@ class ProductionReadinessTests(APITestCase):
         TWILIO_ACCOUNT_SID='AC-test',
         TWILIO_AUTH_TOKEN='token',
         TWILIO_FROM_NUMBER='+6580000000',
-        EMERGENCY_ALERT_DELAY_SECONDS=30,
+        EMERGENCY_ALERT_DELAY_SECONDS=60,
     )
     @patch('api.core.emergency_alerts.deliver_emergency_notification')
     def test_fall_alert_notifies_verified_contact_after_help(

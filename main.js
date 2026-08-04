@@ -49,7 +49,7 @@ import {
   FallMonitor,
   fallMonitoringReadiness,
   parseWellbeingResponse,
-} from "./fall-monitoring.js?v=2";
+} from "./fall-monitoring.js?v=3";
 
 let PoseLandmarker;
 let HandLandmarker;
@@ -303,7 +303,8 @@ let movementModelsPromise = null;
 const fallMonitor = new FallMonitor();
 let safetyCheckActive = false;
 let fallSafetyTimer = null;
-let fallSafetySecondsRemaining = 30;
+const FALL_SAFETY_COUNTDOWN_SECONDS = 60;
+let fallSafetySecondsRemaining = FALL_SAFETY_COUNTDOWN_SECONDS;
 let fallSafetyPreviousFocus = null;
 let activeFallEvent = null;
 let activeFallAlertPromise = null;
@@ -728,7 +729,7 @@ function beginFallSafetyCheck(event) {
       ? "Use a large button, or choose Answer by voice as a fallback."
     : "Voice input is unavailable in this browser. Use a large button.";
   fallSafetyVoice.disabled = !voiceGuidance.canListen;
-  fallSafetySecondsRemaining = 30;
+  fallSafetySecondsRemaining = FALL_SAFETY_COUNTDOWN_SECONDS;
   fallSafetyCountdown.textContent = String(fallSafetySecondsRemaining);
   activeFallAlertPromise = registerFallAlert(event);
   fallSafetyOverlay.classList.remove("hidden");
@@ -759,7 +760,11 @@ function beginFallSafetyCheck(event) {
     fallSafetyCountdown.textContent = String(
       Math.max(fallSafetySecondsRemaining, 0)
     );
-    if (fallSafetySecondsRemaining === 10) {
+    if (fallSafetySecondsRemaining === 30) {
+      voiceGuidance.speak("Thirty seconds left to answer.", {
+        key: "possible-fall-countdown-30",
+      });
+    } else if (fallSafetySecondsRemaining === 10) {
       voiceGuidance.speak("Ten seconds left to answer.", {
         key: "possible-fall-countdown-10",
       });
@@ -2974,7 +2979,7 @@ async function activateCameraGuide({ announceInstruction = true } = {}) {
       fallReadinessTitleEl.textContent = "Local possible-fall check ready";
       fallReadinessDetailEl.textContent =
         profile.emergencyContactAlertsReady
-          ? "The camera check is active. No response can alert your verified emergency contact after 30 seconds."
+          ? "The camera check is active. No response can alert your verified emergency contact after one minute."
           : "The camera check is active, but automatic alerts require a verified emergency contact.";
     }
     cameraStage?.classList.add("camera-active");

@@ -8,7 +8,7 @@ ambulance.
 
 1. The browser detects a possible fall and immediately creates a durable alert
    on the Django API.
-2. A 30-second countdown asks the patient to choose **I'm okay** or **I need
+2. A one-minute countdown asks the patient to choose **I'm okay** or **I need
    help**. Hands-free voice remains available where the browser supports it.
 3. **I'm okay** cancels a pending server alert.
 4. **I need help** requests contact notification immediately.
@@ -52,7 +52,7 @@ EMERGENCY_ALERT_PROVIDER=twilio
 TWILIO_ACCOUNT_SID=AC...
 TWILIO_AUTH_TOKEN=...
 TWILIO_FROM_NUMBER=+65...
-EMERGENCY_ALERT_DELAY_SECONDS=30
+EMERGENCY_ALERT_DELAY_SECONDS=60
 EMERGENCY_CONTACT_VERIFICATION_TTL_MINUTES=10
 EMERGENCY_CONTACT_VERIFICATION_COOLDOWN_SECONDS=60
 EMERGENCY_CONTACT_VERIFICATION_MAX_ATTEMPTS=5

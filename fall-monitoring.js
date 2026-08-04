@@ -144,7 +144,7 @@ export function fallMonitoringReadiness(exerciseOrId) {
     state: "ready",
     title: "Local possible-fall check available",
     detail:
-      "It starts with the camera and can begin a verified-contact alert after a 30-second no-response check.",
+      "It starts with the camera and can begin a verified-contact alert after a one-minute no-response check.",
   };
 }
 

@@ -11,6 +11,8 @@ from .models import (
     CareInvitation,
     ClinicianProfile,
     CueStyle,
+    EmergencyAlert,
+    EmergencyAlertResponse,
     FocusSide,
     GoalChoice,
     PatientPathwayChoice,
@@ -169,12 +171,16 @@ class ResetPasswordSerializer(serializers.Serializer):
 class PatientProfileSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
     primary_clinician_name = serializers.SerializerMethodField()
+    emergency_contact_alerts_ready = serializers.SerializerMethodField()
 
     class Meta:
         model  = PatientProfile
         fields = [
             'id', 'user', 'goal', 'custom_goal', 'activity_level', 'mobility_status',
             'focus_side', 'cue_style', 'care_path',
+            'emergency_contact_name', 'emergency_contact_relationship',
+            'emergency_contact_phone', 'emergency_contact_consent',
+            'emergency_contact_verified_at', 'emergency_contact_alerts_ready',
             'pathway_choice', 'pathway_selected_at',
             'height_cm', 'weight_kg', 'medical_history', 'low_risk_acknowledged',
             'wellness_screening_status', 'wellness_screening_answers',
@@ -187,6 +193,7 @@ class PatientProfileSerializer(serializers.ModelSerializer):
             'pathway_selected_at', 'wellness_screening_status',
             'wellness_screening_answers', 'wellness_screened_at',
             'wellness_plan', 'wellness_plan_accepted_at',
+            'emergency_contact_verified_at', 'emergency_contact_alerts_ready',
             'primary_clinician_name', 'created_at', 'updated_at',
         ]
 
@@ -195,6 +202,10 @@ class PatientProfileSerializer(serializers.ModelSerializer):
         if not clinician:
             return None
         return clinician.user.get_full_name().strip() or clinician.user.email
+
+    def get_emergency_contact_alerts_ready(self, obj):
+        from .emergency_alerts import emergency_contact_ready
+        return emergency_contact_ready(obj)
 
     def validate(self, attrs):
         current_goal = getattr(
@@ -214,7 +225,122 @@ class PatientProfileSerializer(serializers.ModelSerializer):
         attrs['custom_goal'] = (
             custom_goal if goal == GoalChoice.OTHER else ''
         )
+
+        contact_name = attrs.get(
+            'emergency_contact_name',
+            getattr(self.instance, 'emergency_contact_name', ''),
+        ).strip()
+        contact_relationship = attrs.get(
+            'emergency_contact_relationship',
+            getattr(self.instance, 'emergency_contact_relationship', ''),
+        ).strip()
+        contact_phone = attrs.get(
+            'emergency_contact_phone',
+            getattr(self.instance, 'emergency_contact_phone', ''),
+        ).strip()
+        contact_consent = attrs.get(
+            'emergency_contact_consent',
+            getattr(self.instance, 'emergency_contact_consent', False),
+        )
+        has_contact = bool(contact_name or contact_relationship or contact_phone)
+        contact_errors = {}
+        if has_contact:
+            if not contact_name:
+                contact_errors['emergency_contact_name'] = (
+                    'Enter the emergency contact’s full name.'
+                )
+            if not contact_relationship:
+                contact_errors['emergency_contact_relationship'] = (
+                    'Choose your relationship to the emergency contact.'
+                )
+            digits = re.sub(r'\D', '', contact_phone)
+            if not contact_phone:
+                contact_errors['emergency_contact_phone'] = (
+                    'Enter the emergency contact’s phone number.'
+                )
+            elif not re.fullmatch(r'[+0-9() .-]+', contact_phone):
+                contact_errors['emergency_contact_phone'] = (
+                    'Use only numbers and common phone-number symbols.'
+                )
+            elif not contact_phone.startswith('+'):
+                contact_errors['emergency_contact_phone'] = (
+                    'Include the country code, for example +65 9123 4567.'
+                )
+            elif not 8 <= len(digits) <= 15:
+                contact_errors['emergency_contact_phone'] = (
+                    'Enter a phone number containing 8 to 15 digits.'
+                )
+            if contact_consent is not True:
+                contact_errors['emergency_contact_consent'] = (
+                    'Confirm that this person agreed to be listed.'
+                )
+        else:
+            contact_name = ''
+            contact_relationship = ''
+            contact_phone = ''
+            contact_consent = False
+        if contact_errors:
+            raise serializers.ValidationError(contact_errors)
+        attrs['emergency_contact_name'] = contact_name
+        attrs['emergency_contact_relationship'] = contact_relationship
+        attrs['emergency_contact_phone'] = contact_phone
+        attrs['emergency_contact_consent'] = contact_consent
         return attrs
+
+
+class EmergencyContactVerificationCodeSerializer(serializers.Serializer):
+    code = serializers.RegexField(r"^\d{6}$")
+
+
+class EmergencyAlertCreateSerializer(serializers.Serializer):
+    client_event_id = serializers.UUIDField()
+    exercise_id = serializers.CharField(
+        max_length=80,
+        required=False,
+        allow_blank=True,
+    )
+    monitoring_mode = serializers.CharField(
+        max_length=30,
+        required=False,
+        allow_blank=True,
+    )
+    signals = serializers.ListField(
+        child=serializers.CharField(max_length=80),
+        max_length=12,
+        required=False,
+        default=list,
+    )
+
+
+class EmergencyAlertResponseSerializer(serializers.Serializer):
+    response = serializers.ChoiceField(
+        choices=EmergencyAlertResponse.choices,
+    )
+
+
+class EmergencyAlertSerializer(serializers.ModelSerializer):
+    contact_ready = serializers.SerializerMethodField()
+    countdown_seconds = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EmergencyAlert
+        fields = [
+            'id', 'client_event_id', 'source', 'status', 'response',
+            'exercise_id', 'monitoring_mode', 'signals', 'notify_after',
+            'responded_at', 'notification_attempted_at', 'contact_name',
+            'sms_message_id', 'voice_call_id', 'delivery_error',
+            'contact_ready', 'countdown_seconds', 'created_at', 'updated_at',
+        ]
+        read_only_fields = fields
+
+    def get_contact_ready(self, obj):
+        return bool(obj.contact_phone)
+
+    def get_countdown_seconds(self, obj):
+        return max(
+            0,
+            int((obj.notify_after - timezone.now()).total_seconds() + 0.999),
+        )
 
 
 

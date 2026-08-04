@@ -7,7 +7,9 @@ import {
   clearCalibration,
   createCalibration,
   getCalibration,
+  loadProfile,
   saveCalibration,
+  saveProfile,
   validateCalibrationCapture,
 } from "../personalization.js";
 
@@ -291,6 +293,29 @@ function categoricalFrames(handShape, count = 12) {
   clearCalibration("ankle_pumps", "left");
   assert.equal(getCalibration("ankle_pumps", "left"), null);
   assert.equal(getCalibration("ankle_pumps", "right").affectedSide, "right");
+
+  const savedProfile = saveProfile({
+    emergencyContactName: "  Alex Tan  ",
+    emergencyContactRelationship: "Family member",
+    emergencyContactPhone: "  +65 9123 4567  ",
+    emergencyContactConsent: true,
+  }, { syncBackend: false });
+  assert.equal(savedProfile.emergencyContactName, "Alex Tan");
+  assert.equal(savedProfile.emergencyContactRelationship, "Family member");
+  assert.equal(savedProfile.emergencyContactPhone, "+65 9123 4567");
+  assert.equal(savedProfile.emergencyContactConsent, true);
+  assert.equal(loadProfile().emergencyContactName, "Alex Tan");
+
+  const clearedProfile = saveProfile({
+    emergencyContactName: "",
+    emergencyContactRelationship: "",
+    emergencyContactPhone: "",
+    emergencyContactConsent: false,
+  }, { syncBackend: false });
+  assert.equal(clearedProfile.emergencyContactName, "");
+  assert.equal(clearedProfile.emergencyContactRelationship, "");
+  assert.equal(clearedProfile.emergencyContactPhone, "");
+  assert.equal(clearedProfile.emergencyContactConsent, false);
 }
 
 console.log("personal calibration tests passed");

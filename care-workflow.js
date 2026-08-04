@@ -7,8 +7,8 @@ import {
   getMe,
   getPrescriptions,
   isLoggedIn,
-} from "./api.js?v=24";
-import { saveProfile } from "./personalization.js?v=7";
+} from "./api.js?v=25";
+import { saveProfile } from "./personalization.js?v=9";
 
 const patientCareLink = document.getElementById("patientCareLink");
 const careInviteCode = document.getElementById("careInviteCode");

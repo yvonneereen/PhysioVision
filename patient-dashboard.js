@@ -14,13 +14,13 @@ import {
   selectPatientPathway,
   sendCareMessage,
   updateConsultation,
-} from "./api.js?v=24";
+} from "./api.js?v=25";
 import {
   analysePatientTrend,
   findUpcomingConsultation,
   isCurrentPrescription,
 } from "./patient-dashboard-state.js?v=2";
-import { saveProfile } from "./personalization.js?v=7";
+import { saveProfile } from "./personalization.js?v=9";
 import { EXERCISE_MAP } from "./exercises/registry.js";
 
 const dashboard = document.getElementById("patientDashboard");
@@ -1005,6 +1005,16 @@ function browserProfileFromApi(profile) {
       ?? profile.activity_level,
     focusSide: profile.focus_side,
     cueStyle: profile.cue_style,
+    emergencyContactName: profile.emergency_contact_name ?? "",
+    emergencyContactRelationship:
+      profile.emergency_contact_relationship ?? "",
+    emergencyContactPhone: profile.emergency_contact_phone ?? "",
+    emergencyContactConsent:
+      profile.emergency_contact_consent === true,
+    emergencyContactVerifiedAt:
+      profile.emergency_contact_verified_at ?? null,
+    emergencyContactAlertsReady:
+      profile.emergency_contact_alerts_ready === true,
     wellnessScreening: {
       ...(currentUser?.profile?.wellnessScreening ?? {}),
       status: profile.wellness_screening_status,

@@ -2,7 +2,7 @@ import {
   isLoggedIn,
   patchMe,
   postWellnessScreening,
-} from "./api.js?v=24";
+} from "./api.js?v=25";
 
 const PROFILE_KEY = "physiovision.profile.v1";
 const CALIBRATION_KEY = "physiovision.calibrations.v1";
@@ -36,6 +36,12 @@ const DEFAULT_PROFILE = Object.freeze({
   mobility: "Independent",
   focusSide: "right",
   cueStyle: "gentle",
+  emergencyContactName: "",
+  emergencyContactRelationship: "",
+  emergencyContactPhone: "",
+  emergencyContactConsent: false,
+  emergencyContactVerifiedAt: null,
+  emergencyContactAlertsReady: false,
   carePath: "wellness",
   pathwayChoice: "unselected",
   wellnessPlan: null,
@@ -91,6 +97,50 @@ export function saveProfile(
     ).trim().slice(0, 120),
     updatedAt: new Date().toISOString(),
   };
+  next.emergencyContactName = String(
+    profile.emergencyContactName ?? previous.emergencyContactName ?? ""
+  ).trim().slice(0, 60);
+  next.emergencyContactRelationship = String(
+    profile.emergencyContactRelationship
+      ?? previous.emergencyContactRelationship
+      ?? ""
+  ).trim().slice(0, 30);
+  next.emergencyContactPhone = String(
+    profile.emergencyContactPhone ?? previous.emergencyContactPhone ?? ""
+  ).trim().slice(0, 24);
+  next.emergencyContactConsent = Boolean(
+    profile.emergencyContactConsent ?? previous.emergencyContactConsent
+  );
+  next.emergencyContactVerifiedAt = Object.hasOwn(
+    profile,
+    "emergencyContactVerifiedAt"
+  )
+    ? profile.emergencyContactVerifiedAt
+    : previous.emergencyContactVerifiedAt ?? null;
+  next.emergencyContactAlertsReady = Boolean(
+    profile.emergencyContactAlertsReady
+    ?? previous.emergencyContactAlertsReady
+  );
+  if (
+    next.emergencyContactPhone !== previous.emergencyContactPhone
+    || !next.emergencyContactConsent
+  ) {
+    next.emergencyContactVerifiedAt = null;
+    next.emergencyContactAlertsReady = false;
+  }
+  const hasEmergencyContact = Boolean(
+    next.emergencyContactName
+    || next.emergencyContactRelationship
+    || next.emergencyContactPhone
+  );
+  if (!hasEmergencyContact) {
+    next.emergencyContactName = "";
+    next.emergencyContactRelationship = "";
+    next.emergencyContactPhone = "";
+    next.emergencyContactConsent = false;
+    next.emergencyContactVerifiedAt = null;
+    next.emergencyContactAlertsReady = false;
+  }
   const planInputsChanged = (
     (
       Object.hasOwn(profile, "goal")
@@ -135,6 +185,10 @@ export function saveProfile(
       focus_side:      next.focusSide,
       cue_style:       next.cueStyle,
       care_path:       next.carePath,
+      emergency_contact_name: next.emergencyContactName,
+      emergency_contact_relationship: next.emergencyContactRelationship,
+      emergency_contact_phone: next.emergencyContactPhone,
+      emergency_contact_consent: next.emergencyContactConsent,
     }).catch(() => {});
 
     if (

@@ -43,6 +43,26 @@ urlpatterns = [
     path('logout/',   views.LogoutView.as_view(),   name='auth-logout'),
     path('me/',       views.MeView.as_view(),       name='auth-me'),
     path(
+        'emergency-contact/verification/start/',
+        views.EmergencyContactVerificationStartView.as_view(),
+        name='emergency-contact-verification-start',
+    ),
+    path(
+        'emergency-contact/verification/confirm/',
+        views.EmergencyContactVerificationConfirmView.as_view(),
+        name='emergency-contact-verification-confirm',
+    ),
+    path(
+        'emergency-alerts/',
+        views.EmergencyAlertCreateView.as_view(),
+        name='emergency-alert-create',
+    ),
+    path(
+        'emergency-alerts/<uuid:alert_id>/',
+        views.EmergencyAlertDetailView.as_view(),
+        name='emergency-alert-detail',
+    ),
+    path(
         'patient-pathway/',
         views.PatientPathwayChoiceView.as_view(),
         name='patient-pathway',

@@ -5,7 +5,7 @@ import {
   getPatientSessions, getPatientPainCheckins,
   requestSlackLinkCode, disconnectSlack,
   getCareMessages, sendCareMessage, getCareMessageThreads,
-} from "./api.js?v=24";
+} from "./api.js?v=25";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = ["January", "February", "March", "April", "May", "June",

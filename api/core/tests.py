@@ -1,5 +1,6 @@
 import base64
 import re
+import uuid
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -13,6 +14,9 @@ from rest_framework.test import APITestCase
 from .models import (
     CarePath,
     ClinicianProfile,
+    EmergencyAlert,
+    EmergencyAlertResponse,
+    EmergencyAlertStatus,
     GoalChoice,
     LoginVerificationChallenge,
     PatientPathwayChoice,
@@ -109,6 +113,267 @@ class ProductionReadinessTests(APITestCase):
         )
         self.assertEqual(missing_description.status_code, 400)
         self.assertIn('custom_goal', missing_description.data)
+
+    def test_patient_can_save_and_clear_consented_emergency_contact(self):
+        user = User.objects.create_user(
+            username='emergency-contact@example.com',
+            email='emergency-contact@example.com',
+            password='safe-test-password',
+            role=UserRole.PATIENT,
+            is_active=True,
+            email_verified_at=timezone.now(),
+        )
+        PatientProfile.objects.create(user=user)
+        self.client.force_authenticate(user)
+
+        missing_consent = self.client.patch(
+            '/api/auth/me/',
+            {
+                'emergency_contact_name': 'Alex Tan',
+                'emergency_contact_relationship': 'Family member',
+                'emergency_contact_phone': '+65 9123 4567',
+                'emergency_contact_consent': False,
+            },
+            format='json',
+        )
+        self.assertEqual(missing_consent.status_code, 400)
+        self.assertIn('emergency_contact_consent', missing_consent.data)
+
+        invalid_phone = self.client.patch(
+            '/api/auth/me/',
+            {
+                'emergency_contact_name': 'Alex Tan',
+                'emergency_contact_relationship': 'Family member',
+                'emergency_contact_phone': 'not-a-phone',
+                'emergency_contact_consent': True,
+            },
+            format='json',
+        )
+        self.assertEqual(invalid_phone.status_code, 400)
+        self.assertIn('emergency_contact_phone', invalid_phone.data)
+
+        saved = self.client.patch(
+            '/api/auth/me/',
+            {
+                'emergency_contact_name': '  Alex Tan  ',
+                'emergency_contact_relationship': 'Family member',
+                'emergency_contact_phone': '  +65 9123 4567  ',
+                'emergency_contact_consent': True,
+            },
+            format='json',
+        )
+        self.assertEqual(saved.status_code, 200)
+        self.assertEqual(saved.data['emergency_contact_name'], 'Alex Tan')
+        self.assertEqual(
+            saved.data['emergency_contact_relationship'],
+            'Family member',
+        )
+        self.assertEqual(
+            saved.data['emergency_contact_phone'],
+            '+65 9123 4567',
+        )
+        self.assertTrue(saved.data['emergency_contact_consent'])
+
+        reloaded = self.client.get('/api/auth/me/')
+        self.assertEqual(reloaded.status_code, 200)
+        self.assertEqual(
+            reloaded.data['profile']['emergency_contact_name'],
+            'Alex Tan',
+        )
+        self.assertTrue(
+            reloaded.data['profile']['emergency_contact_consent'],
+        )
+
+        cleared = self.client.patch(
+            '/api/auth/me/',
+            {
+                'emergency_contact_name': '',
+                'emergency_contact_relationship': '',
+                'emergency_contact_phone': '',
+                'emergency_contact_consent': False,
+            },
+            format='json',
+        )
+        self.assertEqual(cleared.status_code, 200)
+        self.assertEqual(cleared.data['emergency_contact_name'], '')
+        self.assertEqual(cleared.data['emergency_contact_phone'], '')
+        self.assertFalse(cleared.data['emergency_contact_consent'])
+
+    @override_settings(
+        EMERGENCY_ALERT_PROVIDER='twilio',
+        TWILIO_ACCOUNT_SID='AC-test',
+        TWILIO_AUTH_TOKEN='token',
+        TWILIO_FROM_NUMBER='+6580000000',
+    )
+    @patch('api.core.emergency_alerts.secrets.randbelow', return_value=123456)
+    @patch('api.core.emergency_alerts.send_emergency_sms')
+    def test_patient_verifies_emergency_contact_by_sms(
+        self,
+        send_sms,
+        _randbelow,
+    ):
+        send_sms.return_value = 'SM-verification'
+        user = User.objects.create_user(
+            username='verify-contact@example.com',
+            email='verify-contact@example.com',
+            password='safe-test-password',
+            role=UserRole.PATIENT,
+            is_active=True,
+            email_verified_at=timezone.now(),
+        )
+        profile = PatientProfile.objects.create(
+            user=user,
+            emergency_contact_name='Alex Tan',
+            emergency_contact_relationship='Family member',
+            emergency_contact_phone='+65 9123 4567',
+            emergency_contact_consent=True,
+        )
+        self.client.force_authenticate(user)
+
+        started = self.client.post(
+            '/api/auth/emergency-contact/verification/start/',
+            {},
+            format='json',
+        )
+        self.assertEqual(started.status_code, 200)
+        send_sms.assert_called_once()
+
+        confirmed = self.client.post(
+            '/api/auth/emergency-contact/verification/confirm/',
+            {'code': '123456'},
+            format='json',
+        )
+        self.assertEqual(confirmed.status_code, 200)
+        self.assertTrue(
+            confirmed.data['profile']['emergency_contact_alerts_ready'],
+        )
+        profile.refresh_from_db()
+        self.assertIsNotNone(profile.emergency_contact_verified_at)
+
+        changed = self.client.patch(
+            '/api/auth/me/',
+            {
+                'emergency_contact_name': 'Alex Tan',
+                'emergency_contact_relationship': 'Family member',
+                'emergency_contact_phone': '+65 9234 5678',
+                'emergency_contact_consent': True,
+            },
+            format='json',
+        )
+        self.assertEqual(changed.status_code, 200)
+        self.assertIsNone(changed.data['emergency_contact_verified_at'])
+        self.assertFalse(changed.data['emergency_contact_alerts_ready'])
+
+    @override_settings(
+        EMERGENCY_ALERT_PROVIDER='twilio',
+        TWILIO_ACCOUNT_SID='AC-test',
+        TWILIO_AUTH_TOKEN='token',
+        TWILIO_FROM_NUMBER='+6580000000',
+        EMERGENCY_ALERT_DELAY_SECONDS=30,
+    )
+    @patch('api.core.emergency_alerts.deliver_emergency_notification')
+    def test_fall_alert_notifies_verified_contact_after_help(
+        self,
+        deliver_notification,
+    ):
+        deliver_notification.return_value = {
+            'sms_message_id': 'SM-alert',
+            'voice_call_id': 'CA-alert',
+            'errors': [],
+        }
+        user = User.objects.create_user(
+            username='fall-alert@example.com',
+            email='fall-alert@example.com',
+            password='safe-test-password',
+            role=UserRole.PATIENT,
+            is_active=True,
+            email_verified_at=timezone.now(),
+        )
+        PatientProfile.objects.create(
+            user=user,
+            emergency_contact_name='Alex Tan',
+            emergency_contact_relationship='Family member',
+            emergency_contact_phone='+65 9123 4567',
+            emergency_contact_consent=True,
+            emergency_contact_verified_at=timezone.now(),
+        )
+        self.client.force_authenticate(user)
+        client_event_id = uuid.uuid4()
+
+        created = self.client.post(
+            '/api/auth/emergency-alerts/',
+            {
+                'client_event_id': str(client_event_id),
+                'exercise_id': 'half-squats',
+                'monitoring_mode': 'standing',
+                'signals': ['rapid_descent', 'lying_posture'],
+            },
+            format='json',
+        )
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(created.data['status'], EmergencyAlertStatus.PENDING)
+        self.assertTrue(created.data['contact_ready'])
+
+        duplicate = self.client.post(
+            '/api/auth/emergency-alerts/',
+            {'client_event_id': str(client_event_id)},
+            format='json',
+        )
+        self.assertEqual(duplicate.status_code, 200)
+        self.assertEqual(duplicate.data['id'], created.data['id'])
+
+        responded = self.client.post(
+            f"/api/auth/emergency-alerts/{created.data['id']}/",
+            {'response': EmergencyAlertResponse.HELP},
+            format='json',
+        )
+        self.assertEqual(responded.status_code, 200)
+        self.assertEqual(responded.data['status'], EmergencyAlertStatus.NOTIFIED)
+        self.assertEqual(responded.data['sms_message_id'], 'SM-alert')
+        self.assertEqual(responded.data['voice_call_id'], 'CA-alert')
+        deliver_notification.assert_called_once()
+
+    @override_settings(
+        EMERGENCY_ALERT_PROVIDER='twilio',
+        TWILIO_ACCOUNT_SID='AC-test',
+        TWILIO_AUTH_TOKEN='token',
+        TWILIO_FROM_NUMBER='+6580000000',
+    )
+    @patch('api.core.emergency_alerts.deliver_emergency_notification')
+    def test_due_fall_alert_records_no_response_and_notifies(
+        self,
+        deliver_notification,
+    ):
+        from .emergency_alerts import process_due_emergency_alerts
+
+        deliver_notification.return_value = {
+            'sms_message_id': 'SM-due',
+            'voice_call_id': 'CA-due',
+            'errors': [],
+        }
+        user = User.objects.create_user(
+            username='due-fall-alert@example.com',
+            email='due-fall-alert@example.com',
+            password='safe-test-password',
+            role=UserRole.PATIENT,
+            is_active=True,
+            email_verified_at=timezone.now(),
+        )
+        profile = PatientProfile.objects.create(user=user)
+        alert = EmergencyAlert.objects.create(
+            client_event_id=uuid.uuid4(),
+            patient=profile,
+            notify_after=timezone.now() - timedelta(seconds=1),
+            contact_name='Alex Tan',
+            contact_phone='+65 9123 4567',
+        )
+
+        process_due_emergency_alerts()
+
+        alert.refresh_from_db()
+        self.assertEqual(alert.response, EmergencyAlertResponse.NO_RESPONSE)
+        self.assertEqual(alert.status, EmergencyAlertStatus.NOTIFIED)
+        deliver_notification.assert_called_once()
 
     @override_settings(
         EMAIL_PROVIDER='gmail_api',

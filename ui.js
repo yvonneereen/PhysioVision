@@ -2,17 +2,20 @@ import {
   hasSavedProfile,
   loadProfile,
   saveProfile,
-} from "./personalization.js?v=7";
+} from "./personalization.js?v=9";
 import {
   evaluateWellnessScreening,
   WELLNESS_SCREENING_KEYS,
 } from "./wellness-screening.js";
 import {
   acceptWellnessPlan,
+  confirmEmergencyContactVerification,
   generateWellnessPlan,
   isLoggedIn,
+  patchMe,
   postWellnessScreening,
-} from "./api.js?v=24";
+  startEmergencyContactVerification,
+} from "./api.js?v=25";
 
 const GOAL_API_VALUES = Object.freeze({
   "Stronger knees": "stronger_knees",
@@ -63,6 +66,33 @@ const ACTIVITY_API_VALUES = Object.freeze({
   );
   const profileCustomGoalField = document.getElementById("profileCustomGoalField");
   const profileCustomGoalInput = document.getElementById("profileCustomGoal");
+  const emergencyContactName = document.getElementById("emergencyContactName");
+  const emergencyContactRelationship = document.getElementById(
+    "emergencyContactRelationship"
+  );
+  const emergencyContactPhone = document.getElementById("emergencyContactPhone");
+  const emergencyContactConsent = document.getElementById(
+    "emergencyContactConsent"
+  );
+  const emergencyContactVerificationTitle = document.getElementById(
+    "emergencyContactVerificationTitle"
+  );
+  const emergencyContactVerificationDetail = document.getElementById(
+    "emergencyContactVerificationDetail"
+  );
+  const emergencyContactSendCode = document.getElementById(
+    "emergencyContactSendCode"
+  );
+  const emergencyContactCodeEntry = document.getElementById(
+    "emergencyContactCodeEntry"
+  );
+  const emergencyContactCode = document.getElementById("emergencyContactCode");
+  const emergencyContactVerifyCode = document.getElementById(
+    "emergencyContactVerifyCode"
+  );
+  const emergencyContactVerificationStatus = document.getElementById(
+    "emergencyContactVerificationStatus"
+  );
   let activeModal = null;
   let previousFocus = null;
   let planStep = 1;
@@ -83,6 +113,140 @@ const ACTIVITY_API_VALUES = Object.freeze({
     input.required = isOther;
     if (!isOther) input.setCustomValidity("");
   }
+
+  function syncEmergencyContactRequirements() {
+    if (
+      !emergencyContactName
+      || !emergencyContactRelationship
+      || !emergencyContactPhone
+      || !emergencyContactConsent
+    ) return;
+    const hasDetails = Boolean(
+      emergencyContactName.value.trim()
+      || emergencyContactRelationship.value
+      || emergencyContactPhone.value.trim()
+    );
+    emergencyContactName.required = hasDetails;
+    emergencyContactRelationship.required = hasDetails;
+    emergencyContactPhone.required = hasDetails;
+    emergencyContactConsent.required = hasDetails;
+
+    const phone = emergencyContactPhone.value.trim();
+    const digitCount = phone.replace(/\D/g, "").length;
+    let phoneError = "";
+    if (phone && !/^[+0-9() .-]+$/.test(phone)) {
+      phoneError = "Use only numbers and common phone-number symbols.";
+    } else if (phone && !phone.startsWith("+")) {
+      phoneError =
+        "Include the country code, for example +65 9123 4567.";
+    } else if (phone && (digitCount < 8 || digitCount > 15)) {
+      phoneError =
+        "Enter a valid phone number containing 8 to 15 digits, including the country code when needed.";
+    }
+    emergencyContactPhone.setCustomValidity(phoneError);
+  }
+
+  function emergencyContactValuesFromForm() {
+    return {
+      emergencyContactName: emergencyContactName?.value.trim() ?? "",
+      emergencyContactRelationship:
+        emergencyContactRelationship?.value ?? "",
+      emergencyContactPhone: emergencyContactPhone?.value.trim() ?? "",
+      emergencyContactConsent: Boolean(emergencyContactConsent?.checked),
+    };
+  }
+
+  function profileContactFromApi(apiProfile) {
+    return {
+      emergencyContactName: apiProfile.emergency_contact_name ?? "",
+      emergencyContactRelationship:
+        apiProfile.emergency_contact_relationship ?? "",
+      emergencyContactPhone: apiProfile.emergency_contact_phone ?? "",
+      emergencyContactConsent:
+        apiProfile.emergency_contact_consent === true,
+      emergencyContactVerifiedAt:
+        apiProfile.emergency_contact_verified_at ?? null,
+      emergencyContactAlertsReady:
+        apiProfile.emergency_contact_alerts_ready === true,
+    };
+  }
+
+  function renderEmergencyContactVerification(profile = loadProfile()) {
+    if (
+      !emergencyContactVerificationTitle
+      || !emergencyContactVerificationDetail
+      || !emergencyContactSendCode
+    ) return;
+    const hasContact = Boolean(
+      profile.emergencyContactName
+      && profile.emergencyContactPhone
+      && profile.emergencyContactConsent
+    );
+    const verified = Boolean(profile.emergencyContactVerifiedAt);
+    const alertsReady = profile.emergencyContactAlertsReady === true;
+    if (!hasContact) {
+      emergencyContactVerificationTitle.textContent =
+        "Add contact details to enable verification";
+      emergencyContactVerificationDetail.textContent =
+        "Automatic fall alerts remain off until a complete contact is saved and verified.";
+    } else if (alertsReady) {
+      emergencyContactVerificationTitle.textContent =
+        "Verified and ready for automatic alerts";
+      emergencyContactVerificationDetail.textContent =
+        "After a possible fall, no response can trigger both a call and text to this contact.";
+    } else if (verified) {
+      emergencyContactVerificationTitle.textContent = "Phone number verified";
+      emergencyContactVerificationDetail.textContent =
+        "Automatic delivery is not active on this server yet. Configure the notification provider and alert worker.";
+    } else {
+      emergencyContactVerificationTitle.textContent =
+        "Phone verification required";
+      emergencyContactVerificationDetail.textContent =
+        "Your contact must share the texted code before automatic fall alerts can call or text them.";
+    }
+    emergencyContactSendCode.textContent = verified
+      ? "Send new code"
+      : "Send verification code";
+    emergencyContactSendCode.disabled = !hasContact || !isLoggedIn();
+  }
+
+  function renderEmergencyContactVerificationFromForm() {
+    const cached = loadProfile();
+    const formContact = emergencyContactValuesFromForm();
+    const contactChanged = (
+      cached.emergencyContactPhone !== formContact.emergencyContactPhone
+      || !formContact.emergencyContactConsent
+    );
+    renderEmergencyContactVerification({
+      ...cached,
+      ...formContact,
+      emergencyContactVerifiedAt: contactChanged
+        ? null
+        : cached.emergencyContactVerifiedAt,
+      emergencyContactAlertsReady: contactChanged
+        ? false
+        : cached.emergencyContactAlertsReady,
+    });
+  }
+
+  [
+    emergencyContactName,
+    emergencyContactPhone,
+  ].forEach((field) => {
+    field?.addEventListener("input", () => {
+      syncEmergencyContactRequirements();
+      renderEmergencyContactVerificationFromForm();
+    });
+  });
+  [
+    emergencyContactRelationship,
+    emergencyContactConsent,
+  ].forEach((field) => {
+    field?.addEventListener("change", () => {
+      syncEmergencyContactRequirements();
+      renderEmergencyContactVerificationFromForm();
+    });
+  });
 
   planForm?.querySelectorAll('input[name="goal"]').forEach((input) => {
     input.addEventListener("change", () => {
@@ -183,6 +347,8 @@ const ACTIVITY_API_VALUES = Object.freeze({
         profileCustomGoalField,
         profileCustomGoalInput
       );
+      syncEmergencyContactRequirements();
+      renderEmergencyContactVerification(profile);
     } else if (id === "therapist-view") {
       window.pvLoadDashboard?.();
     }
@@ -605,12 +771,95 @@ const ACTIVITY_API_VALUES = Object.freeze({
 
   profileForm?.addEventListener("submit", (event) => {
     event.preventDefault();
+    syncEmergencyContactRequirements();
     if (!profileForm.reportValidity()) return;
     const formData = new FormData(profileForm);
     const profile = Object.fromEntries(formData.entries());
+    profile.emergencyContactConsent =
+      formData.get("emergencyContactConsent") === "true";
+    const hasEmergencyContact = Boolean(
+      String(profile.emergencyContactName ?? "").trim()
+      || String(profile.emergencyContactRelationship ?? "").trim()
+      || String(profile.emergencyContactPhone ?? "").trim()
+    );
+    if (!hasEmergencyContact) {
+      profile.emergencyContactName = "";
+      profile.emergencyContactRelationship = "";
+      profile.emergencyContactPhone = "";
+      profile.emergencyContactConsent = false;
+    }
     if (profile.goal !== "Other") profile.customGoal = "";
     saveProfile(profile);
     closeModal(profileForm.closest(".modal-shell"));
+  });
+
+  emergencyContactSendCode?.addEventListener("click", async () => {
+    syncEmergencyContactRequirements();
+    if (!profileForm?.reportValidity()) return;
+    if (!isLoggedIn()) {
+      emergencyContactVerificationStatus.textContent =
+        "Sign in before verifying an emergency contact.";
+      return;
+    }
+    const contact = emergencyContactValuesFromForm();
+    emergencyContactSendCode.disabled = true;
+    emergencyContactVerificationStatus.textContent =
+      "Saving the contact securely…";
+    try {
+      const apiProfile = await patchMe({
+        emergency_contact_name: contact.emergencyContactName,
+        emergency_contact_relationship:
+          contact.emergencyContactRelationship,
+        emergency_contact_phone: contact.emergencyContactPhone,
+        emergency_contact_consent: contact.emergencyContactConsent,
+      });
+      saveProfile(profileContactFromApi(apiProfile), {
+        syncBackend: false,
+        syncScreening: false,
+      });
+      await startEmergencyContactVerification();
+      emergencyContactCodeEntry.hidden = false;
+      emergencyContactVerificationStatus.textContent =
+        "Code sent. Ask your contact to share the 6-digit code with you.";
+      emergencyContactCode.value = "";
+      emergencyContactCode.focus();
+    } catch (error) {
+      emergencyContactVerificationStatus.textContent =
+        error.message || "The verification code could not be sent.";
+    } finally {
+      renderEmergencyContactVerification(loadProfile());
+    }
+  });
+
+  emergencyContactVerifyCode?.addEventListener("click", async () => {
+    const code = emergencyContactCode?.value.trim() ?? "";
+    if (!/^\d{6}$/.test(code)) {
+      emergencyContactVerificationStatus.textContent =
+        "Enter the 6-digit code received by your emergency contact.";
+      emergencyContactCode?.focus();
+      return;
+    }
+    emergencyContactVerifyCode.disabled = true;
+    emergencyContactVerificationStatus.textContent = "Verifying contact…";
+    try {
+      const result = await confirmEmergencyContactVerification(code);
+      const mapped = profileContactFromApi(result.profile);
+      saveProfile(mapped, {
+        syncBackend: false,
+        syncScreening: false,
+      });
+      emergencyContactCodeEntry.hidden = true;
+      emergencyContactVerificationStatus.textContent =
+        mapped.emergencyContactAlertsReady
+          ? "Contact verified. Automatic fall alerts are ready."
+          : "Contact verified. The server notification provider still needs to be configured.";
+      renderEmergencyContactVerification(loadProfile());
+    } catch (error) {
+      emergencyContactVerificationStatus.textContent =
+        error.message || "The code could not be verified.";
+    } finally {
+      emergencyContactVerifyCode.disabled = false;
+    }
   });
 
   function fillFormFromProfile(form, profile) {
@@ -618,7 +867,11 @@ const ACTIVITY_API_VALUES = Object.freeze({
     for (const [key, value] of Object.entries(profile)) {
       const field = form.elements.namedItem(key);
       if (field && value !== undefined && value !== null) {
-        field.value = String(value);
+        if (field.type === "checkbox") {
+          field.checked = value === true || value === "true";
+        } else {
+          field.value = String(value);
+        }
       }
     }
   }

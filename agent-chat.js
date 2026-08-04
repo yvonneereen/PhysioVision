@@ -2,8 +2,8 @@ import {
   getMe,
   isLoggedIn,
   sendAgentMessage,
-} from "./api.js?v=24";
-import { voiceGuidance } from "./voice-guidance.js?v=2";
+} from "./api.js?v=25";
+import { voiceGuidance } from "./voice-guidance.js?v=3";
 
 const launcher = document.getElementById("agentChatLauncher");
 const panel = document.getElementById("agentChatPanel");

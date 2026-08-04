@@ -2216,6 +2216,39 @@ body.fall-safety-open {
   line-height: 1.5;
 }
 
+.fall-safety-no-alert[data-state="sent"] {
+  border-left-color: #2f8d61;
+  color: #123e2b;
+  background: #dff5e8;
+}
+
+.fall-safety-no-alert[data-state="pending"] {
+  border-left-color: #b87817;
+  color: #64430f;
+  background: #fff0cf;
+}
+
+.fall-safety-call {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 64px;
+  margin-top: 18px;
+  padding: 16px 24px;
+  border-radius: 999px;
+  color: var(--white);
+  background: #c43d2a;
+  font-size: 18px;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.fall-safety-call:focus-visible {
+  outline: 4px solid #f2c14d;
+  outline-offset: 4px;
+}
+
 .fall-safety-finish {
   display: flex;
   align-items: center;
@@ -5653,6 +5686,188 @@ details.metrics summary {
   font-weight: 700;
 }
 
+.emergency-contact-card {
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid #c7dcd1;
+  border-radius: 12px;
+  background: #f3f8f5;
+}
+
+.emergency-contact-heading {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.emergency-contact-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--white);
+  background: var(--coral);
+  font-size: 23px;
+  font-weight: 700;
+}
+
+.emergency-contact-heading .eyebrow,
+.emergency-contact-heading h3,
+.emergency-contact-heading p {
+  margin: 0;
+}
+
+.emergency-contact-heading h3 {
+  margin: 2px 0 4px;
+  font-size: 19px;
+}
+
+.emergency-contact-heading p:last-child {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.emergency-contact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.emergency-contact-grid label > span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.emergency-contact-grid input,
+.emergency-contact-grid select {
+  width: 100%;
+  min-height: 50px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  background: var(--white);
+  font-weight: 650;
+}
+
+.emergency-contact-phone {
+  grid-column: 1 / -1;
+}
+
+.emergency-contact-consent {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 14px;
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.emergency-contact-consent input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  margin-top: 1px;
+  accent-color: var(--green);
+}
+
+.emergency-contact-verification {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 13px;
+  border: 1px solid #c7dcd1;
+  border-radius: 10px;
+  background: var(--white);
+}
+
+.emergency-contact-verification strong,
+.emergency-contact-verification span {
+  display: block;
+}
+
+.emergency-contact-verification strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.emergency-contact-verification span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.emergency-contact-verification .button {
+  flex: 0 0 auto;
+  min-height: 42px;
+  padding: 0 15px;
+  font-size: 10px;
+}
+
+.emergency-contact-code {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin-top: 12px;
+}
+
+.emergency-contact-code[hidden] {
+  display: none;
+}
+
+.emergency-contact-code label > span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.emergency-contact-code input {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+}
+
+.emergency-contact-code .button {
+  min-height: 46px;
+  padding: 0 16px;
+}
+
+.emergency-contact-verification-status {
+  min-height: 18px;
+  margin: 8px 0 0;
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.emergency-contact-help {
+  margin: 12px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid #c7dcd1;
+  color: #52655d;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
 .profile-safety-note {
   display: flex;
   gap: 10px;
@@ -7104,6 +7319,23 @@ details.metrics summary {
   .profile-account-summary em {
     grid-column: 2;
     justify-self: start;
+  }
+
+  .emergency-contact-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .emergency-contact-phone {
+    grid-column: auto;
+  }
+
+  .emergency-contact-verification {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .emergency-contact-code {
+    grid-template-columns: 1fr;
   }
 
   .calibration-overlay {

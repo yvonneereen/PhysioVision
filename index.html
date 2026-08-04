@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=72" />
+  <link rel="stylesheet" href="style.css?v=74" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -1011,7 +1011,7 @@
               <div>
                 <strong id="fallReadinessTitle">Local possible-fall check available</strong>
                 <small id="fallReadinessDetail">
-                  It starts with the camera. No emergency alert is sent.
+                  A verified contact can be alerted after no response. It never calls 995.
                 </small>
               </div>
             </div>
@@ -1035,7 +1035,9 @@
               </p>
               <div class="fall-safety-countdown" aria-live="polite">
                 <strong id="fallSafetyCountdown">30</strong>
-                <span>seconds to answer before the exercise stops</span>
+                <span id="fallSafetyCountdownLabel">
+                  seconds to answer before the safety check escalates
+                </span>
               </div>
               <div class="fall-safety-actions">
                 <button
@@ -1070,8 +1072,8 @@
                 role="status"
                 aria-live="polite"
               ></p>
-              <p class="fall-safety-prototype-note">
-                No emergency contact or outside service is alerted in this version.
+              <p id="fallSafetyContactNotice" class="fall-safety-prototype-note">
+                Checking whether your verified emergency contact can be alerted…
               </p>
             </section>
 
@@ -1082,13 +1084,19 @@
               <p id="fallSafetyResultMessage">
                 Take a moment before deciding whether to exercise again.
               </p>
-              <div id="fallSafetyNoAlert" class="fall-safety-no-alert hidden">
-                <strong>No emergency alert was sent.</strong>
-                <span>
-                  Emergency contacts are not configured in this version. Use
-                  your phone or call out to someone nearby if you need help.
+              <div id="fallSafetyAlertStatus" class="fall-safety-no-alert hidden">
+                <strong id="fallSafetyAlertStatusTitle">Checking alert status…</strong>
+                <span id="fallSafetyAlertStatusMessage">
+                  PhysioVision never calls emergency services automatically.
                 </span>
               </div>
+              <a
+                id="fallSafetyCall995"
+                class="fall-safety-call"
+                href="tel:995"
+              >
+                Call 995 now <span aria-hidden="true">→</span>
+              </a>
               <button
                 id="fallSafetyClose"
                 class="fall-safety-finish"
@@ -2005,6 +2013,116 @@
             </select>
           </label>
         </div>
+        <section class="emergency-contact-card" aria-labelledby="emergencyContactTitle">
+          <div class="emergency-contact-heading">
+            <span class="emergency-contact-icon" aria-hidden="true">+</span>
+            <div>
+              <p class="eyebrow">Optional · recommended</p>
+              <h3 id="emergencyContactTitle">Emergency contact</h3>
+              <p>
+                Add someone you trust whom PhysioVision may help you contact
+                during a future emergency workflow.
+              </p>
+            </div>
+          </div>
+          <div class="emergency-contact-grid">
+            <label>
+              <span>Contact’s full name</span>
+              <input
+                id="emergencyContactName"
+                type="text"
+                name="emergencyContactName"
+                maxlength="60"
+                autocomplete="off"
+                placeholder="For example, Alex Tan"
+              />
+            </label>
+            <label>
+              <span>Relationship</span>
+              <select id="emergencyContactRelationship" name="emergencyContactRelationship">
+                <option value="">Choose relationship</option>
+                <option value="Spouse or partner">Spouse or partner</option>
+                <option value="Family member">Family member</option>
+                <option value="Friend">Friend</option>
+                <option value="Caregiver">Caregiver</option>
+                <option value="Other">Other</option>
+              </select>
+            </label>
+            <label class="emergency-contact-phone">
+              <span>Phone number</span>
+              <input
+                id="emergencyContactPhone"
+                type="tel"
+                name="emergencyContactPhone"
+                maxlength="24"
+                inputmode="tel"
+                autocomplete="off"
+                placeholder="For example, +65 9123 4567"
+                aria-describedby="emergencyContactHelp"
+              />
+            </label>
+          </div>
+          <label class="emergency-contact-consent">
+            <input
+              id="emergencyContactConsent"
+              type="checkbox"
+              name="emergencyContactConsent"
+              value="true"
+            />
+            <span>
+              I confirm that this person has agreed to be listed as my
+              emergency contact and that the details are accurate.
+            </span>
+          </label>
+          <div class="emergency-contact-verification">
+            <div>
+              <strong id="emergencyContactVerificationTitle">
+                Phone verification required
+              </strong>
+              <span id="emergencyContactVerificationDetail">
+                Verify this number before automatic fall alerts can call or text it.
+              </span>
+            </div>
+            <button
+              id="emergencyContactSendCode"
+              class="button button-light"
+              type="button"
+            >
+              Send verification code
+            </button>
+          </div>
+          <div id="emergencyContactCodeEntry" class="emergency-contact-code" hidden>
+            <label for="emergencyContactCode">
+              <span>Code received by your contact</span>
+              <input
+                id="emergencyContactCode"
+                type="text"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                maxlength="6"
+                pattern="[0-9]{6}"
+                placeholder="6-digit code"
+              />
+            </label>
+            <button
+              id="emergencyContactVerifyCode"
+              class="button button-dark"
+              type="button"
+            >
+              Verify contact
+            </button>
+          </div>
+          <p
+            id="emergencyContactVerificationStatus"
+            class="emergency-contact-verification-status"
+            role="status"
+            aria-live="polite"
+          ></p>
+          <p id="emergencyContactHelp" class="emergency-contact-help">
+            Saving this contact does not notify or call them. In a
+            life-threatening emergency in Singapore, call 995.
+          </p>
+        </section>
         <div class="profile-safety-note">
           <span aria-hidden="true">i</span>
           <p>Personalization changes presentation and comfortable targets. It cannot diagnose a condition or override clinician instructions.</p>
@@ -2499,13 +2617,13 @@
   </div>
 
   <script src="runtime-config.js"></script>
-  <script type="module" src="auth.js?v=26"></script>
-  <script type="module" src="ui.js?v=21"></script>
-  <script type="module" src="patient-dashboard.js?v=26"></script>
-  <script type="module" src="therapist.js?v=22"></script>
+  <script type="module" src="auth.js?v=28"></script>
+  <script type="module" src="ui.js?v=23"></script>
+  <script type="module" src="patient-dashboard.js?v=28"></script>
+  <script type="module" src="therapist.js?v=23"></script>
   <script type="module" src="exercise-library.js?v=15"></script>
-  <script type="module" src="main.js?v=68"></script>
-  <script type="module" src="agent-chat.js?v=17"></script>
-  <script type="module" src="care-workflow.js?v=16"></script>
+  <script type="module" src="main.js?v=72"></script>
+  <script type="module" src="agent-chat.js?v=19"></script>
+  <script type="module" src="care-workflow.js?v=18"></script>
 </body>
 </html>

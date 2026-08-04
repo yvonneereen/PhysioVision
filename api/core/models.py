@@ -199,6 +199,11 @@ class PatientProfile(TimestampedModel):
     mobility_status = models.CharField(max_length=25, choices=MobilityStatus.choices, default=MobilityStatus.INDEPENDENT)
     focus_side      = models.CharField(max_length=5, choices=FocusSide.choices, default=FocusSide.RIGHT)
     cue_style       = models.CharField(max_length=10, choices=CueStyle.choices, default=CueStyle.GENTLE)
+    emergency_contact_name = models.CharField(max_length=60, blank=True)
+    emergency_contact_relationship = models.CharField(max_length=30, blank=True)
+    emergency_contact_phone = models.CharField(max_length=24, blank=True)
+    emergency_contact_consent = models.BooleanField(default=False)
+    emergency_contact_verified_at = models.DateTimeField(null=True, blank=True)
     care_path       = models.CharField(max_length=12, choices=CarePath.choices, default=CarePath.WELLNESS)
     pathway_choice  = models.CharField(
         max_length=20,
@@ -246,6 +251,93 @@ class PatientProfile(TimestampedModel):
 
     def __str__(self) -> str:
         return f"Patient: {self.user}"
+
+
+class EmergencyContactVerificationChallenge(TimestampedModel):
+    """Short-lived SMS code used to verify an emergency-contact number."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    patient = models.OneToOneField(
+        PatientProfile,
+        on_delete=models.CASCADE,
+        related_name="emergency_contact_verification_challenge",
+    )
+    phone = models.CharField(max_length=24)
+    code_hash = models.CharField(max_length=128)
+    expires_at = models.DateTimeField()
+    sent_at = models.DateTimeField(null=True, blank=True)
+    attempts_remaining = models.PositiveSmallIntegerField(default=5)
+    consumed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "core_emergencycontactverificationchallenge"
+
+    def __str__(self) -> str:
+        return f"Emergency-contact verification for {self.patient.user}"
+
+
+class EmergencyAlertStatus(models.TextChoices):
+    PENDING = "pending", _("Waiting for the user")
+    CANCELLED = "cancelled", _("Cancelled by the user")
+    NOTIFYING = "notifying", _("Contact notification in progress")
+    NOTIFIED = "notified", _("SMS and call requested")
+    PARTIAL = "partial", _("Only one notification channel succeeded")
+    FAILED = "failed", _("Contact notification failed")
+    NOT_CONFIGURED = "not_configured", _("No verified contact or provider")
+
+
+class EmergencyAlertResponse(models.TextChoices):
+    OKAY = "okay", _("I am okay")
+    HELP = "help", _("I need help")
+    NO_RESPONSE = "no_response", _("No response")
+
+
+class EmergencyAlert(TimestampedModel):
+    """Durable fall alert used to cancel or notify a verified contact."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    client_event_id = models.UUIDField(unique=True, editable=False)
+    patient = models.ForeignKey(
+        PatientProfile,
+        on_delete=models.CASCADE,
+        related_name="emergency_alerts",
+    )
+    source = models.CharField(max_length=30, default="possible_fall")
+    status = models.CharField(
+        max_length=20,
+        choices=EmergencyAlertStatus.choices,
+        default=EmergencyAlertStatus.PENDING,
+        db_index=True,
+    )
+    response = models.CharField(
+        max_length=20,
+        choices=EmergencyAlertResponse.choices,
+        blank=True,
+    )
+    exercise_id = models.CharField(max_length=80, blank=True)
+    monitoring_mode = models.CharField(max_length=30, blank=True)
+    signals = models.JSONField(default=list, blank=True)
+    notify_after = models.DateTimeField(db_index=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+    notification_attempted_at = models.DateTimeField(null=True, blank=True)
+    contact_name = models.CharField(max_length=60, blank=True)
+    contact_phone = models.CharField(max_length=24, blank=True)
+    sms_message_id = models.CharField(max_length=64, blank=True)
+    voice_call_id = models.CharField(max_length=64, blank=True)
+    delivery_error = models.TextField(blank=True)
+
+    class Meta:
+        db_table = "core_emergencyalert"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["patient", "status"],
+                name="core_emerg_patient_80ed9e_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Emergency alert for {self.patient.user} ({self.status})"
 
 
 # ── Clinician Profile ─────────────────────────────────────────

@@ -109,7 +109,39 @@ assert.equal(spoken[0].voice, gentleVoice);
 assert.equal(spoken[0].text, "You are ready. take your time.");
 assert.equal(spoken[0].rate, 0.84);
 assert.equal(spoken[0].pitch, 1.04);
-assert.equal(spoken[0].volume, 0.92);
+assert.equal(spoken[0].volume, 1);
+
+let delayedVoiceList = [];
+let delayedVoicesChanged = null;
+const delayedSpoken = [];
+const delayedVoiceWindow = {
+  ...mockWindow,
+  speechSynthesis: {
+    speaking: false,
+    getVoices: () => delayedVoiceList,
+    addEventListener: (event, callback) => {
+      if (event === "voiceschanged") delayedVoicesChanged = callback;
+    },
+    speak: (utterance) => delayedSpoken.push(utterance),
+    cancel: () => {},
+  },
+};
+const preparedGuidance = new VoiceGuidance(delayedVoiceWindow);
+globalThis.setTimeout(() => {
+  delayedVoiceList = [gentleVoice];
+}, 10);
+assert.equal(
+  await preparedGuidance.preparePreferredVoice({ timeoutMs: 100, pollMs: 5 }),
+  gentleVoice
+);
+preparedGuidance.speak("First prompt", { interrupt: true });
+assert.equal(delayedSpoken[0].voice, gentleVoice);
+assert.equal(delayedSpoken[0].volume, 1);
+delayedVoiceList = [standardVoice];
+delayedVoicesChanged?.();
+preparedGuidance.speak("Second prompt", { interrupt: true });
+assert.equal(delayedSpoken[1].voice, gentleVoice);
+assert.equal(delayedSpoken[1].volume, 1);
 
 let activeRecognitionInstance = null;
 class MockRecognition {

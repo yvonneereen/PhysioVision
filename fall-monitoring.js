@@ -127,7 +127,7 @@ export function fallMonitoringReadiness(exerciseOrId) {
       state: "limited",
       title: "Floor exercise: visibility check active",
       detail:
-        "Possible-fall detection is limited because lying down is expected. No emergency alert is sent.",
+        "Possible-fall detection is limited because lying down is expected. Automatic contact alerts cannot start from this mode.",
     };
   }
   if (mode === FALL_MONITORING_MODES.UNAVAILABLE) {
@@ -136,7 +136,7 @@ export function fallMonitoringReadiness(exerciseOrId) {
       state: "unavailable",
       title: "Possible-fall check unavailable for this movement",
       detail:
-        "Close-up or supported-lean tracking cannot reliably identify a fall. No emergency alert is sent.",
+        "Close-up or supported-lean tracking cannot reliably identify a fall, so automatic contact alerts are unavailable.",
     };
   }
   return {
@@ -144,7 +144,7 @@ export function fallMonitoringReadiness(exerciseOrId) {
     state: "ready",
     title: "Local possible-fall check available",
     detail:
-      "It starts with the camera and can stop exercise for a wellbeing check. No emergency alert is sent.",
+      "It starts with the camera and can begin a verified-contact alert after a 30-second no-response check.",
   };
 }
 

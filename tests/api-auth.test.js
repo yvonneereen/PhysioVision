@@ -151,6 +151,41 @@ assert.equal(
   JSON.parse(requests[9].options.body).draft_token,
   "signed-draft-token",
 );
+
+responses.push({
+  status: 200,
+  body: { detail: "Verification code sent." },
+});
+await api.startEmergencyContactVerification();
+
+responses.push({
+  status: 200,
+  body: { detail: "Emergency contact verified.", profile: {} },
+});
+await api.confirmEmergencyContactVerification("123456");
+
+responses.push({
+  status: 201,
+  body: { id: "fall-alert-id", status: "pending" },
+});
+await api.createEmergencyAlert({
+  clientEventId: "11111111-1111-4111-8111-111111111111",
+  exerciseId: "half-squats",
+  monitoringMode: "standing",
+  signals: ["rapid_descent"],
+});
+
+responses.push({
+  status: 200,
+  body: { id: "fall-alert-id", status: "notified" },
+});
+await api.respondEmergencyAlert("fall-alert-id", "no_response");
+
+responses.push({
+  status: 200,
+  body: { id: "fall-alert-id", status: "notified" },
+});
+await api.getEmergencyAlert("fall-alert-id");
 assert.match(requests[0].url, /\/api\/auth\/register\/$/);
 assert.match(requests[2].url, /\/api\/auth\/verify-login\/$/);
 assert.match(requests[4].url, /\/api\/auth\/forgot-password\/$/);
@@ -158,5 +193,22 @@ assert.match(requests[5].url, /\/api\/auth\/verify-reset-code\/$/);
 assert.match(requests[6].url, /\/api\/auth\/reset-password\/$/);
 assert.match(requests[8].url, /\/api\/auth\/agent\/plan\/$/);
 assert.match(requests[9].url, /\/api\/auth\/agent\/plan\/accept\/$/);
+assert.match(
+  requests[10].url,
+  /\/api\/auth\/emergency-contact\/verification\/start\/$/
+);
+assert.match(
+  requests[11].url,
+  /\/api\/auth\/emergency-contact\/verification\/confirm\/$/
+);
+assert.match(requests[12].url, /\/api\/auth\/emergency-alerts\/$/);
+assert.match(
+  requests[13].url,
+  /\/api\/auth\/emergency-alerts\/fall-alert-id\/$/
+);
+assert.equal(
+  JSON.parse(requests[13].options.body).response,
+  "no_response"
+);
 
 console.log("API authentication storage tests passed");

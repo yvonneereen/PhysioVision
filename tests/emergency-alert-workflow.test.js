@@ -1,0 +1,38 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+
+const markup = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
+const styles = fs.readFileSync(new URL("../style.css", import.meta.url), "utf8");
+const main = fs.readFileSync(new URL("../main.js", import.meta.url), "utf8");
+const ui = fs.readFileSync(new URL("../ui.js", import.meta.url), "utf8");
+const api = fs.readFileSync(new URL("../api.js", import.meta.url), "utf8");
+
+assert.match(markup, /id="emergencyContactSendCode"/);
+assert.match(markup, /id="emergencyContactCode"/);
+assert.match(markup, /id="emergencyContactVerifyCode"/);
+assert.match(markup, /href="tel:995"/);
+assert.match(markup, /It never calls 995/i);
+
+assert.match(ui, /startEmergencyContactVerification\(\)/);
+assert.match(ui, /confirmEmergencyContactVerification\(code\)/);
+assert.match(ui, /Your contact must share the texted code/);
+assert.match(api, /export async function createEmergencyAlert/);
+assert.match(api, /export async function respondEmergencyAlert/);
+
+assert.match(
+  main,
+  /activeFallAlertPromise = registerFallAlert\(event\)/,
+  "the backend countdown must be registered as soon as the fall dialog opens"
+);
+assert.match(main, /respondEmergencyAlert\(alert\.id, response\)/);
+assert.match(main, /response !== "okay"[\s\S]*renderFallAlertDelivery/);
+assert.match(main, /It will not call 995 automatically/);
+assert.doesNotMatch(
+  main,
+  /respondEmergencyAlert\([^)]*,\s*"995"/,
+  "the application must never send 995 to the automatic contact endpoint"
+);
+assert.match(styles, /\.fall-safety-call\s*\{/);
+assert.match(styles, /\.emergency-contact-verification\s*\{/);
+
+console.log("emergency alert workflow tests passed");

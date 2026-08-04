@@ -353,8 +353,13 @@ assert.match(
 );
 assert.match(
   voiceVisibilitySource,
-  /classList\.toggle\([\s\S]*?"hidden"[\s\S]*?handsFreeVoiceEnabled && !safetyActive[\s\S]*?safetyOutcome/,
-  "hands-free mode should hide the redundant Answer by voice button"
+  /classList\.toggle\([\s\S]*?"hidden"[\s\S]*?handsFreeVoiceEnabled && !painVoiceFallbackNeeded[\s\S]*?safetyOutcome/,
+  "hands-free mode should hide the redundant Answer by voice button during every automatically listened question"
+);
+assert.match(
+  source,
+  /Answer aloud after the question\. You do not need to press a button\./,
+  "the safety interview should clearly explain that hands-free answers require no button press"
 );
 
 const safetyThresholdSource = functionSource(
@@ -469,8 +474,8 @@ assert.match(
 
 assert.match(
   source,
-  /onError:[\s\S]*?classList\.remove\("hands-free-checkin"\)[\s\S]*?large on-screen choices/,
-  "the on-screen check-in should reappear if hands-free recognition fails"
+  /onError:[\s\S]*?showPainVoiceFallback\(\)[\s\S]*?large on-screen choices/,
+  "the manual voice fallback should reappear if hands-free recognition fails"
 );
 
 console.log("exercise session control tests passed");

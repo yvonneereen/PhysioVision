@@ -13,7 +13,7 @@ import {
   verifyEmail,
   verifyLogin,
   verifyPasswordResetCode,
-} from "./api.js?v=24";
+} from "./api.js?v=25";
 import { getRoleNavigationState } from "./role-ui.js?v=17";
 
 const shell        = document.getElementById("auth-modal");
@@ -548,6 +548,15 @@ async function seedProfileFromApi() {
       mobility:  mobilityLabels[p.mobility_status] ?? p.mobility_status ?? "",
       focusSide: p.focus_side       ?? "right",
       cueStyle:  p.cue_style        ?? "gentle",
+      emergencyContactName: p.emergency_contact_name ?? "",
+      emergencyContactRelationship:
+        p.emergency_contact_relationship ?? "",
+      emergencyContactPhone: p.emergency_contact_phone ?? "",
+      emergencyContactConsent: p.emergency_contact_consent === true,
+      emergencyContactVerifiedAt:
+        p.emergency_contact_verified_at ?? null,
+      emergencyContactAlertsReady:
+        p.emergency_contact_alerts_ready === true,
       carePath:  p.care_path        ?? "wellness",
       pathwayChoice: p.pathway_choice ?? "unselected",
       wellnessPlan,

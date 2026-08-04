@@ -77,6 +77,9 @@ REST_FRAMEWORK = {
         'password_reset_verify': '10/hour',
         'password_reset_confirm': '5/hour',
         'wellness_plan_draft': '12/hour',
+        'emergency_contact_verification': '5/hour',
+        'emergency_alert_create': '12/hour',
+        'emergency_alert_response': '30/hour',
     },
 }
 
@@ -242,6 +245,33 @@ PASSWORD_RESET_MAX_ATTEMPTS = env.int(
     default=5,
 )
 AUTH_TOKEN_TTL_HOURS = env.int('AUTH_TOKEN_TTL_HOURS', default=12)
+
+# Automatic fall notifications contact only the patient's verified emergency
+# contact. They never dial emergency-service numbers. Keep disabled until a
+# compliant Singapore-capable outbound number and worker are configured.
+EMERGENCY_ALERT_PROVIDER = env(
+    'EMERGENCY_ALERT_PROVIDER',
+    default='disabled',
+).strip().lower()
+TWILIO_ACCOUNT_SID = env('TWILIO_ACCOUNT_SID', default='')
+TWILIO_AUTH_TOKEN = env('TWILIO_AUTH_TOKEN', default='')
+TWILIO_FROM_NUMBER = env('TWILIO_FROM_NUMBER', default='')
+EMERGENCY_ALERT_DELAY_SECONDS = env.int(
+    'EMERGENCY_ALERT_DELAY_SECONDS',
+    default=30,
+)
+EMERGENCY_CONTACT_VERIFICATION_TTL_MINUTES = env.int(
+    'EMERGENCY_CONTACT_VERIFICATION_TTL_MINUTES',
+    default=10,
+)
+EMERGENCY_CONTACT_VERIFICATION_COOLDOWN_SECONDS = env.int(
+    'EMERGENCY_CONTACT_VERIFICATION_COOLDOWN_SECONDS',
+    default=60,
+)
+EMERGENCY_CONTACT_VERIFICATION_MAX_ATTEMPTS = env.int(
+    'EMERGENCY_CONTACT_VERIFICATION_MAX_ATTEMPTS',
+    default=5,
+)
 
 # Slack Physio Assistant AI
 SLACK_BOT_TOKEN     = env('SLACK_BOT_TOKEN', default='')

@@ -1,4 +1,5 @@
 const VOICE_PREFERENCE_KEY = "physiovision.voice.enabled.v1";
+const DEFAULT_SPEECH_VOLUME = 1;
 
 const GENTLE_VOICE_NAME =
   /\b(samantha|karen|moira|tessa|serena|fiona|ava|aria|jenny|sonia)\b|google (us|uk) english/i;
@@ -263,13 +264,16 @@ export class VoiceGuidance {
     this.lastSpoken = new Map();
     this.activeRecognition = null;
     this.preferredVoice = null;
+    this.voiceSelectionLocked = false;
     this.refreshPreferredVoice = () => {
+      if (this.voiceSelectionLocked) return this.preferredVoice;
       const language =
         this.window?.document?.documentElement?.lang || "en-US";
       this.preferredVoice = selectGentleVoice(
         this.synthesis?.getVoices?.() ?? [],
         language
       );
+      return this.preferredVoice;
     };
     this.refreshPreferredVoice();
     this.synthesis?.addEventListener?.(
@@ -286,9 +290,35 @@ export class VoiceGuidance {
     return Boolean(this.Recognition);
   }
 
+  preparePreferredVoice({ timeoutMs = 1200, pollMs = 50 } = {}) {
+    if (!this.canSpeak || this.voiceSelectionLocked) {
+      return Promise.resolve(this.preferredVoice);
+    }
+    const selected = this.refreshPreferredVoice();
+    if (selected) return Promise.resolve(selected);
+
+    const schedule = this.window?.setTimeout?.bind(this.window)
+      ?? globalThis.setTimeout;
+    const startedAt = Date.now();
+    return new Promise((resolve) => {
+      const checkVoices = () => {
+        const voice = this.refreshPreferredVoice();
+        if (voice || Date.now() - startedAt >= timeoutMs) {
+          resolve(voice);
+          return;
+        }
+        schedule(checkVoices, pollMs);
+      };
+      schedule(checkVoices, pollMs);
+    });
+  }
+
   setEnabled(enabled) {
     this.enabled = Boolean(enabled);
-    if (!this.enabled) this.cancel();
+    if (!this.enabled) {
+      this.cancel();
+      this.voiceSelectionLocked = false;
+    }
     try {
       this.window?.localStorage.setItem(
         VOICE_PREFERENCE_KEY,
@@ -332,7 +362,7 @@ export class VoiceGuidance {
     onEnd = null,
     rate = 0.84,
     pitch = 1.04,
-    volume = 0.92,
+    volume = DEFAULT_SPEECH_VOLUME,
   } = {}) {
     const message = prepareGentleSpeech(text);
     if (!message || !this.enabled || !this.canSpeak) return false;
@@ -345,13 +375,17 @@ export class VoiceGuidance {
     const utterance = new this.window.SpeechSynthesisUtterance(message);
     if (!this.preferredVoice) this.refreshPreferredVoice();
     if (this.preferredVoice) utterance.voice = this.preferredVoice;
+    this.voiceSelectionLocked = true;
     utterance.lang =
       this.preferredVoice?.lang ||
       this.window.document?.documentElement?.lang ||
       "en-US";
     utterance.rate = Math.min(Math.max(Number(rate) || 0.84, 0.5), 1.25);
     utterance.pitch = Math.min(Math.max(Number(pitch) || 1.04, 0.75), 1.3);
-    utterance.volume = Math.min(Math.max(Number(volume) || 0.92, 0.2), 1);
+    utterance.volume = Math.min(
+      Math.max(Number(volume) || DEFAULT_SPEECH_VOLUME, 0.2),
+      1
+    );
     if (typeof onEnd === "function") utterance.addEventListener("end", onEnd);
     this.lastSpoken.set(key, now);
     this.synthesis.speak(utterance);

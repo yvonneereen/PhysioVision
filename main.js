@@ -18,12 +18,19 @@ import {
   loadProfile,
   saveCalibration,
   validateCalibrationCapture,
-} from "./personalization.js?v=7";
+} from "./personalization.js?v=9";
 import {
   buildCalibrationSafetyContext,
   evaluateCalibrationReuse,
 } from "./calibration-policy.js?v=2";
-import { postSession, postPainCheckin, postCalibration, isLoggedIn } from "./api.js?v=24";
+import {
+  createEmergencyAlert,
+  isLoggedIn,
+  postCalibration,
+  postPainCheckin,
+  postSession,
+  respondEmergencyAlert,
+} from "./api.js?v=25";
 import { DRAFT_EXERCISES } from "./exercises/catalog.js";
 import {
   parseConfirmationResponse,
@@ -31,7 +38,7 @@ import {
   parsePainSafetyResponse,
   parseRecoveryStatus,
   voiceGuidance,
-} from "./voice-guidance.js?v=2";
+} from "./voice-guidance.js?v=3";
 import { isWellnessEligible } from "./wellness-screening.js";
 import {
   PRACTICE_VIEWS,
@@ -42,7 +49,7 @@ import {
   FallMonitor,
   fallMonitoringReadiness,
   parseWellbeingResponse,
-} from "./fall-monitoring.js";
+} from "./fall-monitoring.js?v=2";
 
 let PoseLandmarker;
 let HandLandmarker;
@@ -220,7 +227,16 @@ const fallSafetyVoiceStatus = document.getElementById("fallSafetyVoiceStatus");
 const fallSafetyResultTitle = document.getElementById("fallSafetyResultTitle");
 const fallSafetyResultMessage = document.getElementById("fallSafetyResultMessage");
 const fallSafetyResultIcon = document.getElementById("fallSafetyResultIcon");
-const fallSafetyNoAlert = document.getElementById("fallSafetyNoAlert");
+const fallSafetyContactNotice = document.getElementById("fallSafetyContactNotice");
+const fallSafetyCountdownLabel = document.getElementById("fallSafetyCountdownLabel");
+const fallSafetyAlertStatus = document.getElementById("fallSafetyAlertStatus");
+const fallSafetyAlertStatusTitle = document.getElementById(
+  "fallSafetyAlertStatusTitle"
+);
+const fallSafetyAlertStatusMessage = document.getElementById(
+  "fallSafetyAlertStatusMessage"
+);
+const fallSafetyCall995 = document.getElementById("fallSafetyCall995");
 const fallSafetyClose = document.getElementById("fallSafetyClose");
 
 // Keep the full-screen wellbeing dialog outside the camera grid so ancestor
@@ -290,6 +306,7 @@ let fallSafetyTimer = null;
 let fallSafetySecondsRemaining = 30;
 let fallSafetyPreviousFocus = null;
 let activeFallEvent = null;
+let activeFallAlertPromise = null;
 let handsFreeVoiceEnabled = false;
 let voiceModeChosenThisSession = false;
 let voiceModeChoicePromise = null;
@@ -359,6 +376,8 @@ voiceSetupHandsFree.addEventListener("click", async () => {
       audio: true,
     });
     permissionStream.getTracks().forEach((track) => track.stop());
+    voiceSetupStatus.textContent = "Preparing consistent voice guidance…";
+    await voiceGuidance.preparePreferredVoice();
     finishVoiceModeChoice(true);
   } catch (_) {
     voiceSetupHandsFree.disabled = false;
@@ -405,7 +424,11 @@ function renderFallReadiness(exercise = engine?.exercise) {
   const readiness = fallMonitoringReadiness(exercise);
   fallReadinessEl.dataset.state = readiness.state;
   fallReadinessTitleEl.textContent = readiness.title;
-  fallReadinessDetailEl.textContent = readiness.detail;
+  fallReadinessDetailEl.textContent = (
+    readiness.state === "ready" && !profile.emergencyContactAlertsReady
+      ? "The camera check is available. Verify an emergency contact in My profile before automatic alerts can be sent."
+      : readiness.detail
+  );
   const icon = fallReadinessEl.querySelector(".fall-readiness-icon");
   if (icon) {
     icon.textContent = readiness.state === "ready"
@@ -447,6 +470,157 @@ function clearFallSafetyTimer() {
   fallSafetyTimer = null;
 }
 
+function createFallClientEventId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((value) => value.toString(16).padStart(2, "0"));
+  return [
+    hex.slice(0, 4).join(""),
+    hex.slice(4, 6).join(""),
+    hex.slice(6, 8).join(""),
+    hex.slice(8, 10).join(""),
+    hex.slice(10).join(""),
+  ].join("-");
+}
+
+function setFallAlertStatus(state, title, message) {
+  fallSafetyAlertStatus.classList.remove("hidden");
+  fallSafetyAlertStatus.dataset.state = state;
+  fallSafetyAlertStatusTitle.textContent = title;
+  fallSafetyAlertStatusMessage.textContent = message;
+}
+
+function updateFallContactNotice(alert) {
+  if (!alert) {
+    fallSafetyContactNotice.textContent =
+      "The server could not register this alert. No automatic contact notification is available.";
+    fallSafetyCountdownLabel.textContent =
+      "seconds to answer before help instructions appear";
+    return;
+  }
+  if (alert.contact_ready && alert.status === "pending") {
+    const who = alert.contact_name || "your verified emergency contact";
+    fallSafetyContactNotice.textContent =
+      `If you do not respond, PhysioVision will request a call and text to ${who}. It will not call 995.`;
+    fallSafetyCountdownLabel.textContent =
+      `seconds to answer before ${who} is alerted`;
+    return;
+  }
+  fallSafetyContactNotice.textContent =
+    "No verified automatic contact alert is available. Use Call 995 or ask someone nearby for urgent help.";
+  fallSafetyCountdownLabel.textContent =
+    "seconds to answer before help instructions appear";
+}
+
+function registerFallAlert(event) {
+  if (!isLoggedIn()) {
+    updateFallContactNotice(null);
+    return Promise.resolve(null);
+  }
+  const clientEventId = createFallClientEventId();
+  const promise = createEmergencyAlert({
+    clientEventId,
+    exerciseId: engine?.exercise?.id ?? "",
+    monitoringMode: event.mode ?? fallMonitor.mode ?? "",
+    signals: Array.isArray(event.signals) ? event.signals : [],
+  })
+    .then((alert) => {
+      if (activeFallEvent === event) {
+        updateFallContactNotice(alert);
+        if (Number.isInteger(alert.countdown_seconds)) {
+          fallSafetySecondsRemaining = Math.min(
+            fallSafetySecondsRemaining,
+            alert.countdown_seconds
+          );
+          fallSafetyCountdown.textContent = String(
+            Math.max(fallSafetySecondsRemaining, 0)
+          );
+        }
+      }
+      return alert;
+    })
+    .catch((error) => {
+      if (activeFallEvent === event) {
+        updateFallContactNotice(null);
+        fallSafetyVoiceStatus.textContent =
+          `${error.message || "The automatic alert could not be registered."} Use Call 995 or ask someone nearby if you need urgent help.`;
+      }
+      return null;
+    });
+  return promise;
+}
+
+function renderFallAlertDelivery(alert) {
+  if (!alert) {
+    setFallAlertStatus(
+      "error",
+      "No automatic contact alert was sent",
+      "The alert could not reach the server. Use Call 995 or contact someone nearby."
+    );
+    return;
+  }
+  const who = alert.contact_name || "your emergency contact";
+  if (alert.status === "notified") {
+    setFallAlertStatus(
+      "sent",
+      `Call and text requested for ${who}`,
+      "The provider accepted both notification requests. This does not mean the contact answered, and no ambulance was dispatched."
+    );
+  } else if (alert.status === "partial") {
+    setFallAlertStatus(
+      "pending",
+      `Only one alert channel reached ${who}`,
+      "Either the call or text request failed. Use Call 995 or another phone if urgent."
+    );
+  } else if (["pending", "notifying"].includes(alert.status)) {
+    setFallAlertStatus(
+      "pending",
+      `Contacting ${who}…`,
+      "A call and text are being requested. No ambulance has been dispatched."
+    );
+  } else {
+    setFallAlertStatus(
+      "error",
+      "No automatic contact alert was sent",
+      alert.status === "not_configured"
+        ? "A verified contact and notification provider are not both active. Use Call 995 or ask someone nearby."
+        : "The notification provider failed. Use Call 995 or another phone if urgent."
+    );
+  }
+}
+
+async function submitFallEmergencyResponse(response) {
+  const alertPromise = activeFallAlertPromise;
+  const alert = alertPromise ? await alertPromise : null;
+  if (!alert) {
+    if (response !== "okay") renderFallAlertDelivery(null);
+    return;
+  }
+  try {
+    const updated = await respondEmergencyAlert(alert.id, response);
+    if (response !== "okay") {
+      renderFallAlertDelivery(updated);
+      if (["notified", "partial"].includes(updated.status)) {
+        voiceGuidance.speak(
+          "An alert request was sent to your emergency contact. This does not mean they answered. No ambulance was dispatched.",
+          { key: `fall-contact-alert:${updated.id}` }
+        );
+      }
+    }
+  } catch (error) {
+    if (response !== "okay") {
+      setFallAlertStatus(
+        "error",
+        "Automatic contact alert failed",
+        `${error.message || "The server could not send the alert."} Use Call 995 or another phone if urgent.`
+      );
+    }
+  }
+}
+
 function showFallSafetyResult(response, event = {}) {
   clearFallSafetyTimer();
   recordLocalSafetyIncident(response, event);
@@ -460,7 +634,9 @@ function showFallSafetyResult(response, event = {}) {
     "fall-safety-result-safe",
     response === "okay"
   );
-  fallSafetyNoAlert.classList.toggle("hidden", response === "okay");
+  fallSafetyAlertStatus.classList.toggle("hidden", response === "okay");
+  fallSafetyAlertStatus.removeAttribute("data-state");
+  fallSafetyCall995.classList.toggle("hidden", response === "okay");
 
   if (response === "okay") {
     fallSafetyResultIcon.textContent = "✓";
@@ -471,25 +647,35 @@ function showFallSafetyResult(response, event = {}) {
     fallSafetyResultIcon.textContent = "!";
     fallSafetyResultTitle.textContent = "You said that you need help.";
     fallSafetyResultMessage.textContent =
-      "Stay where you are if moving may be unsafe. Use your phone or call out to someone nearby.";
+      "Stay where you are if moving may be unsafe. Call 995 now for urgent help, or call out to someone nearby.";
   } else {
     fallSafetyResultIcon.textContent = "!";
     fallSafetyResultTitle.textContent = "We did not receive a response.";
     fallSafetyResultMessage.textContent =
-      "The exercise and camera have stopped. Use your phone or call out to someone nearby if you need help.";
+      "The exercise and camera have stopped. Anyone nearby should check on you and call 995 if urgent.";
   }
+
+  if (response !== "okay") {
+    setFallAlertStatus(
+      "pending",
+      "Checking your emergency-contact alert…",
+      "PhysioVision never calls 995 automatically. Use Call 995 now if you can."
+    );
+  }
+  void submitFallEmergencyResponse(response);
 
   voiceGuidance.speak(
     `${fallSafetyResultTitle.textContent} ${fallSafetyResultMessage.textContent}` +
       (response === "okay"
         ? ""
-        : " No emergency alert was sent because emergency contacts are not configured in this version."),
+        : " PhysioVision is checking whether your verified emergency contact can be alerted. It will not call 995 automatically."),
     {
       key: `fall-safety-result:${response}`,
       interrupt: true,
     }
   );
-  fallSafetyClose.focus({ preventScroll: true });
+  (response === "okay" ? fallSafetyClose : fallSafetyCall995)
+    .focus({ preventScroll: true });
 }
 
 function startFallSafetyVoiceListening() {
@@ -530,7 +716,12 @@ function beginFallSafetyCheck(event) {
   fallSafetyQuestion.classList.remove("hidden");
   fallSafetyResult.classList.add("hidden");
   fallSafetyResult.classList.remove("fall-safety-result-safe");
-  fallSafetyNoAlert.classList.add("hidden");
+  fallSafetyAlertStatus.classList.add("hidden");
+  fallSafetyCall995.classList.add("hidden");
+  fallSafetyContactNotice.textContent =
+    "Registering the safety countdown with the server…";
+  fallSafetyCountdownLabel.textContent =
+    "seconds to answer before the safety check escalates";
   fallSafetyVoiceStatus.textContent = handsFreeVoiceEnabled
     ? "Hands-free voice is on. Listening will start after the question."
     : voiceGuidance.canListen
@@ -539,6 +730,7 @@ function beginFallSafetyCheck(event) {
   fallSafetyVoice.disabled = !voiceGuidance.canListen;
   fallSafetySecondsRemaining = 30;
   fallSafetyCountdown.textContent = String(fallSafetySecondsRemaining);
+  activeFallAlertPromise = registerFallAlert(event);
   fallSafetyOverlay.classList.remove("hidden");
   document.body.classList.add("fall-safety-open");
   fallSafetyOkay.focus({ preventScroll: true });
@@ -596,6 +788,7 @@ function closeFallSafetyCheck() {
   }
   fallSafetyPreviousFocus = null;
   activeFallEvent = null;
+  activeFallAlertPromise = null;
 }
 
 function processFallMonitoring(landmarks, timestampMs) {
@@ -2780,7 +2973,9 @@ async function activateCameraGuide({ announceInstruction = true } = {}) {
     if (fallReadinessEl.dataset.state === "ready") {
       fallReadinessTitleEl.textContent = "Local possible-fall check ready";
       fallReadinessDetailEl.textContent =
-        "The camera check is active. No emergency alert is sent in this version.";
+        profile.emergencyContactAlertsReady
+          ? "The camera check is active. No response can alert your verified emergency contact after 30 seconds."
+          : "The camera check is active, but automatic alerts require a verified emergency contact.";
     }
     cameraStage?.classList.add("camera-active");
     if (exerciseUsesHand(engine.exercise)) {
@@ -3051,6 +3246,7 @@ const recordedPainMessageEl = document.getElementById("recordedPainMessage");
 const recordedPainValueEl = document.getElementById("recordedPainValue");
 let painCheckinState = null;
 let painSafetyRestTimer = null;
+let painVoiceFallbackNeeded = false;
 
 function painQuestion(context) {
   return context === "before"
@@ -3182,14 +3378,21 @@ function updatePainCheckinPresentation() {
   const safetyRestPause = painCheckinState?.stage === "safety-rest-pause";
   painCheckinEl.classList.toggle(
     "hands-free-checkin",
-    handsFreeVoiceEnabled && !safetyActive
+    handsFreeVoiceEnabled && !painVoiceFallbackNeeded && !safetyActive
   );
   painCheckinEl.classList.toggle("safety-interview-active", safetyActive);
   painVoiceInputBtn.classList.toggle(
     "hidden",
-    (handsFreeVoiceEnabled && !safetyActive) || safetyOutcome || safetyRestPause
+    (handsFreeVoiceEnabled && !painVoiceFallbackNeeded)
+      || safetyOutcome
+      || safetyRestPause
   );
   painVoiceInputBtn.disabled = !voiceGuidance.canListen || safetyRestPause;
+}
+
+function showPainVoiceFallback() {
+  painVoiceFallbackNeeded = true;
+  updatePainCheckinPresentation();
 }
 
 function cancelCameraSetupCountdown({ announce = true } = {}) {
@@ -3307,23 +3510,27 @@ function startPainVoiceListening({ expectedStage = null } = {}) {
     return false;
   }
 
+  painVoiceFallbackNeeded = false;
+  updatePainCheckinPresentation();
   return voiceGuidance.listen({
     onStatus: (status) => {
       voiceCheckinStatusEl.textContent = status;
     },
     onError: (message) => {
-      if (handsFreeVoiceEnabled) {
-        painCheckinEl.classList.remove("hands-free-checkin");
-      }
+      showPainVoiceFallback();
       voiceCheckinStatusEl.textContent =
         `${message} You can also use the large on-screen choices.`;
     },
     onResult: (transcript) => {
       voiceCheckinStatusEl.textContent = `I heard: “${transcript}”`;
       if (painCheckinState?.stage === "pain") {
-        acceptPainLevel(parsePainLevel(transcript));
+        const level = parsePainLevel(transcript);
+        if (!Number.isInteger(level)) showPainVoiceFallback();
+        acceptPainLevel(level);
       } else if (painCheckinState?.stage === "confirm-pain") {
-        acceptPainConfirmation(parseConfirmationResponse(transcript));
+        const confirmation = parseConfirmationResponse(transcript);
+        if (!confirmation) showPainVoiceFallback();
+        acceptPainConfirmation(confirmation);
       } else if (isPainSafetyStage()) {
         const stage = painCheckinState.stage.replace("safety-", "");
         if (stage !== "outcome") {
@@ -3333,6 +3540,7 @@ function startPainVoiceListening({ expectedStage = null } = {}) {
               transcript.trim().slice(0, 200);
             acceptPainSafetyResponse("other");
           } else {
+            if (!parsedResponse) showPainVoiceFallback();
             if (stage === "location" && transcript.trim()) {
               painCheckinState.safetyAnswers.painLocationDescription =
                 transcript.trim().slice(0, 200);
@@ -3341,7 +3549,9 @@ function startPainVoiceListening({ expectedStage = null } = {}) {
           }
         }
       } else {
-        acceptRecoveryStatus(parseRecoveryStatus(transcript));
+        const recovery = parseRecoveryStatus(transcript);
+        if (!recovery) showPainVoiceFallback();
+        acceptRecoveryStatus(recovery);
       }
     },
   });
@@ -3392,6 +3602,7 @@ function showPainCheckin(context = "after", {
     recoveryStatus: "",
     safetyAnswers: null,
   };
+  painVoiceFallbackNeeded = false;
   painCheckinContextEl.textContent =
     context === "before" ? "Before exercise" : "After exercise";
   painCheckinTitleEl.innerHTML =
@@ -3430,6 +3641,7 @@ function hidePainCheckin() {
   );
   painSafetyInterviewEl.classList.add("hidden");
   voiceCheckinStatusEl.textContent = "";
+  painVoiceFallbackNeeded = false;
   painCheckinState = null;
   toggleBtn.disabled = false;
 }
@@ -3628,7 +3840,9 @@ function renderPainSafetyStage(stageName, { announceReassurance = false } = {}) 
     painSafetyChoicesEl.appendChild(button);
   });
   voiceCheckinStatusEl.textContent = voiceGuidance.canListen
-    ? "You can answer by voice after the question, or choose a large button."
+    ? handsFreeVoiceEnabled
+      ? "Answer aloud after the question. You do not need to press a button."
+      : "Choose Answer by voice, or use a large button."
     : "Choose the answer that fits best.";
   updatePainCheckinPresentation();
   const spokenPrompt = announceReassurance
@@ -3696,7 +3910,7 @@ function renderPainSafetyOutcome(forcedOutcome = "") {
     message =
       "Do not continue exercising. If these symptoms are severe, new, or worsening, call local emergency services now.";
     help =
-      "PhysioVision has not contacted an emergency service or another person. Ask someone nearby for help if you can do so safely. An emergency-contact workflow is not available yet.";
+      "PhysioVision has not contacted emergency services or your saved emergency contact. Use your phone or ask someone nearby for help if you can do so safely.";
   } else if (outcome === "professional") {
     heading = "Pause today’s programme and seek professional advice";
     message =

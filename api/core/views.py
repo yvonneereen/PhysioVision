@@ -18,6 +18,14 @@ from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from .ai import generate_agent_reply
 from .email_delivery import EmailDeliveryError
+from .emergency_alerts import (
+    EmergencyVerificationCooldown,
+    EmergencyVerificationDeliveryError,
+    dispatch_emergency_alert,
+    emergency_contact_ready,
+    issue_emergency_contact_verification,
+    verify_emergency_contact_code,
+)
 from .email_verification import (
     VerificationCooldown,
     VerificationDeliveryError,
@@ -33,6 +41,10 @@ from .login_verification import (
 from .models import (
     CareInvitation,
     CarePath,
+    EmergencyAlert,
+    EmergencyAlertResponse,
+    EmergencyAlertStatus,
+    EmergencyContactVerificationChallenge,
     LoginVerificationChallenge,
     PatientPathwayChoice,
     PatientProfile,
@@ -51,6 +63,10 @@ from .serializers import (
     CareInvitationAcceptSerializer,
     CareInvitationSerializer,
     ClinicianProfileSerializer,
+    EmergencyAlertCreateSerializer,
+    EmergencyAlertResponseSerializer,
+    EmergencyAlertSerializer,
+    EmergencyContactVerificationCodeSerializer,
     ForgotPasswordSerializer,
     LoginSerializer,
     PatientListSerializer,
@@ -564,6 +580,7 @@ class MeView(APIView):
     def patch(self, request):
         user = request.user
         if user.role == UserRole.PATIENT and hasattr(user, 'patient_profile'):
+            previous_contact_phone = user.patient_profile.emergency_contact_phone
             serializer = PatientProfileSerializer(user.patient_profile, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
             plan_inputs = {
@@ -580,19 +597,285 @@ class MeView(APIView):
                 for key in plan_inputs
             )
             if plan_inputs_changed:
-                serializer.save(
+                profile = serializer.save(
                     wellness_plan={},
                     wellness_plan_accepted_at=None,
                 )
             else:
-                serializer.save()
-            return Response(serializer.data)
+                profile = serializer.save()
+            contact_changed = (
+                previous_contact_phone != profile.emergency_contact_phone
+                or not profile.emergency_contact_consent
+            )
+            if contact_changed:
+                profile.emergency_contact_verified_at = None
+                profile.save(update_fields=[
+                    'emergency_contact_verified_at',
+                    'updated_at',
+                ])
+                EmergencyContactVerificationChallenge.objects.filter(
+                    patient=profile,
+                ).delete()
+            return Response(PatientProfileSerializer(profile).data)
         elif user.role == UserRole.CLINICIAN and hasattr(user, 'clinician_profile'):
             serializer = ClinicianProfileSerializer(user.clinician_profile, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
             serializer.save()
             return Response(serializer.data)
         return Response({'detail': 'No profile found.'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class EmergencyContactVerificationStartView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'emergency_contact_verification'
+
+    def post(self, request):
+        if (
+            request.user.role != UserRole.PATIENT
+            or not hasattr(request.user, 'patient_profile')
+        ):
+            return Response(
+                {'detail': 'A patient account is required.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        profile = request.user.patient_profile
+        try:
+            challenge = issue_emergency_contact_verification(profile)
+        except ValueError as exc:
+            return Response(
+                {'detail': str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except EmergencyVerificationCooldown as exc:
+            return Response(
+                {
+                    'detail': (
+                        f'Please wait {exc.retry_after} seconds before '
+                        'requesting another code.'
+                    ),
+                    'retry_after': exc.retry_after,
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+        except EmergencyVerificationDeliveryError as exc:
+            logger.exception('Could not send emergency-contact verification')
+            return Response(
+                {
+                    'detail': str(exc),
+                    'code': 'emergency_contact_delivery_unavailable',
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response({
+            'detail': (
+                'A verification code was texted to your emergency contact.'
+            ),
+            'expires_at': challenge.expires_at,
+        })
+
+
+class EmergencyContactVerificationConfirmView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'emergency_contact_verification'
+
+    def post(self, request):
+        if (
+            request.user.role != UserRole.PATIENT
+            or not hasattr(request.user, 'patient_profile')
+        ):
+            return Response(
+                {'detail': 'A patient account is required.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer = EmergencyContactVerificationCodeSerializer(
+            data=request.data,
+        )
+        serializer.is_valid(raise_exception=True)
+        profile = request.user.patient_profile
+        verified, reason = verify_emergency_contact_code(
+            profile,
+            serializer.validated_data['code'],
+        )
+        if not verified:
+            messages = {
+                'expired': 'This verification code has expired.',
+                'attempts_exhausted': (
+                    'Too many incorrect attempts. Request a new code.'
+                ),
+                'contact_changed': (
+                    'The contact number changed. Request a new code.'
+                ),
+            }
+            return Response(
+                {
+                    'detail': messages.get(
+                        reason,
+                        'The verification code is incorrect.',
+                    ),
+                    'code': f'emergency_contact_verification_{reason}',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        profile.refresh_from_db()
+        return Response({
+            'detail': 'Emergency contact verified.',
+            'profile': PatientProfileSerializer(profile).data,
+        })
+
+
+class EmergencyAlertCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'emergency_alert_create'
+
+    def post(self, request):
+        if (
+            request.user.role != UserRole.PATIENT
+            or not hasattr(request.user, 'patient_profile')
+        ):
+            return Response(
+                {'detail': 'A patient account is required.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer = EmergencyAlertCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile = request.user.patient_profile
+        existing = EmergencyAlert.objects.filter(
+            client_event_id=serializer.validated_data['client_event_id'],
+            patient=profile,
+        ).first()
+        if existing:
+            return Response(EmergencyAlertSerializer(existing).data)
+
+        contact_is_ready = emergency_contact_ready(profile)
+        delay_seconds = max(
+            10,
+            min(settings.EMERGENCY_ALERT_DELAY_SECONDS, 120),
+        )
+        alert = EmergencyAlert.objects.create(
+            client_event_id=(
+                serializer.validated_data['client_event_id']
+            ),
+            patient=profile,
+            status=(
+                EmergencyAlertStatus.PENDING
+                if contact_is_ready
+                else EmergencyAlertStatus.NOT_CONFIGURED
+            ),
+            exercise_id=serializer.validated_data.get('exercise_id', ''),
+            monitoring_mode=serializer.validated_data.get(
+                'monitoring_mode',
+                '',
+            ),
+            signals=serializer.validated_data.get('signals', []),
+            notify_after=timezone.now() + timedelta(seconds=delay_seconds),
+            contact_name=(
+                profile.emergency_contact_name if contact_is_ready else ''
+            ),
+            contact_phone=(
+                profile.emergency_contact_phone if contact_is_ready else ''
+            ),
+            delivery_error=(
+                ''
+                if contact_is_ready
+                else (
+                    'No verified emergency contact or notification provider '
+                    'is configured.'
+                )
+            ),
+        )
+        return Response(
+            EmergencyAlertSerializer(alert).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class EmergencyAlertDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'emergency_alert_response'
+
+    def get_alert(self, request, alert_id):
+        if (
+            request.user.role != UserRole.PATIENT
+            or not hasattr(request.user, 'patient_profile')
+        ):
+            return None
+        return EmergencyAlert.objects.filter(
+            pk=alert_id,
+            patient=request.user.patient_profile,
+        ).first()
+
+    def get(self, request, alert_id):
+        alert = self.get_alert(request, alert_id)
+        if not alert:
+            return Response(
+                {'detail': 'Emergency alert not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(EmergencyAlertSerializer(alert).data)
+
+    def post(self, request, alert_id):
+        if (
+            request.user.role != UserRole.PATIENT
+            or not hasattr(request.user, 'patient_profile')
+        ):
+            return Response(
+                {'detail': 'A patient account is required.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        input_serializer = EmergencyAlertResponseSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        response_value = input_serializer.validated_data['response']
+        with transaction.atomic():
+            alert = (
+                EmergencyAlert.objects.select_for_update()
+                .filter(
+                    pk=alert_id,
+                    patient=request.user.patient_profile,
+                )
+                .first()
+            )
+            if not alert:
+                return Response(
+                    {'detail': 'Emergency alert not found.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            if alert.status in {
+                EmergencyAlertStatus.NOTIFYING,
+                EmergencyAlertStatus.NOTIFIED,
+                EmergencyAlertStatus.PARTIAL,
+                EmergencyAlertStatus.FAILED,
+            }:
+                if not alert.response:
+                    alert.response = response_value
+                    alert.responded_at = timezone.now()
+                    alert.save(update_fields=[
+                        'response',
+                        'responded_at',
+                        'updated_at',
+                    ])
+                return Response(EmergencyAlertSerializer(alert).data)
+
+            alert.response = response_value
+            alert.responded_at = timezone.now()
+            update_fields = ['response', 'responded_at', 'updated_at']
+            if response_value == EmergencyAlertResponse.OKAY:
+                alert.status = EmergencyAlertStatus.CANCELLED
+                update_fields.append('status')
+            elif alert.status == EmergencyAlertStatus.PENDING:
+                alert.notify_after = timezone.now()
+                update_fields.append('notify_after')
+            alert.save(update_fields=update_fields)
+
+        if (
+            response_value != EmergencyAlertResponse.OKAY
+            and alert.status == EmergencyAlertStatus.PENDING
+        ):
+            alert = dispatch_emergency_alert(alert.id)
+        return Response(EmergencyAlertSerializer(alert).data)
 
 
 class PatientPathwayChoiceView(APIView):

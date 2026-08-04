@@ -165,6 +165,51 @@ export async function patchMe(fields) {
   return request("PATCH", "/auth/me/", fields);
 }
 
+export async function startEmergencyContactVerification() {
+  return request(
+    "POST",
+    "/auth/emergency-contact/verification/start/",
+    {}
+  );
+}
+
+export async function confirmEmergencyContactVerification(code) {
+  return request(
+    "POST",
+    "/auth/emergency-contact/verification/confirm/",
+    { code }
+  );
+}
+
+export async function createEmergencyAlert({
+  clientEventId,
+  exerciseId = "",
+  monitoringMode = "",
+  signals = [],
+}) {
+  return request("POST", "/auth/emergency-alerts/", {
+    client_event_id: clientEventId,
+    exercise_id: exerciseId,
+    monitoring_mode: monitoringMode,
+    signals,
+  });
+}
+
+export async function respondEmergencyAlert(alertId, response) {
+  return request(
+    "POST",
+    `/auth/emergency-alerts/${encodeURIComponent(alertId)}/`,
+    { response }
+  );
+}
+
+export async function getEmergencyAlert(alertId) {
+  return request(
+    "GET",
+    `/auth/emergency-alerts/${encodeURIComponent(alertId)}/`
+  );
+}
+
 export async function selectPatientPathway(pathway) {
   return request("POST", "/auth/patient-pathway/", { pathway });
 }

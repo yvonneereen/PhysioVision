@@ -242,6 +242,13 @@ export async function generateWellnessPlan(preferences) {
   return request("POST", "/auth/agent/plan/", preferences);
 }
 
+export async function interpretSafetyLanguage({ stage, transcript }) {
+  return request("POST", "/auth/agent/safety-language/", {
+    stage,
+    transcript,
+  });
+}
+
 export async function acceptWellnessPlan(draftToken) {
   return request("POST", "/auth/agent/plan/accept/", {
     draft_token: draftToken,

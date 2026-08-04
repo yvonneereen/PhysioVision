@@ -99,6 +99,11 @@ urlpatterns = [
     ),
     path('agent/chat/', views.AgentChatView.as_view(), name='agent-chat'),
     path(
+        'agent/safety-language/',
+        views.SafetyLanguageInterpretationView.as_view(),
+        name='agent-safety-language',
+    ),
+    path(
         'slack/link-code/',
         views.SlackLinkCodeView.as_view(),
         name='auth-slack-link-code',

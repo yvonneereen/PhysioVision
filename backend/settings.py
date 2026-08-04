@@ -80,6 +80,7 @@ REST_FRAMEWORK = {
         'emergency_contact_verification': '5/hour',
         'emergency_alert_create': '12/hour',
         'emergency_alert_response': '30/hour',
+        'safety_language_interpretation': '60/hour',
     },
 }
 

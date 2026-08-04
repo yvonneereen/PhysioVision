@@ -218,10 +218,19 @@ assert.match(
   /onEnd:\s*\(\)\s*=>\s*armVoiceListening\(beginListening\)/,
   "hands-free listening should arm automatically after the spoken question"
 );
+const armListeningSource = functionSource(
+  "armVoiceListening",
+  "finishVoiceModeChoice"
+);
 assert.match(
-  source,
-  /const VOICE_LISTENING_ARM_DELAY_MS = 400/,
-  "recognition should wait briefly for spoken audio to release the microphone"
+  armListeningSource,
+  /callback\(\)/,
+  "recognition should start immediately when spoken guidance ends"
+);
+assert.doesNotMatch(
+  armListeningSource,
+  /setTimeout/,
+  "hands-free answers should not be delayed after a question"
 );
 assert.match(
   speakPainSource,
@@ -270,6 +279,21 @@ assert.match(
   source,
   /stageName === "urgent"[\s\S]*?response === "unsure"[\s\S]*?renderPainSafetyStage\("urgent-chest"\)/,
   "not sure must open clarification instead of immediately showing an urgent outcome"
+);
+assert.match(
+  source,
+  /parsePainSafetyResponse\(stage, transcript\)[\s\S]*?if \(parsedResponse\)[\s\S]*?acceptPainSafetyResponse\(parsedResponse\)[\s\S]*?interpretPainSafetyTranscript\(stage, transcript\)/,
+  "fixed safety-language rules should run before the constrained AI fallback"
+);
+assert.match(
+  source,
+  /interpretSafetyLanguage\(\{[\s\S]*?stage,[\s\S]*?transcript,[\s\S]*?interpretation\?\.matched[\s\S]*?acceptPainSafetyResponse\(interpretation\.response\)/,
+  "AI language output should be validated before entering the fixed safety pathway"
+);
+assert.match(
+  source,
+  /language_interpretations: answers\.languageInterpretations/,
+  "constrained AI language notes should be recorded with the safety check"
 );
 assert.match(
   source,
@@ -458,8 +482,8 @@ assert.match(
 );
 assert.match(
   source,
-  /stage === "location" && !parsedResponse[\s\S]*?painLocationDescription[\s\S]*?acceptPainSafetyResponse\("other"\)/,
-  "an unmatched spoken body-area description should be recorded as Other"
+  /stage === "location" && transcript\.trim\(\)[\s\S]*?painLocationDescription[\s\S]*?if \(parsedResponse\)[\s\S]*?acceptPainSafetyResponse\(parsedResponse\)[\s\S]*?interpretPainSafetyTranscript\(stage, transcript\)/,
+  "an unmatched spoken body-area description should be preserved and interpreted before advancing"
 );
 assert.match(
   source,

@@ -73,11 +73,19 @@ function painSafetyReview(checkin) {
   const painArea = [safety.pain_side, safety.pain_location]
     .filter(Boolean)
     .join(" ");
+  const languageNotes = Array.isArray(safety.language_interpretations)
+    ? safety.language_interpretations
+      .map((item) => String(item?.summary || "").trim())
+      .filter(Boolean)
+      .slice(0, 2)
+      .join("; ")
+    : "";
   const details = [
     safety.exercise_name,
     painArea,
     restLabels[safety.rest_trend],
     movementLabels[safety.safe_movement],
+    languageNotes ? `AI language interpretation: ${languageNotes}` : "",
   ].filter(Boolean);
   return `
     <span class="pain-review-summary">

@@ -25,12 +25,13 @@ import {
 } from "./calibration-policy.js?v=2";
 import {
   createEmergencyAlert,
+  interpretSafetyLanguage,
   isLoggedIn,
   postCalibration,
   postPainCheckin,
   postSession,
   respondEmergencyAlert,
-} from "./api.js?v=26";
+} from "./api.js?v=27";
 import { DRAFT_EXERCISES } from "./exercises/catalog.js";
 import {
   parseConfirmationResponse,
@@ -310,8 +311,8 @@ let fallSafetyPreviousFocus = null;
 let activeFallEvent = null;
 let activeFallAlertPromise = null;
 let fallSafetyClarificationMode = "";
+let fallSafetyAiAttempts = 0;
 let handsFreeVoiceEnabled = false;
-const VOICE_LISTENING_ARM_DELAY_MS = 400;
 let voiceModeChosenThisSession = false;
 let voiceModeChoicePromise = null;
 let resolveVoiceModeChoice = null;
@@ -325,7 +326,7 @@ const exerciseContent = new Map(
 voiceGuidance.attachToggle(soundToggle);
 
 function armVoiceListening(callback) {
-  window.setTimeout(callback, VOICE_LISTENING_ARM_DELAY_MS);
+  callback();
 }
 
 function finishVoiceModeChoice(handsFree) {
@@ -710,7 +711,7 @@ function requestFallSafetyOkayClarification() {
     interrupt: true,
     onEnd: () => armVoiceListening(listenAfterQuestion),
   });
-  if (!spoken) window.setTimeout(listenAfterQuestion, 200);
+  if (!spoken) listenAfterQuestion();
 }
 
 function requestFallSafetyUnknownClarification(transcript) {
@@ -735,7 +736,77 @@ function requestFallSafetyUnknownClarification(transcript) {
       onEnd: () => armVoiceListening(listenAfterQuestion),
     }
   );
-  if (!spoken) window.setTimeout(listenAfterQuestion, 200);
+  if (!spoken) listenAfterQuestion();
+}
+
+function requestFallSafetyAiClarification(prompt) {
+  const fixedPrompt = String(prompt || "").trim();
+  if (!fixedPrompt) {
+    fallSafetyVoiceStatus.textContent =
+      "I could not determine what you meant. Please use one of the two large buttons.";
+    return;
+  }
+  fallSafetyVoiceStatus.textContent = fixedPrompt;
+  const listenAfterQuestion = () => {
+    if (
+      safetyCheckActive
+      && !fallSafetyQuestion.classList.contains("hidden")
+    ) {
+      startFallSafetyVoiceListening();
+    }
+  };
+  const spoken = voiceGuidance.speak(fixedPrompt, {
+    key: `possible-fall:ai-clarification:${fallSafetyAiAttempts}`,
+    interrupt: true,
+    rate: 0.88,
+    onEnd: () => armVoiceListening(listenAfterQuestion),
+  });
+  if (!spoken) listenAfterQuestion();
+}
+
+async function interpretFallSafetyTranscript(transcript) {
+  if (fallSafetyAiAttempts >= 1) {
+    fallSafetyVoiceStatus.textContent =
+      "I still could not determine what you meant. Please use I’m okay or I need help.";
+    return;
+  }
+  fallSafetyAiAttempts += 1;
+  const expectedEvent = activeFallEvent;
+  const expectedMode = fallSafetyClarificationMode;
+  const stage = expectedMode === "confirm-okay"
+    ? "fall-confirm-okay"
+    : "fall-wellbeing";
+  fallSafetyVoiceStatus.textContent =
+    `I heard: “${transcript}” Checking what you meant…`;
+  try {
+    const interpretation = await interpretSafetyLanguage({
+      stage,
+      transcript,
+    });
+    if (
+      !safetyCheckActive
+      || activeFallEvent !== expectedEvent
+      || fallSafetyClarificationMode !== expectedMode
+      || fallSafetyQuestion.classList.contains("hidden")
+    ) {
+      return;
+    }
+    const response = interpretation?.matched
+      ? interpretation.response
+      : "";
+    if (response === "okay" || response === "help") {
+      showFallSafetyResult(response, activeFallEvent ?? {});
+    } else if (response === "confirm-okay") {
+      requestFallSafetyOkayClarification();
+    } else {
+      requestFallSafetyAiClarification(interpretation?.retry_prompt);
+    }
+  } catch (_) {
+    if (safetyCheckActive && activeFallEvent === expectedEvent) {
+      fallSafetyVoiceStatus.textContent =
+        "The language helper is unavailable. Please use I’m okay or I need help.";
+    }
+  }
 }
 
 function startFallSafetyVoiceListening() {
@@ -760,7 +831,7 @@ function startFallSafetyVoiceListening() {
       } else if (response === "confirm-okay") {
         requestFallSafetyOkayClarification();
       } else {
-        requestFallSafetyUnknownClarification(transcript);
+        void interpretFallSafetyTranscript(transcript);
       }
     },
   });
@@ -770,6 +841,7 @@ function beginFallSafetyCheck(event) {
   if (safetyCheckActive) return;
   safetyCheckActive = true;
   fallSafetyClarificationMode = "";
+  fallSafetyAiAttempts = 0;
   activeFallEvent = event;
   fallSafetyPreviousFocus = document.activeElement;
   clearHoldTimer(activeDose(engine.exercise).holdSeconds);
@@ -814,9 +886,7 @@ function beginFallSafetyCheck(event) {
     }
   );
   if (!spoken && handsFreeVoiceEnabled) {
-    window.setTimeout(() => {
-      if (safetyCheckActive) startFallSafetyVoiceListening();
-    }, 200);
+    if (safetyCheckActive) startFallSafetyVoiceListening();
   }
 
   clearFallSafetyTimer();
@@ -3614,6 +3684,76 @@ function acknowledgeRecordedPain(completed) {
   });
 }
 
+function recordPainLanguageInterpretation(stage, interpretation) {
+  const answers = painCheckinState?.safetyAnswers;
+  if (!answers || !interpretation?.matched) return;
+  answers.languageInterpretations.push({
+    stage,
+    response: interpretation.response,
+    facts: Array.isArray(interpretation.facts)
+      ? interpretation.facts.slice(0, 8)
+      : [],
+    summary: String(interpretation.summary || "").slice(0, 180),
+    source: "gemini_constrained_language",
+  });
+}
+
+async function interpretPainSafetyTranscript(stage, transcript) {
+  const expectedState = painCheckinState;
+  const expectedStage = `safety-${stage}`;
+  if (!expectedState || expectedState.stage !== expectedStage) return;
+  const attempts = expectedState.languageInterpretationAttempts;
+  if ((attempts[stage] ?? 0) >= 1) {
+    showPainVoiceFallback();
+    voiceCheckinStatusEl.textContent =
+      "I still could not match that answer. Please use one of the large choices.";
+    return;
+  }
+  attempts[stage] = (attempts[stage] ?? 0) + 1;
+  voiceCheckinStatusEl.textContent =
+    `I heard: “${transcript}” Checking what you meant…`;
+  try {
+    const interpretation = await interpretSafetyLanguage({
+      stage,
+      transcript,
+    });
+    if (
+      painCheckinState !== expectedState
+      || expectedState.stage !== expectedStage
+    ) {
+      return;
+    }
+    if (interpretation?.matched && interpretation.response) {
+      recordPainLanguageInterpretation(stage, interpretation);
+      voiceCheckinStatusEl.textContent =
+        "Your answer was matched to one of the safety choices.";
+      acceptPainSafetyResponse(interpretation.response);
+      return;
+    }
+    showPainVoiceFallback();
+    const retryPrompt = String(interpretation?.retry_prompt || "").trim();
+    voiceCheckinStatusEl.textContent = retryPrompt
+      || "I could not match that answer. Please use a large choice.";
+    if (handsFreeVoiceEnabled && retryPrompt) {
+      speakPainPrompt(
+        retryPrompt,
+        `checkin:${expectedState.context}:safety:${stage}:simpler`,
+        expectedStage,
+        { rate: 0.88 }
+      );
+    }
+  } catch (_) {
+    if (
+      painCheckinState === expectedState
+      && expectedState.stage === expectedStage
+    ) {
+      showPainVoiceFallback();
+      voiceCheckinStatusEl.textContent =
+        "The language helper is unavailable. Please use one of the large choices.";
+    }
+  }
+}
+
 function startPainVoiceListening({ expectedStage = null } = {}) {
   if (
     !painCheckinState ||
@@ -3647,17 +3787,14 @@ function startPainVoiceListening({ expectedStage = null } = {}) {
         const stage = painCheckinState.stage.replace("safety-", "");
         if (stage !== "outcome") {
           const parsedResponse = parsePainSafetyResponse(stage, transcript);
-          if (stage === "location" && !parsedResponse && transcript.trim()) {
+          if (stage === "location" && transcript.trim()) {
             painCheckinState.safetyAnswers.painLocationDescription =
               transcript.trim().slice(0, 200);
-            acceptPainSafetyResponse("other");
-          } else {
-            if (!parsedResponse) showPainVoiceFallback();
-            if (stage === "location" && transcript.trim()) {
-              painCheckinState.safetyAnswers.painLocationDescription =
-                transcript.trim().slice(0, 200);
-            }
+          }
+          if (parsedResponse) {
             acceptPainSafetyResponse(parsedResponse);
+          } else {
+            void interpretPainSafetyTranscript(stage, transcript);
           }
         }
       } else {
@@ -3669,7 +3806,7 @@ function startPainVoiceListening({ expectedStage = null } = {}) {
   });
 }
 
-function speakPainPrompt(question, key, expectedStage) {
+function speakPainPrompt(question, key, expectedStage, { rate } = {}) {
   const beginListening = () => {
     if (
       handsFreeVoiceEnabled &&
@@ -3681,10 +3818,11 @@ function speakPainPrompt(question, key, expectedStage) {
   const spoken = voiceGuidance.speak(question, {
     key,
     interrupt: true,
+    ...(Number.isFinite(rate) ? { rate } : {}),
     onEnd: () => armVoiceListening(beginListening),
   });
   if (!spoken && handsFreeVoiceEnabled) {
-    window.setTimeout(beginListening, 200);
+    beginListening();
   }
 }
 
@@ -3713,6 +3851,7 @@ function showPainCheckin(context = "after", {
     painLevel: null,
     recoveryStatus: "",
     safetyAnswers: null,
+    languageInterpretationAttempts: {},
   };
   painVoiceFallbackNeeded = false;
   painCheckinContextEl.textContent =
@@ -3842,6 +3981,7 @@ function createPainSafetyAnswers() {
     onsetTiming: "",
     restTrend: "",
     safeMovement: "",
+    languageInterpretations: [],
     outcome: "",
     reportForPhysiotherapist: false,
     exerciseId: engine.exercise?.id ?? "",
@@ -4051,6 +4191,7 @@ function painSafetyCheckinPayload(state, reportForPhysiotherapist) {
       onset_timing: answers.onsetTiming,
       rest_trend: answers.restTrend,
       safe_movement: answers.safeMovement,
+      language_interpretations: answers.languageInterpretations,
       outcome: answers.outcome,
       report_for_physiotherapist: reportForPhysiotherapist,
       exercise_id: answers.exerciseId,

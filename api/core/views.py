@@ -59,6 +59,11 @@ from .password_reset import (
     reset_password,
     verify_password_reset_code,
 )
+from .safety_language import (
+    SafetyLanguageUnavailable,
+    available_safety_language_stage,
+    interpret_safety_language,
+)
 from .serializers import (
     CareInvitationAcceptSerializer,
     CareInvitationSerializer,
@@ -1002,6 +1007,42 @@ class AgentChatView(APIView):
             'reply': reply,
             'role': request.user.role,
         })
+
+
+class SafetyLanguageInterpretationView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'safety_language_interpretation'
+
+    def post(self, request):
+        if request.user.role != UserRole.PATIENT:
+            return Response(
+                {'detail': 'This language interpreter is available to patients only.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        stage = str(request.data.get('stage', '')).strip()
+        transcript = ' '.join(
+            str(request.data.get('transcript', '')).split()
+        )
+        if not available_safety_language_stage(stage):
+            return Response(
+                {'detail': 'Unsupported safety-language stage.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not transcript or len(transcript) > 500:
+            return Response(
+                {'detail': 'Transcript must contain between 1 and 500 characters.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            interpretation = interpret_safety_language(stage, transcript)
+        except SafetyLanguageUnavailable:
+            logger.exception('Constrained safety-language interpretation failed')
+            return Response(
+                {'detail': 'The language interpreter is unavailable.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response(interpretation)
 
 
 class WellnessScreeningView(APIView):

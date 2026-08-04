@@ -187,6 +187,22 @@ responses.push({
   body: { id: "fall-alert-id", status: "notified" },
 });
 await api.getEmergencyAlert("fall-alert-id");
+
+responses.push({
+  status: 200,
+  body: {
+    matched: true,
+    response: "help",
+    confidence: "high",
+    facts: ["unable_to_move_safely"],
+    summary: "The speaker cannot stand without help.",
+    source: "gemini_constrained_language",
+  },
+});
+await api.interpretSafetyLanguage({
+  stage: "fall-wellbeing",
+  transcript: "I cannot stand anymore",
+});
 assert.match(requests[0].url, /\/api\/auth\/register\/$/);
 assert.match(requests[2].url, /\/api\/auth\/verify-login\/$/);
 assert.match(requests[4].url, /\/api\/auth\/forgot-password\/$/);
@@ -210,6 +226,17 @@ assert.match(
 assert.equal(
   JSON.parse(requests[13].options.body).response,
   "no_response"
+);
+assert.match(
+  requests[15].url,
+  /\/api\/auth\/agent\/safety-language\/$/
+);
+assert.deepEqual(
+  JSON.parse(requests[15].options.body),
+  {
+    stage: "fall-wellbeing",
+    transcript: "I cannot stand anymore",
+  }
 );
 
 responses.push({ status: 200, body: { status: "ok" } });

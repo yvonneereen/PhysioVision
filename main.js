@@ -22,7 +22,7 @@ import {
 import {
   buildCalibrationSafetyContext,
   evaluateCalibrationReuse,
-} from "./calibration-policy.js";
+} from "./calibration-policy.js?v=2";
 import { postSession, postPainCheckin, postCalibration, isLoggedIn } from "./api.js?v=24";
 import { DRAFT_EXERCISES } from "./exercises/catalog.js";
 import {

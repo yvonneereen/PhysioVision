@@ -14,6 +14,7 @@ const frontendEntries = [
   "agent-chat.js",
   "api.js",
   "auth.js",
+  "calibration-policy.js",
   "care-workflow.js",
   "exercise-library.js",
   "exercise-tracking.js",

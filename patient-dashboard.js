@@ -203,34 +203,8 @@ function formatDate(value, options = {}) {
   }).format(parsed);
 }
 
-function setPatientPracticePresentation(authorized) {
-  const active = Boolean(authorized);
-  document.body.classList.toggle("patient-practice-authorized", active);
-  if (active) {
-    document.body.dataset.patientPracticeAuthorized = "true";
-  } else {
-    delete document.body.dataset.patientPracticeAuthorized;
-  }
-
-  const forcedDisplays = [
-    ["publicPracticePreview", "none"],
-    ["patientPracticeGate", "none"],
-    ["clinicianPracticeGate", "none"],
-    ["patientPracticeWorkspace", "block"],
-  ];
-  forcedDisplays.forEach(([id, display]) => {
-    const element = document.getElementById(id);
-    if (!element) return;
-    if (active) element.style.setProperty("display", display, "important");
-    else element.style.removeProperty("display");
-  });
-}
-
 function setView(mode) {
   const isPatientDashboard = mode === "dashboard";
-  if (isPatientDashboard) {
-    setPatientPracticePresentation(false);
-  }
   dashboard.hidden = !isPatientDashboard;
   publicMain.hidden = isPatientDashboard;
   backToDashboard?.classList.toggle("hidden", isPatientDashboard);
@@ -296,12 +270,6 @@ function startExercise(exerciseId = firstExerciseId) {
   };
 
   window.physioVisionPendingPracticeRequest = practiceRequest;
-  // Reaching this branch means the authenticated patient dashboard has
-  // already resolved a real exercise from an available plan. Keep that
-  // authorization attached to the view transition so the signed-out preview
-  // cannot flash or remain visible while the larger guide module synchronizes.
-  setPatientPracticePresentation(true);
-  setView("practice");
 
   if (typeof window.physioVisionOpenPractice === "function") {
     window.physioVisionOpenPractice(practiceRequest);
@@ -313,6 +281,7 @@ function startExercise(exerciseId = firstExerciseId) {
     );
   }
 
+  setView("practice");
   const exerciseSelect = document.getElementById("exerciseSelect");
   if (exerciseSelect) {
     exerciseSelect.value = exerciseId;
@@ -1255,7 +1224,6 @@ window.addEventListener("physiovision:auth-role", (event) => {
     activatePatientDashboard(user);
   } else {
     currentUser = null;
-    setPatientPracticePresentation(false);
     dashboard.hidden = true;
     publicMain.hidden = false;
     document.body.classList.remove(

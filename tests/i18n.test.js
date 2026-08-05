@@ -15,6 +15,8 @@ assert.deepEqual(
 
 setLocale("zh-SG", { persist: false, announce: false });
 assert.equal(getSpeechLocale(), "zh-CN");
+assert.equal(translateText("Text size"), "文字大小");
+assert.equal(translateText("Extra large"), "特大");
 assert.equal(translateText("Start camera guide"), "开始摄像头指导");
 assert.equal(
   translateText("A patient-specific note that has no bundled translation"),
@@ -34,10 +36,12 @@ assert.equal(
 
 setLocale("ms-SG", { persist: false, announce: false });
 assert.equal(getSpeechLocale(), "ms-MY");
+assert.equal(translateText("Choose text size"), "Pilih saiz teks");
 assert.equal(translateText("I need help"), "Saya perlukan bantuan");
 
 setLocale("ta-SG", { persist: false, announce: false });
 assert.equal(getSpeechLocale(), "ta-IN");
+assert.equal(translateText("Large"), "பெரியது");
 assert.equal(translateText("Call 995 now"), "இப்போது 995-ஐ அழைக்கவும்");
 
 setLocale("en-SG", { persist: false, announce: false });

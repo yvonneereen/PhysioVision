@@ -15,6 +15,11 @@ const SUPPORTED_CODES = new Set(SUPPORTED_LANGUAGES.map(({ code }) => code));
 const TRANSLATION_ROWS = [
   ["Language", "语言", "Bahasa", "மொழி"],
   ["Choose language", "选择语言", "Pilih bahasa", "மொழியைத் தேர்ந்தெடுக்கவும்"],
+  ["Text size", "文字大小", "Saiz teks", "உரை அளவு"],
+  ["Choose text size", "选择文字大小", "Pilih saiz teks", "உரை அளவைத் தேர்ந்தெடுக்கவும்"],
+  ["Standard", "标准", "Standard", "வழக்கமானது"],
+  ["Large", "大", "Besar", "பெரியது"],
+  ["Extra large", "特大", "Sangat besar", "மிகப் பெரியது"],
   ["Skip to main content", "跳到主要内容", "Langkau ke kandungan utama", "முதன்மை உள்ளடக்கத்திற்குச் செல்லவும்"],
   ["Main navigation", "主导航", "Navigasi utama", "முதன்மை வழிசெலுத்தல்"],
   ["Mobile navigation", "移动导航", "Navigasi mudah alih", "கைப்பேசி வழிசெலுத்தல்"],

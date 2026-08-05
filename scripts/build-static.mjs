@@ -11,6 +11,7 @@ const outputDirectory = path.join(projectRoot, "dist");
 const frontendEntries = [
   "index.html",
   "style.css",
+  "text-size.js",
   "agent-chat.js",
   "api.js",
   "auth.js",

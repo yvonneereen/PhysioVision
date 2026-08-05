@@ -23,6 +23,18 @@
   --font-body: "DM Sans", "Segoe UI", sans-serif;
 }
 
+html {
+  font-size: 1rem;
+}
+
+html[data-text-size="large"] {
+  font-size: 1.25rem;
+}
+
+html[data-text-size="extra-large"] {
+  font-size: 1.5rem;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -36,7 +48,7 @@ body {
   color: var(--ink);
   background: var(--paper);
   font-family: var(--font-body);
-  font-size: 17px;
+  font-size: 1.125rem;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
@@ -169,7 +181,7 @@ textarea:focus-visible {
   gap: 12px;
   width: fit-content;
   font-family: var(--font-display);
-  font-size: clamp(21px, 1.25vw, 24px);
+  font-size: clamp(1.3125rem, 1.25vw, 1.5rem);
   font-weight: 750;
   letter-spacing: -0.04em;
 }
@@ -206,7 +218,7 @@ textarea:focus-visible {
   justify-self: start;
   gap: clamp(16px, 1.65vw, 32px);
   margin-left: clamp(12px, 2vw, 38px);
-  font-size: 17px;
+  font-size: 1.0625rem;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -243,10 +255,11 @@ textarea:focus-visible {
 }
 
 .header-actions > .text-button {
-  font-size: 17px;
+  font-size: 1.0625rem;
 }
 
-.language-picker {
+.language-picker,
+.text-size-picker {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -256,11 +269,12 @@ textarea:focus-visible {
   border-radius: 999px;
   color: inherit;
   background: rgba(255, 255, 255, 0.08);
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
-.language-picker select {
+.language-picker select,
+.text-size-picker select {
   min-width: 104px;
   max-width: 164px;
   padding: 6px 24px 6px 9px;
@@ -272,13 +286,19 @@ textarea:focus-visible {
   cursor: pointer;
 }
 
-.site-header.is-scrolled .language-picker {
+.site-header.is-scrolled .language-picker,
+.site-header.is-scrolled .text-size-picker {
   border-color: rgba(25, 56, 58, 0.24);
   background: rgba(25, 56, 58, 0.06);
 }
 
-.language-picker-mobile {
+.language-picker-mobile,
+.text-size-picker-mobile {
   display: none;
+}
+
+.text-size-picker select {
+  min-width: 112px;
 }
 
 html[lang="zh-SG"] body {
@@ -300,7 +320,7 @@ html[lang="en-SG"] body {
   border: 0;
   color: inherit;
   background: transparent;
-  font-size: 14px;
+  font-size: 1rem;
   font-weight: 650;
   cursor: pointer;
 }
@@ -322,7 +342,7 @@ html[lang="en-SG"] body {
   border: 0;
   border-radius: 100px;
   font-family: var(--font-body);
-  font-size: 15px;
+  font-size: 1rem;
   font-weight: 700;
   cursor: pointer;
   transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
@@ -341,7 +361,7 @@ html[lang="en-SG"] body {
 .button-small {
   min-height: 44px;
   padding: 0 19px;
-  font-size: 13px;
+  font-size: 1rem;
 }
 
 .button-light {
@@ -450,7 +470,7 @@ html[lang="en-SG"] body {
   gap: 10px;
   margin-bottom: 24px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -485,7 +505,7 @@ html[lang="en-SG"] body {
 .hero h1 {
   max-width: 800px;
   margin-bottom: 36px;
-  font-size: clamp(69px, 7.6vw, 138px);
+  font-size: clamp(4.3125rem, 7.6vw, 8.625rem);
   font-weight: 600;
   letter-spacing: -0.075em;
   line-height: 0.82;
@@ -499,7 +519,7 @@ html[lang="en-SG"] body {
   max-width: 570px;
   margin-bottom: 40px;
   color: rgba(255, 255, 255, 0.76);
-  font-size: clamp(17px, 1.25vw, 21px);
+  font-size: clamp(1.0625rem, 1.25vw, 1.3125rem);
   line-height: 1.55;
 }
 
@@ -516,7 +536,7 @@ html[lang="en-SG"] body {
   gap: 7px;
   margin-top: 22px;
   color: rgba(255, 255, 255, 0.66);
-  font-size: 12px;
+  font-size: 1rem;
 }
 
 .hero-account-entry button {
@@ -536,7 +556,7 @@ html[lang="en-SG"] body {
   align-items: center;
   gap: 13px;
   color: rgba(255, 255, 255, 0.88);
-  font-size: 14px;
+  font-size: 1rem;
   font-weight: 600;
 }
 
@@ -804,7 +824,7 @@ html[lang="en-SG"] body {
   box-shadow: 0 14px 34px rgba(28, 54, 49, 0.16);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
-  font-size: 11px;
+  font-size: 1rem;
   line-height: 1.25;
 }
 
@@ -815,7 +835,7 @@ html[lang="en-SG"] body {
 
 .tracking-card strong {
   margin-bottom: 3px;
-  font-size: 13px;
+  font-size: 1rem;
 }
 
 .tracking-card-top {
@@ -843,7 +863,7 @@ html[lang="en-SG"] body {
   border-radius: 9px;
   color: var(--ink);
   background: var(--coral);
-  font-size: 15px;
+  font-size: 1rem;
   font-weight: 800;
 }
 
@@ -858,7 +878,7 @@ html[lang="en-SG"] body {
   bottom: 16px;
   z-index: 5;
   color: rgba(25, 56, 58, 0.62);
-  font-size: 11px;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.1em;
 }
@@ -871,7 +891,7 @@ html[lang="en-SG"] body {
   padding: 0 3.5vw;
   border-top: 1px solid rgba(255, 255, 255, 0.18);
   color: rgba(255, 255, 255, 0.54);
-  font-size: 12px;
+  font-size: 1rem;
   letter-spacing: 0.04em;
 }
 
@@ -912,7 +932,7 @@ html[lang="en-SG"] body {
   padding-bottom: 22px;
   border-bottom: 1px solid var(--line);
   color: var(--muted);
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -936,7 +956,7 @@ html[lang="en-SG"] body {
 .safety-content h2,
 .final-cta h2 {
   margin: 0;
-  font-size: clamp(48px, 5.7vw, 96px);
+  font-size: clamp(3rem, 5.7vw, 6rem);
   font-weight: 520;
 }
 
@@ -948,7 +968,7 @@ html[lang="en-SG"] body {
 
 .manifesto-copy p {
   margin-bottom: 22px;
-  font-size: 18px;
+  font-size: 1.125rem;
 }
 
 .arrow-link {
@@ -959,7 +979,7 @@ html[lang="en-SG"] body {
   padding-bottom: 7px;
   border-bottom: 1px solid var(--ink);
   color: var(--ink);
-  font-size: 14px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -1010,21 +1030,21 @@ html[lang="en-SG"] body {
 .journey-card-dark { color: var(--white); background: var(--ink); }
 
 .journey-number {
-  font-size: 11px;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.1em;
 }
 
 .journey-card h3 {
   margin-bottom: 14px;
-  font-size: clamp(25px, 2vw, 33px);
+  font-size: clamp(1.5625rem, 2vw, 2.0625rem);
   font-weight: 600;
 }
 
 .journey-card p {
   margin: 0;
   opacity: 0.74;
-  font-size: 15px;
+  font-size: 1rem;
 }
 
 .journey-icon {
@@ -1193,7 +1213,7 @@ html[lang="en-SG"] body {
 
 .practice-heading h2 {
   margin: 0;
-  font-size: clamp(32px, 3.5vw, 56px);
+  font-size: clamp(2rem, 3.5vw, 3.5rem);
   font-weight: 520;
 }
 
@@ -1221,14 +1241,14 @@ html[lang="en-SG"] body {
 .session-readiness p {
   margin: 0;
   color: rgba(255, 255, 255, 0.56);
-  font-size: 12px;
+  font-size: 1rem;
   line-height: 1.4;
 }
 
 .session-readiness strong {
   display: block;
   color: var(--white);
-  font-size: 13px;
+  font-size: 1rem;
 }
 
 .public-practice-preview {
@@ -1254,7 +1274,7 @@ html[lang="en-SG"] body {
 .public-preview-copy h2,
 .practice-role-gate h2 {
   margin-bottom: 26px;
-  font-size: clamp(44px, 5vw, 76px);
+  font-size: clamp(2.75rem, 5vw, 4.75rem);
   font-weight: 520;
 }
 
@@ -1262,7 +1282,7 @@ html[lang="en-SG"] body {
 .practice-role-gate p:not(.eyebrow) {
   max-width: 630px;
   color: rgba(255, 255, 255, 0.67);
-  font-size: 15px;
+  font-size: 1rem;
 }
 
 .public-preview-copy .button {
@@ -1274,7 +1294,7 @@ html[lang="en-SG"] body {
   max-width: 390px;
   margin-top: 16px;
   color: rgba(255, 255, 255, 0.43);
-  font-size: 10px;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
@@ -1295,7 +1315,7 @@ html[lang="en-SG"] body {
   border-radius: 10px;
   color: rgba(255, 255, 255, 0.76);
   background: rgba(255, 255, 255, 0.035);
-  font-size: 12px;
+  font-size: 1rem;
 }
 
 .public-preview-steps b {
@@ -1307,7 +1327,7 @@ html[lang="en-SG"] body {
   border-radius: 50%;
   color: var(--ink);
   background: var(--mint);
-  font-size: 10px;
+  font-size: 1rem;
 }
 
 .public-preview-motion {
@@ -1326,7 +1346,7 @@ html[lang="en-SG"] body {
   justify-content: space-between;
   gap: 18px;
   color: rgba(255, 255, 255, 0.58);
-  font-size: 10px;
+  font-size: 1rem;
 }
 
 .preview-motion-heading span,
@@ -1413,21 +1433,21 @@ html[lang="en-SG"] body {
   border-radius: 50%;
   color: var(--ink);
   background: var(--mint);
-  font-size: 11px;
+  font-size: 1rem;
   font-weight: 800;
 }
 
 .preview-motion-note p {
   margin: 0;
   color: rgba(255, 255, 255, 0.5);
-  font-size: 10px;
+  font-size: 1rem;
   line-height: 1.45;
 }
 
 .preview-motion-note strong {
   display: block;
   color: var(--white);
-  font-size: 11px;
+  font-size: 1rem;
 }
 
 .practice-role-gate {
@@ -1461,7 +1481,7 @@ html[lang="en-SG"] body {
   border-radius: 50%;
   color: var(--ink);
   background: var(--mint);
-  font-size: 23px;
+  font-size: 1.4375rem;
   font-weight: 800;
 }
 
@@ -1539,14 +1559,14 @@ html[lang="en-SG"] body {
   margin: 0;
   color: rgba(255, 255, 255, 0.58);
   text-align: center;
-  font-size: 14px;
+  font-size: 1rem;
 }
 
 .camera-placeholder strong {
   display: block;
   margin-bottom: 5px;
   color: var(--white);
-  font-size: 19px;
+  font-size: 1.1875rem;
 }
 
 .camera-placeholder-actions {
@@ -1558,12 +1578,12 @@ html[lang="en-SG"] body {
 }
 
 .camera-placeholder-actions p {
-  font-size: 16px;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
 .camera-placeholder-actions strong {
-  font-size: clamp(20px, 2vw, 26px);
+  font-size: clamp(1.25rem, 2vw, 1.625rem);
 }
 
 .camera-setup-button {
@@ -1574,7 +1594,7 @@ html[lang="en-SG"] body {
   width: 100%;
   min-height: 62px;
   padding: 16px 22px;
-  font-size: 16px;
+  font-size: 1rem;
   text-align: left;
 }
 
@@ -1591,7 +1611,7 @@ html[lang="en-SG"] body {
   border-radius: 12px;
   background: rgba(255, 208, 95, 0.12);
   color: #fff4cd;
-  font-size: 14px;
+  font-size: 1rem;
   font-weight: 650;
   line-height: 1.45;
   text-align: left;
@@ -1603,7 +1623,7 @@ html[lang="en-SG"] body {
 
 .camera-placeholder-actions small {
   color: rgba(255, 255, 255, 0.62);
-  font-size: 12px;
+  font-size: 1rem;
   line-height: 1.45;
 }
 
@@ -1665,7 +1685,7 @@ html[lang="en-SG"] body {
   background: rgba(9, 28, 30, 0.65);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 600;
 }
 
@@ -1690,7 +1710,7 @@ html[lang="en-SG"] body {
   background: rgba(9, 28, 30, 0.65);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
 }
@@ -1705,7 +1725,7 @@ html[lang="en-SG"] body {
   color: rgba(255, 255, 255, 0.54);
   background: rgba(6, 23, 24, 0.76);
   text-align: center;
-  font-size: 11px;
+  font-size: 1rem;
   letter-spacing: 0.05em;
 }
 
@@ -1730,7 +1750,7 @@ html[lang="en-SG"] body {
   border: 2px dashed rgba(185, 217, 200, 0.9);
   border-radius: 34px;
   background: rgba(8, 30, 31, 0.18);
-  font-size: clamp(72px, 11vw, 120px);
+  font-size: clamp(4.5rem, 11vw, 7.5rem);
   opacity: 0.68;
 }
 
@@ -1738,7 +1758,7 @@ html[lang="en-SG"] body {
   padding: 8px 12px;
   border-radius: 7px;
   background: rgba(6, 23, 24, 0.78);
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 650;
 }
 
@@ -1746,7 +1766,7 @@ html[lang="en-SG"] body {
   width: min(72vw, 560px);
   aspect-ratio: 1.7;
   border-radius: 28px;
-  font-size: clamp(54px, 8vw, 88px);
+  font-size: clamp(3.375rem, 8vw, 5.5rem);
 }
 
 .calibration-overlay {
@@ -1800,7 +1820,7 @@ html[lang="en-SG"] body {
   display: block;
   margin-bottom: 10px;
   color: var(--mint);
-  font-size: 11px;
+  font-size: 1rem;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -1808,7 +1828,7 @@ html[lang="en-SG"] body {
 
 .voice-setup-dialog h3 {
   margin: 0 0 10px;
-  font-size: clamp(28px, 4vw, 42px);
+  font-size: clamp(1.75rem, 4vw, 2.625rem);
   line-height: 1.02;
   letter-spacing: -0.045em;
 }
@@ -1816,7 +1836,7 @@ html[lang="en-SG"] body {
 .voice-setup-dialog > p {
   margin: 0;
   color: rgba(255, 255, 255, 0.7);
-  font-size: 15px;
+  font-size: 1rem;
   line-height: 1.55;
 }
 
@@ -1870,7 +1890,7 @@ html[lang="en-SG"] body {
   border-radius: 50%;
   color: var(--ink-deep);
   background: var(--mint);
-  font-size: 18px;
+  font-size: 1.125rem;
 }
 
 .voice-setup-option strong,
@@ -1880,12 +1900,12 @@ html[lang="en-SG"] body {
 
 .voice-setup-option strong {
   margin: 2px 0 7px;
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .voice-setup-option small {
   color: rgba(255, 255, 255, 0.66);
-  font-size: 12px;
+  font-size: 1rem;
   line-height: 1.45;
 }
 
@@ -1893,7 +1913,7 @@ html[lang="en-SG"] body {
   min-height: 22px;
   margin-top: 14px !important;
   color: #ffd05f !important;
-  font-size: 13px !important;
+  font-size: 1rem !important;
   font-weight: 700;
 }
 
@@ -1912,7 +1932,7 @@ html[lang="en-SG"] body {
   border-radius: 999px;
   color: var(--ink-deep);
   background: var(--mint);
-  font-size: 13px;
+  font-size: 1rem;
   font-weight: 800;
 }
 
@@ -1923,14 +1943,14 @@ html[lang="en-SG"] body {
 
 .voice-setup-recovery span {
   color: rgba(255, 255, 255, 0.72);
-  font-size: 12px;
+  font-size: 1rem;
 }
 
 .voice-setup-privacy {
   display: block;
   margin-top: 8px;
   color: rgba(255, 255, 255, 0.52);
-  font-size: 11px;
+  font-size: 1rem;
   line-height: 1.45;
 }
 
@@ -1952,7 +1972,7 @@ html[lang="en-SG"] body {
   display: block;
   margin-bottom: 8px;
   color: var(--mint);
-  font-size: 10px;
+  font-size: 1rem;
   font-weight: 750;
   letter-spacing: 0.11em;
   text-transform: uppercase;
@@ -1977,14 +1997,14 @@ html[lang="en-SG"] body {
 
 .calibration-dialog h3 {
   margin-bottom: 10px;
-  font-size: 27px;
+  font-size: 1.6875rem;
   letter-spacing: -0.04em;
 }
 
 .calibration-dialog > p {
   margin-bottom: 17px;
   color: rgba(255, 255, 255, 0.68);
-  font-size: 13px;
+  font-size: 1rem;
 }
 
 .calibration-dialog .calibration-status {
@@ -2017,13 +2037,13 @@ html[lang="en-SG"] body {
   border-radius: 9px;
   color: rgba(255, 255, 255, 0.62);
   background: rgba(255, 255, 255, 0.08);
-  font-size: 10px;
+  font-size: 1rem;
 }
 
 .calibration-result strong {
   display: block;
   color: var(--white);
-  font-size: 20px;
+  font-size: 1.25rem;
 }
 
 .camera-safety {
@@ -2035,7 +2055,7 @@ html[lang="en-SG"] body {
   padding: 10px 24px;
   color: rgba(255, 255, 255, 0.5);
   background: #0a2224;
-  font-size: 11px;
+  font-size: 1rem;
 }
 
 .camera-privacy-note {
@@ -2083,14 +2103,14 @@ html[lang="en-SG"] body {
 
 .fall-readiness strong {
   color: var(--white);
-  font-size: 11px;
+  font-size: 1rem;
   line-height: 1.35;
 }
 
 .fall-readiness small {
   margin-top: 2px;
   color: rgba(255, 255, 255, 0.55);
-  font-size: 9px;
+  font-size: 1rem;
   line-height: 1.35;
 }
 
@@ -2141,7 +2161,7 @@ body.fall-safety-open {
   border-radius: 50%;
   color: var(--white);
   background: #d94732;
-  font-size: 34px;
+  font-size: 2.125rem;
   font-weight: 800;
 }
 
@@ -2149,7 +2169,7 @@ body.fall-safety-open {
   display: block;
   margin-bottom: 12px;
   color: #a73223;
-  font-size: 13px;
+  font-size: 1rem;
   font-weight: 800;
   letter-spacing: 0.13em;
   text-transform: uppercase;
@@ -2158,7 +2178,7 @@ body.fall-safety-open {
 .fall-safety-dialog h2 {
   margin: 0 0 14px;
   color: var(--ink);
-  font-size: clamp(44px, 7vw, 74px);
+  font-size: clamp(2.75rem, 7vw, 4.625rem);
   line-height: 0.98;
   letter-spacing: -0.055em;
 }
@@ -2167,7 +2187,7 @@ body.fall-safety-open {
   max-width: 650px;
   margin: 0;
   color: var(--muted);
-  font-size: clamp(18px, 2.2vw, 23px);
+  font-size: clamp(1.125rem, 2.2vw, 1.4375rem);
   line-height: 1.5;
 }
 
@@ -2184,12 +2204,12 @@ body.fall-safety-open {
 
 .fall-safety-countdown strong {
   min-width: 58px;
-  font-size: 42px;
+  font-size: 2.625rem;
   line-height: 1;
 }
 
 .fall-safety-countdown span {
-  font-size: 15px;
+  font-size: 1rem;
   font-weight: 700;
   line-height: 1.4;
 }
@@ -2220,17 +2240,17 @@ body.fall-safety-open {
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  font-size: 24px;
+  font-size: 1.5rem;
   font-weight: 900;
 }
 
 .fall-safety-button strong {
-  font-size: 24px;
+  font-size: 1.5rem;
   line-height: 1.1;
 }
 
 .fall-safety-button small {
-  font-size: 12px;
+  font-size: 1rem;
   line-height: 1.4;
 }
 
@@ -2269,7 +2289,7 @@ body.fall-safety-open {
   border: 0;
   border-radius: 999px;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 800;
 }
 
@@ -2289,7 +2309,7 @@ body.fall-safety-open {
   min-height: 24px;
   margin-top: 12px !important;
   color: var(--ink) !important;
-  font-size: 14px !important;
+  font-size: 1rem !important;
   font-weight: 700;
 }
 
@@ -2297,7 +2317,7 @@ body.fall-safety-open {
   margin-top: 12px !important;
   padding-top: 12px;
   border-top: 1px solid #d9ddd8;
-  font-size: 13px !important;
+  font-size: 1rem !important;
 }
 
 .fall-safety-no-alert {
@@ -2309,7 +2329,7 @@ body.fall-safety-open {
   border-radius: 8px;
   color: #6e2016;
   background: #ffe1db;
-  font-size: 16px;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
@@ -2336,7 +2356,7 @@ body.fall-safety-open {
   border-radius: 999px;
   color: var(--white);
   background: #c43d2a;
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 850;
   text-decoration: none;
 }
@@ -2404,7 +2424,7 @@ body.fall-safety-open {
   justify-content: space-between;
   margin-bottom: 23px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.11em;
   text-transform: uppercase;
@@ -2440,7 +2460,7 @@ body.fall-safety-open {
 
 .personalization-card span {
   color: var(--green);
-  font-size: 9px;
+  font-size: 1rem;
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -2448,7 +2468,7 @@ body.fall-safety-open {
 
 .personalization-card strong {
   overflow: hidden;
-  font-size: 13px;
+  font-size: 1rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2456,7 +2476,7 @@ body.fall-safety-open {
 .personalization-card small {
   overflow: hidden;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 1rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2466,7 +2486,7 @@ body.fall-safety-open {
   border: 0;
   color: var(--ink);
   background: transparent;
-  font-size: 10px;
+  font-size: 1rem;
   font-weight: 750;
   text-decoration: underline;
   cursor: pointer;
@@ -2490,18 +2510,18 @@ body.fall-safety-open {
 }
 
 .calibration-control span {
-  font-size: 11px;
+  font-size: 1rem;
   font-weight: 750;
 }
 
 .calibration-control small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 1rem;
 }
 
 .calibration-control .text-link {
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: 1rem;
 }
 
 .calibration-control button:disabled {
@@ -2522,7 +2542,7 @@ body.fall-safety-open {
 .field-label,
 .booking-reason > span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -2562,7 +2582,7 @@ body.fall-safety-open {
   display: block;
   margin-bottom: 5px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -2571,7 +2591,7 @@ body.fall-safety-open {
 .dose-card strong {
   display: -webkit-box;
   overflow: hidden;
-  font-size: 12px;
+  font-size: 1rem;
   line-height: 1.3;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -2601,7 +2621,7 @@ body.fall-safety-open {
 
 .recorded-pain-copy span {
   color: var(--green);
-  font-size: 10px;
+  font-size: 1rem;
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -2609,7 +2629,7 @@ body.fall-safety-open {
 
 .recorded-pain-copy strong {
   color: var(--ink);
-  font-size: 14px;
+  font-size: 1rem;
   line-height: 1.3;
 }
 
@@ -2623,12 +2643,12 @@ body.fall-safety-open {
 
 .recorded-pain-score strong {
   font-family: var(--font-display);
-  font-size: 32px;
+  font-size: 2rem;
   line-height: 1;
 }
 
 .recorded-pain-score span {
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 750;
 }
 
@@ -2669,7 +2689,7 @@ body.fall-safety-open {
   padding: 8px 12px;
   border-radius: 8px;
   color: var(--green);
-  font-size: 13px;
+  font-size: 1rem;
   font-weight: 800;
   text-align: center;
   background: color-mix(in srgb, var(--mint) 45%, transparent);
@@ -2685,7 +2705,7 @@ body.fall-safety-open {
 .rep-count {
   color: var(--coral);
   font-family: var(--font-display);
-  font-size: 68px;
+  font-size: 4.25rem;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.08em;
@@ -2694,7 +2714,7 @@ body.fall-safety-open {
 
 .rep-label {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 1rem;
 }
 
 .rep-goal {
@@ -2705,14 +2725,14 @@ body.fall-safety-open {
 .rep-goal span {
   display: block;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 1rem;
   font-weight: 700;
   text-transform: uppercase;
 }
 
 .rep-goal strong {
   font-family: var(--font-display);
-  font-size: 25px;
+  font-size: 1.5625rem;
 }
 
 .feedback-banner {
@@ -2760,7 +2780,7 @@ body.fall-safety-open {
   border-radius: 50%;
   color: var(--white);
   background: var(--green);
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 850;
   line-height: 1;
   overflow: hidden;
@@ -2782,14 +2802,14 @@ body.fall-safety-open {
 
 .feedback-title {
   color: inherit;
-  font-size: 14px;
+  font-size: 1rem;
   line-height: 1.3;
   overflow-wrap: break-word;
 }
 
 .feedback-detail {
   color: #3d6d53;
-  font-size: 11px;
+  font-size: 1rem;
   line-height: 1.4;
   overflow-wrap: break-word;
   word-break: normal;
@@ -2817,7 +2837,7 @@ body.fall-safety-open {
   border-radius: 999px;
   color: var(--muted);
   background: var(--white);
-  font-size: 9px;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -2832,7 +2852,7 @@ body.fall-safety-open {
 
 .phase-arrow {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 1rem;
 }
 
 @media (max-width: 560px) {
@@ -2847,7 +2867,7 @@ body.fall-safety-open {
   .feedback-symbol {
     width: 32px;
     height: 32px;
-    font-size: 14px;
+    font-size: 1rem;
   }
 
   .phase-flow {
@@ -2883,7 +2903,7 @@ body.fall-safety-open {
 .progress-label {
   margin: 7px 0 15px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 1rem;
 }
 
 .cue-list {
@@ -2903,7 +2923,7 @@ body.fall-safety-open {
   border-radius: 8px;
   color: #764817;
   background: #fff4dd;
-  font-size: 12px;
+  font-size: 1rem;
 }
 
 .sym-warning {
@@ -2955,7 +2975,7 @@ body.fall-safety-open {
 .camera-session-hint {
   margin: 9px 2px 12px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 1rem;
   line-height: 1.45;
 }
 
@@ -2978,7 +2998,7 @@ body.fall-safety-open {
 .hand-model-status {
   display: block;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -2987,7 +3007,7 @@ body.fall-safety-open {
 .hand-tracking-heading strong {
   display: block;
   margin-top: 2px;
-  font-size: 13px;
+  font-size: 1rem;
 }
 
 .hand-model-status {
@@ -3010,7 +3030,7 @@ body.fall-safety-open {
 .hand-tracking-card > p {
   margin: 9px 0 11px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 1rem;
   line-height: 1.45;
 }
 
@@ -3020,7 +3040,7 @@ body.fall-safety-open {
   border: 1px solid rgba(25, 56, 58, 0.18);
   color: var(--ink);
   background: var(--white);
-  font-size: 11px;
+  font-size: 1rem;
 }
 
 .hand-tracking-readout {
@@ -3033,7 +3053,7 @@ body.fall-safety-open {
   gap: 12px;
   padding: 5px 0;
   border-top: 1px solid rgba(25, 56, 58, 0.1);
-  font-size: 10px;
+  font-size: 1rem;
 }
 
 .hand-tracking-readout dt {
@@ -3058,7 +3078,7 @@ body.fall-safety-open {
 
 #holdInlineCountdown {
   font-family: var(--font-display);
-  font-size: 36px;
+  font-size: 2.25rem;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.06em;
@@ -3068,7 +3088,7 @@ body.fall-safety-open {
 
 .hold-inline-unit {
   max-width: 44px;
-  font-size: 9px;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   line-height: 1.1;
@@ -3124,7 +3144,7 @@ body.fall-safety-open {
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.5);
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -3138,7 +3158,7 @@ body.fall-safety-open {
 
 .pose-label {
   color: rgba(255, 255, 255, 0.55);
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -3152,7 +3172,7 @@ body.fall-safety-open {
 
 .pose-arrow-sep {
   color: rgba(255, 255, 255, 0.35);
-  font-size: 24px;
+  font-size: 1.5rem;
   font-weight: 300;
 }
 
@@ -3191,7 +3211,7 @@ body.fall-safety-open {
 .exercise-library-heading h3 {
   margin: 0;
   color: var(--white);
-  font-size: clamp(32px, 4vw, 54px);
+  font-size: clamp(2rem, 4vw, 3.375rem);
 }
 
 .exercise-library-status {
@@ -3200,7 +3220,7 @@ body.fall-safety-open {
   border: 1px solid rgba(243, 215, 125, 0.4);
   border-radius: 999px;
   color: var(--yellow);
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 750;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -3231,7 +3251,7 @@ body.fall-safety-open {
   display: grid;
   gap: 7px;
   color: rgba(255, 255, 255, 0.72);
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -3246,7 +3266,7 @@ body.fall-safety-open {
   border-radius: 10px;
   color: var(--white);
   background: rgba(255, 255, 255, 0.06);
-  font-size: 16px;
+  font-size: 1rem;
   letter-spacing: 0;
   text-transform: none;
 }
@@ -3263,7 +3283,7 @@ body.fall-safety-open {
 .exercise-library-count {
   margin: 24px 0 12px;
   color: rgba(255, 255, 255, 0.58);
-  font-size: 13px;
+  font-size: 1rem;
 }
 
 .exercise-library-grid {
@@ -3296,7 +3316,7 @@ body.fall-safety-open {
   margin-bottom: 12px;
   padding: 4px 10px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 1rem;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -3315,7 +3335,7 @@ body.fall-safety-open {
 .exercise-card-metadata {
   margin-bottom: 10px;
   color: var(--coral-dark);
-  font-size: 11px;
+  font-size: 1rem;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -3324,7 +3344,7 @@ body.fall-safety-open {
 .exercise-library-card h4 {
   margin: 0 0 10px;
   font-family: var(--font-display);
-  font-size: 24px;
+  font-size: 1.5rem;
   letter-spacing: -0.04em;
   line-height: 1.08;
 }
@@ -3332,7 +3352,7 @@ body.fall-safety-open {
 .exercise-card-status {
   margin-bottom: 15px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 650;
 }
 
@@ -3353,14 +3373,14 @@ body.fall-safety-open {
   border-radius: 6px;
   color: var(--ink-soft);
   background: var(--mint-light);
-  font-size: 10px;
+  font-size: 1rem;
   font-weight: 750;
 }
 
 .exercise-card-label {
   margin-bottom: 4px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 1rem;
   font-weight: 800;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -3368,7 +3388,7 @@ body.fall-safety-open {
 
 .exercise-card-uses {
   margin-bottom: 18px;
-  font-size: 13px;
+  font-size: 1rem;
   line-height: 1.55;
 }
 
@@ -3380,7 +3400,7 @@ body.fall-safety-open {
 
 .exercise-card-details summary {
   color: var(--ink);
-  font-size: 13px;
+  font-size: 1rem;
   font-weight: 750;
   cursor: pointer;
 }
@@ -3388,7 +3408,7 @@ body.fall-safety-open {
 .exercise-card-details p {
   margin: 12px 0 0;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 1rem;
   line-height: 1.6;
 }
 
@@ -3397,7 +3417,7 @@ body.fall-safety-open {
   padding-top: 14px;
   border-top: 1px solid var(--line);
   color: var(--red);
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 650;
 }
 
@@ -3420,7 +3440,7 @@ details.metrics {
 
 details.metrics summary {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 1rem;
   font-weight: 650;
   cursor: pointer;
 }
@@ -3436,7 +3456,7 @@ details.metrics summary {
   justify-content: space-between;
   padding: 5px 0;
   border-bottom: 1px solid rgba(25, 56, 58, 0.09);
-  font-size: 11px;
+  font-size: 1rem;
 }
 
 .metrics b {
@@ -3451,7 +3471,7 @@ details.metrics summary {
 
 .fps {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 1rem;
 }
 
 .progress-section {
@@ -3473,7 +3493,7 @@ details.metrics summary {
 .large-copy {
   max-width: 590px;
   color: #526867;
-  font-size: 19px;
+  font-size: 1.1875rem;
 }
 
 .care-actions {
@@ -3505,7 +3525,7 @@ details.metrics summary {
 .metric-card > span,
 .chart-title span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -3513,7 +3533,7 @@ details.metrics summary {
 
 .dashboard-top h3 {
   margin: 7px 0 0;
-  font-size: 27px;
+  font-size: 1.6875rem;
   letter-spacing: -0.045em;
 }
 
@@ -3528,7 +3548,7 @@ details.metrics summary {
   border-radius: 100px;
   color: #2e6948;
   background: var(--green-light);
-  font-size: 9px;
+  font-size: 1rem;
   font-style: normal;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -3567,19 +3587,19 @@ details.metrics summary {
   display: block;
   margin: 12px 0 5px;
   font-family: var(--font-display);
-  font-size: 33px;
+  font-size: 2.0625rem;
   letter-spacing: -0.06em;
 }
 
 .metric-card small {
   margin-left: 2px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 1rem;
 }
 
 .metric-card em {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 1rem;
   font-style: normal;
 }
 
@@ -3603,7 +3623,7 @@ details.metrics summary {
 .chart-title strong {
   display: block;
   margin-top: 3px;
-  font-size: 13px;
+  font-size: 1rem;
 }
 
 .chart-legend i {
@@ -3656,21 +3676,21 @@ details.metrics summary {
   border-radius: 50%;
   color: var(--white);
   background: var(--coral);
-  font-size: 13px;
+  font-size: 1rem;
   font-weight: 800;
 }
 
 .chart-note p {
   margin: 0;
   color: #765646;
-  font-size: 9px;
+  font-size: 1rem;
   line-height: 1.35;
 }
 
 .chart-note strong {
   display: block;
   color: var(--ink);
-  font-size: 10px;
+  font-size: 1rem;
 }
 
 .chart-note button,
@@ -3679,7 +3699,7 @@ details.metrics summary {
   border: 0;
   color: var(--ink);
   background: transparent;
-  font-size: 9px;
+  font-size: 1rem;
   font-weight: 700;
   text-decoration: underline;
   cursor: pointer;
@@ -3750,7 +3770,7 @@ details.metrics summary {
   background: var(--ink);
   clip-path: polygon(50% 0, 94% 20%, 88% 72%, 50% 100%, 12% 72%, 6% 20%);
   font-family: var(--font-display);
-  font-size: 55px;
+  font-size: 3.4375rem;
   font-weight: 300;
   transform: translate(-50%, -50%);
 }
@@ -3769,7 +3789,7 @@ details.metrics summary {
 .safety-content > p:not(.eyebrow) {
   max-width: 630px;
   color: rgba(255, 255, 255, 0.63);
-  font-size: 18px;
+  font-size: 1.125rem;
 }
 
 .safety-content ul {
@@ -3787,12 +3807,12 @@ details.metrics summary {
   padding: 18px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.16);
   color: rgba(255, 255, 255, 0.8);
-  font-size: 14px;
+  font-size: 1rem;
 }
 
 .safety-content li span {
   color: var(--coral);
-  font-size: 10px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -3853,7 +3873,7 @@ details.metrics summary {
 .footer-main > p {
   color: rgba(255, 255, 255, 0.59);
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: 1.375rem;
   line-height: 1.4;
 }
 
@@ -3872,7 +3892,7 @@ details.metrics summary {
 .footer-links span {
   margin-bottom: 8px;
   color: rgba(255, 255, 255, 0.38);
-  font-size: 10px;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -3880,7 +3900,7 @@ details.metrics summary {
 
 .footer-links a {
   color: rgba(255, 255, 255, 0.75);
-  font-size: 13px;
+  font-size: 1rem;
 }
 
 .footer-links a:hover {
@@ -3893,7 +3913,7 @@ details.metrics summary {
   padding-top: 24px;
   border-top: 1px solid rgba(255, 255, 255, 0.13);
   color: rgba(255, 255, 255, 0.35);
-  font-size: 10px;
+  font-size: 1rem;
 }
 
 .modal-shell {
@@ -3956,7 +3976,7 @@ details.metrics summary {
   border-radius: 50%;
   color: var(--ink);
   background: var(--white);
-  font-size: 23px;
+  font-size: 1.4375rem;
   line-height: 1;
   cursor: pointer;
 }
@@ -4001,7 +4021,7 @@ details.metrics summary {
 .modal h2 {
   max-width: 650px;
   margin-bottom: 14px;
-  font-size: clamp(37px, 5vw, 55px);
+  font-size: clamp(2.3125rem, 5vw, 3.4375rem);
   font-weight: 580;
 }
 
@@ -4049,7 +4069,7 @@ details.metrics summary {
   height: 46px;
   border-radius: 50%;
   background: var(--cream);
-  font-size: 20px;
+  font-size: 1.25rem;
 }
 
 .choice-card:has(input:checked) .choice-icon {
@@ -4063,12 +4083,12 @@ details.metrics summary {
 
 .choice-card strong {
   margin-bottom: 3px;
-  font-size: 14px;
+  font-size: 1rem;
 }
 
 .choice-card span:last-child {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 1rem;
   line-height: 1.35;
 }
 
@@ -4088,7 +4108,7 @@ details.metrics summary {
 
 .custom-goal-field > span {
   color: var(--ink);
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -4110,7 +4130,7 @@ details.metrics summary {
 
 .custom-goal-field small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 1rem;
   line-height: 1.45;
 }
 
@@ -4139,7 +4159,7 @@ details.metrics summary {
   width: 100%;
   margin-bottom: 9px;
   color: var(--ink);
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 700;
   line-height: 1.4;
 }
@@ -4154,7 +4174,7 @@ details.metrics summary {
   border-radius: 8px;
   color: var(--muted);
   background: #fafbf9;
-  font-size: 10px;
+  font-size: 1rem;
   font-weight: 700;
   cursor: pointer;
 }
@@ -4181,7 +4201,7 @@ details.metrics summary {
   border-left: 3px solid var(--coral);
   color: var(--muted);
   background: var(--cream);
-  font-size: 11px;
+  font-size: 1rem;
   line-height: 1.45;
 }
 
@@ -4221,14 +4241,14 @@ details.metrics summary {
 
 .planner-agent-intro p {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
 .planner-agent-intro strong {
   margin-bottom: 3px;
   color: var(--ink);
-  font-size: 12px;
+  font-size: 1rem;
 }
 
 .field-grid label,
@@ -4253,19 +4273,19 @@ details.metrics summary {
 .profile-path-status span {
   margin-bottom: 5px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 1rem;
   font-weight: 700;
   text-transform: uppercase;
 }
 
 .profile-path-status strong {
-  font-size: 11px;
+  font-size: 1rem;
 }
 
 .profile-path-status small {
   margin-top: 4px;
   color: var(--muted);
-  font-size: 8px;
+  font-size: 1rem;
   line-height: 1.35;
 }
 
@@ -4274,7 +4294,7 @@ details.metrics summary {
   display: block;
   margin-bottom: 6px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -4283,7 +4303,7 @@ details.metrics summary {
   right: 14px;
   bottom: 15px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 1rem;
   font-style: normal;
 }
 
@@ -4296,7 +4316,7 @@ details.metrics summary {
   gap: 6px;
   margin-top: 12px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -4317,7 +4337,7 @@ details.metrics summary {
 .planner-history-question legend {
   padding: 0 6px;
   color: var(--ink);
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 700;
   line-height: 1.4;
 }
@@ -4325,7 +4345,7 @@ details.metrics summary {
 .planner-history-question > p {
   margin: 0 0 10px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
@@ -4345,7 +4365,7 @@ details.metrics summary {
   border-radius: 9px;
   color: var(--muted);
   background: var(--white);
-  font-size: 11px;
+  font-size: 1rem;
   font-weight: 700;
   cursor: pointer;
 }
@@ -4364,7 +4384,7 @@ details.metrics summary {
 
 .planner-medical-history small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 1rem;
   font-weight: 500;
   line-height: 1.45;
 }
@@ -4373,7 +4393,7 @@ details.metrics summary {
   min-height: 18px;
   margin: 10px 0 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 1rem;
   line-height: 1.45;
 }
 
@@ -4398,7 +4418,7 @@ details.metrics summary {
   border-radius: 9px;
   background: var(--cream);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 1rem;
 }
 
 .check-row input {
@@ -4423,7 +4443,7 @@ details.metrics summary {
   border-radius: 50%;
   color: #225b3b;
   background: var(--green-light);
-  font-size: 25px;
+  font-size: 1.5625rem;
   font-weight: 800;
 }
 
@@ -4448,7 +4468,7 @@ details.metrics summary {
   margin: 0;
   padding-left: 20px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
@@ -4483,7 +4503,7 @@ details.metrics summary {
   border-radius: 10px;
   color: var(--white);
   background: var(--ink);
-  font-size: 11px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -4493,17 +4513,17 @@ details.metrics summary {
 }
 
 .generated-day strong {
-  font-size: 14px;
+  font-size: 1rem;
 }
 
 .generated-day small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 1rem;
 }
 
 .generated-day em {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 1rem;
   font-style: normal;
 }
 
@@ -4515,7 +4535,7 @@ details.metrics summary {
   border-radius: 8px;
   color: #715225;
   background: #fff0d2;
-  font-size: 10px;
+  font-size: 1rem;
 }
 
 .plan-note span {
@@ -4549,7 +4569,7 @@ details.metrics summary {
 
 .planner-trace summary {
   color: var(--ink);
-  font-size: 11px;
+  font-size: 1rem;
   font-weight: 700;
   cursor: pointer;
 }
@@ -4558,7 +4578,7 @@ details.metrics summary {
   margin: 10px 0 0;
   padding-left: 19px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 1rem;
   line-height: 1.55;
 }
 
@@ -4572,7 +4592,7 @@ details.metrics summary {
 
 .planner-revision > p {
   margin: 0 0 10px;
-  font-size: 12px;
+  font-size: 1rem;
 }
 
 .planner-revision-actions {
@@ -4591,7 +4611,7 @@ details.metrics summary {
   display: block;
   margin-bottom: 6px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -4615,7 +4635,7 @@ details.metrics summary {
   margin: 0 0 18px;
   padding-left: 20px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 1rem;
   line-height: 1.55;
 }
 
@@ -4693,7 +4713,7 @@ details.metrics summary {
   border-radius: 0;
   color: inherit;
   background: transparent;
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 650;
   box-shadow: none;
   transition: color 0.2s ease;
@@ -4786,7 +4806,7 @@ details.metrics summary {
 .patient-dashboard-hero h1 {
   max-width: 760px;
   margin: 8px 0 12px;
-  font-size: clamp(40px, 5.8vw, 78px);
+  font-size: clamp(2.5rem, 5.8vw, 4.875rem);
   line-height: 0.98;
   letter-spacing: -0.055em;
 }
@@ -4799,7 +4819,7 @@ details.metrics summary {
   max-width: 650px;
   margin: 0;
   color: rgba(255, 255, 255, 0.72);
-  font-size: clamp(16px, 1.5vw, 20px);
+  font-size: clamp(1rem, 1.5vw, 1.25rem);
   line-height: 1.55;
 }
 
@@ -4819,7 +4839,7 @@ details.metrics summary {
   border-radius: 999px;
   color: rgba(255, 255, 255, 0.84);
   background: rgba(255, 255, 255, 0.08);
-  font-size: 11px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -4903,7 +4923,7 @@ details.metrics summary {
 
 .patient-trend-alert h2 {
   margin: 3px 0 5px;
-  font-size: clamp(20px, 2.4vw, 30px);
+  font-size: clamp(1.25rem, 2.4vw, 1.875rem);
 }
 
 .patient-trend-alert p {
@@ -4954,7 +4974,7 @@ details.metrics summary {
 
 .patient-card-heading h2 {
   margin-top: 4px;
-  font-size: clamp(26px, 3vw, 40px);
+  font-size: clamp(1.625rem, 3vw, 2.5rem);
   letter-spacing: -0.04em;
 }
 
@@ -4962,7 +4982,7 @@ details.metrics summary {
   max-width: 680px;
   margin: 14px 0 22px;
   color: var(--muted);
-  font-size: 15px;
+  font-size: 1rem;
   line-height: 1.6;
 }
 
@@ -4987,19 +5007,19 @@ details.metrics summary {
 }
 
 .patient-demo-notice strong {
-  font-size: 13px;
+  font-size: 1rem;
 }
 
 .patient-demo-notice span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
 .patient-demo-notice a {
   width: fit-content;
   color: var(--green);
-  font-size: 11px;
+  font-size: 1rem;
   font-weight: 800;
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -5027,7 +5047,7 @@ details.metrics summary {
   box-shadow:
     0 4px 10px rgba(63, 139, 97, 0.28),
     inset 0 0 0 1px rgba(255, 255, 255, 0.18);
-  font-size: 15px;
+  font-size: 1rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
@@ -5042,7 +5062,7 @@ details.metrics summary {
 .patient-plan-row > div > span {
   margin-top: 3px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 1rem;
 }
 
 .patient-plan-row small {
@@ -5065,7 +5085,7 @@ details.metrics summary {
 .patient-change-plan {
   min-height: 48px;
   padding: 0 4px;
-  font-size: 14px;
+  font-size: 1rem;
   white-space: nowrap;
 }
 
@@ -5086,14 +5106,14 @@ details.metrics summary {
 .patient-metric-grid small {
   display: block;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 1rem;
 }
 
 .patient-metric-grid strong {
   display: block;
   margin: 8px 0 4px;
   font-family: var(--font-display);
-  font-size: clamp(22px, 3vw, 36px);
+  font-size: clamp(1.375rem, 3vw, 2.25rem);
 }
 
 .patient-trend-chart {
@@ -5132,7 +5152,7 @@ details.metrics summary {
 .patient-trend-method {
   margin: 12px 0 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
@@ -5160,7 +5180,7 @@ details.metrics summary {
 
 .patient-support-card h2 {
   margin: 6px 0 12px;
-  font-size: clamp(24px, 2.7vw, 34px);
+  font-size: clamp(1.5rem, 2.7vw, 2.125rem);
   letter-spacing: -0.045em;
 }
 
@@ -5177,7 +5197,7 @@ details.metrics summary {
   margin-top: 14px !important;
   padding-top: 14px;
   border-top: 1px solid var(--line);
-  font-size: 11px;
+  font-size: 1rem;
 }
 
 .patient-ai-plan-card {
@@ -5215,7 +5235,7 @@ details.metrics summary {
 .patient-pathway-modal h2 {
   max-width: 680px;
   margin-top: 8px;
-  font-size: clamp(32px, 5vw, 56px);
+  font-size: clamp(2rem, 5vw, 3.5rem);
   line-height: 1.02;
   letter-spacing: -0.055em;
 }
@@ -5273,7 +5293,7 @@ details.metrics summary {
   border-radius: 50%;
   color: var(--green);
   background: var(--mint-light);
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 800;
 }
 
@@ -5284,13 +5304,13 @@ details.metrics summary {
 
 .patient-pathway-option strong {
   margin: 5px 0 10px;
-  font-size: 19px;
+  font-size: 1.1875rem;
   line-height: 1.25;
 }
 
 .patient-pathway-option small {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 1rem;
   line-height: 1.55;
 }
 
@@ -5317,13 +5337,13 @@ details.metrics summary {
   display: block;
   margin: 3px 0 4px;
   color: var(--green);
-  font-size: 17px;
+  font-size: 1.0625rem;
 }
 
 .patient-pathway-invite-heading p {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
@@ -5331,7 +5351,7 @@ details.metrics summary {
   display: block;
   margin-bottom: 7px;
   color: var(--ink);
-  font-size: 11px;
+  font-size: 1rem;
   font-weight: 800;
 }
 
@@ -5349,7 +5369,7 @@ details.metrics summary {
   border-radius: 9px;
   color: var(--ink);
   background: var(--white);
-  font: 800 16px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 800 1rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -5363,7 +5383,7 @@ details.metrics summary {
   min-height: 18px;
   margin: 9px 0 0;
   color: var(--coral-dark);
-  font-size: 11px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -5372,12 +5392,12 @@ details.metrics summary {
   padding-top: 12px;
   border-top: 1px solid var(--line);
   color: var(--muted);
-  font-size: 12px;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
 .patient-pathway-invite-nocode .text-link {
-  font-size: 12px;
+  font-size: 1rem;
 }
 
 .patient-refer-physio {
@@ -5396,13 +5416,13 @@ details.metrics summary {
 
 .patient-refer-physio strong {
   display: block;
-  font-size: 14px;
+  font-size: 1rem;
 }
 
 .patient-refer-physio p {
   margin: 4px 0 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
@@ -5411,7 +5431,7 @@ details.metrics summary {
   margin: 0;
   min-height: 16px;
   color: var(--green);
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -5433,14 +5453,14 @@ details.metrics summary {
 .patient-messages-empty {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 1rem;
 }
 
 .care-message {
   max-width: 85%;
   padding: 8px 11px;
   border-radius: 14px;
-  font-size: 13px;
+  font-size: 1rem;
   line-height: 1.4;
 }
 
@@ -5467,7 +5487,7 @@ details.metrics summary {
 .care-message-meta {
   display: block;
   margin-top: 4px;
-  font-size: 10px;
+  font-size: 1rem;
   opacity: 0.7;
 }
 
@@ -5485,13 +5505,13 @@ details.metrics summary {
   border: 1px solid var(--line);
   border-radius: 10px;
   font: inherit;
-  font-size: 13px;
+  font-size: 1rem;
 }
 
 .patient-messages-note {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
@@ -5510,13 +5530,13 @@ details.metrics summary {
   color: #fff;
   background: var(--green);
   box-shadow: 0 14px 40px rgba(6, 24, 25, 0.24);
-  font: 700 14px/1 var(--font-body);
+  font: 700 1rem/1 var(--font-body);
   cursor: pointer;
 }
 
 .physio-chat-launcher[hidden] { display: none; }
 
-.physio-chat-launcher span { font-size: 16px; }
+.physio-chat-launcher span { font-size: 1rem; }
 
 .physio-chat-panel {
   position: fixed;
@@ -5549,19 +5569,19 @@ details.metrics summary {
   display: block;
   margin-bottom: 4px;
   color: rgba(255, 255, 255, 0.7);
-  font-size: 10px;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
 }
 
-.physio-chat-header h2 { margin: 0; font-size: 18px; }
+.physio-chat-header h2 { margin: 0; font-size: 1.125rem; }
 
 .physio-chat-header button {
   border: 0;
   background: transparent;
   color: #fff;
-  font-size: 22px;
+  font-size: 1.375rem;
   line-height: 1;
   cursor: pointer;
 }
@@ -5590,14 +5610,14 @@ details.metrics summary {
   border: 1px solid var(--line);
   border-radius: 12px;
   font: inherit;
-  font-size: 13px;
+  font-size: 1rem;
 }
 
 .physio-chat-note {
   margin: 0;
   padding: 0 16px 14px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
@@ -5605,7 +5625,7 @@ details.metrics summary {
   min-height: 20px;
   margin: 12px 0 0;
   color: var(--coral-dark);
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -5662,7 +5682,7 @@ details.metrics summary {
   min-height: 22px;
   margin: 10px 0;
   color: var(--green);
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -5755,7 +5775,7 @@ details.metrics summary {
   color: var(--white);
   background: var(--green);
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -5768,7 +5788,7 @@ details.metrics summary {
   margin-top: 2px;
   overflow: hidden;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 1rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -5778,7 +5798,7 @@ details.metrics summary {
   border-radius: 999px;
   color: #315446;
   background: var(--mint-light);
-  font-size: 9px;
+  font-size: 1rem;
   font-style: normal;
   font-weight: 700;
 }
@@ -5807,7 +5827,7 @@ details.metrics summary {
   border-radius: 50%;
   color: var(--white);
   background: var(--coral);
-  font-size: 23px;
+  font-size: 1.4375rem;
   font-weight: 700;
 }
 
@@ -5819,12 +5839,12 @@ details.metrics summary {
 
 .emergency-contact-heading h3 {
   margin: 2px 0 4px;
-  font-size: 19px;
+  font-size: 1.1875rem;
 }
 
 .emergency-contact-heading p:last-child {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 1rem;
   line-height: 1.45;
 }
 
@@ -5838,7 +5858,7 @@ details.metrics summary {
   display: block;
   margin-bottom: 6px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -5864,7 +5884,7 @@ details.metrics summary {
   align-items: flex-start;
   margin-top: 14px;
   color: var(--ink);
-  font-size: 10px;
+  font-size: 1rem;
   font-weight: 650;
   line-height: 1.45;
 }
@@ -5896,13 +5916,13 @@ details.metrics summary {
 
 .emergency-contact-verification strong {
   color: var(--ink);
-  font-size: 12px;
+  font-size: 1rem;
 }
 
 .emergency-contact-verification span {
   margin-top: 3px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 1rem;
   line-height: 1.4;
 }
 
@@ -5910,7 +5930,7 @@ details.metrics summary {
   flex: 0 0 auto;
   min-height: 42px;
   padding: 0 15px;
-  font-size: 10px;
+  font-size: 1rem;
 }
 
 .emergency-contact-code {
@@ -5929,7 +5949,7 @@ details.metrics summary {
   display: block;
   margin-bottom: 6px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -5952,7 +5972,7 @@ details.metrics summary {
   min-height: 18px;
   margin: 8px 0 0;
   color: var(--green);
-  font-size: 10px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -5961,7 +5981,7 @@ details.metrics summary {
   padding-top: 12px;
   border-top: 1px solid #c7dcd1;
   color: #52655d;
-  font-size: 9px;
+  font-size: 1rem;
   line-height: 1.45;
 }
 
@@ -5973,7 +5993,7 @@ details.metrics summary {
   border-radius: 9px;
   color: #315446;
   background: var(--mint-light);
-  font-size: 11px;
+  font-size: 1rem;
 }
 
 .profile-safety-note > span {
@@ -6003,14 +6023,14 @@ details.metrics summary {
 .care-link-card h3,
 .clinician-workflow-card h3 {
   margin: 3px 0 8px;
-  font-size: 19px;
+  font-size: 1.1875rem;
 }
 
 .care-link-card > p:not(.eyebrow),
 .clinician-workflow-card > p:not(.eyebrow) {
   margin: 0 0 14px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
@@ -6023,7 +6043,7 @@ details.metrics summary {
 .care-link-form label {
   grid-column: 1 / -1;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -6036,7 +6056,7 @@ details.metrics summary {
   min-height: 18px;
   margin: 10px 0 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 1rem;
   line-height: 1.4;
 }
 
@@ -6062,7 +6082,7 @@ details.metrics summary {
   width: 43px;
   height: 43px;
   border-radius: 50%;
-  font-size: 10px;
+  font-size: 1rem;
   font-style: normal;
   font-weight: 800;
 }
@@ -6078,12 +6098,12 @@ details.metrics summary {
 }
 
 .therapist-summary strong {
-  font-size: 14px;
+  font-size: 1rem;
 }
 
 .therapist-summary div > span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 1rem;
 }
 
 .booking-columns {
@@ -6130,16 +6150,16 @@ details.metrics summary {
 }
 
 .date-options span {
-  font-size: 9px;
+  font-size: 1rem;
   text-transform: uppercase;
 }
 
 .date-options strong {
-  font-size: 17px;
+  font-size: 1.0625rem;
 }
 
 .time-options button {
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -6157,7 +6177,7 @@ details.metrics summary {
   margin: 12px 0 0;
   color: var(--muted);
   text-align: center;
-  font-size: 9px;
+  font-size: 1rem;
 }
 
 .therapist-modal {
@@ -6203,7 +6223,7 @@ details.metrics summary {
   margin: 0;
   padding: 16px 18px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 1rem;
   font-weight: 500;
 }
 
@@ -6229,7 +6249,7 @@ details.metrics summary {
   padding: 7px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 1rem;
 }
 
 /* Patient detail panel */
@@ -6248,7 +6268,7 @@ details.metrics summary {
   margin-bottom: 14px;
 }
 .detail-head h3 { margin: 0; font-family: var(--font-display); }
-.detail-head p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.detail-head p { margin: 2px 0 0; color: var(--muted); font-size: 1rem; }
 .detail-head-right { display: flex; align-items: center; gap: 10px; }
 .detail-metrics {
   display: grid;
@@ -6261,8 +6281,8 @@ details.metrics summary {
   border-radius: 10px;
   background: var(--white);
 }
-.detail-metrics span { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-.detail-metrics code { font-size: 18px; letter-spacing: 2px; }
+.detail-metrics span { display: block; font-size: 1rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.detail-metrics code { font-size: 1.125rem; letter-spacing: 2px; }
 .detail-section { margin-top: 14px; }
 .detail-section > strong { display: block; margin-bottom: 6px; }
 
@@ -6287,7 +6307,7 @@ details.metrics summary {
   border-radius: 999px;
   background: var(--coral);
   color: #fff;
-  font-size: 11px;
+  font-size: 1rem;
   font-weight: 800;
 }
 .therapist-sidebar nav button .tab-badge[hidden] { display: none; }
@@ -6327,7 +6347,7 @@ details.metrics summary {
   display: block;
   margin-top: 2px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 1rem;
   font-weight: 400;
 }
 
@@ -6364,18 +6384,18 @@ details.metrics summary {
   border-radius: 999px;
   background: var(--coral);
   color: #fff;
-  font-size: 11px;
+  font-size: 1rem;
   font-weight: 800;
 }
 
 .conversation-preview {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 1rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.conversation-when { color: var(--muted); font-size: 10px; }
+.conversation-when { color: var(--muted); font-size: 1rem; }
 
 .messaging-conversation {
   border: 1px solid var(--line);
@@ -6383,7 +6403,7 @@ details.metrics summary {
   padding: 22px;
   min-height: 340px;
 }
-.conversation-head { margin-bottom: 16px; font-size: 16px; }
+.conversation-head { margin-bottom: 16px; font-size: 1rem; }
 .detail-messages-form {
   display: flex;
   gap: 8px;
@@ -6397,7 +6417,7 @@ details.metrics summary {
   border: 1px solid var(--line);
   border-radius: 10px;
   font: inherit;
-  font-size: 13px;
+  font-size: 1rem;
 }
 .detail-row {
   display: grid;
@@ -6406,7 +6426,7 @@ details.metrics summary {
   align-items: center;
   padding: 8px 6px;
   border-bottom: 1px solid var(--line);
-  font-size: 13px;
+  font-size: 1rem;
 }
 
 .pain-review-summary strong,
@@ -6439,15 +6459,15 @@ details.metrics summary {
   border-radius: 14px;
   background: var(--white);
 }
-.rx-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; }
+.rx-form label { display: flex; flex-direction: column; gap: 4px; font-size: 1rem; font-weight: 600; }
 .rx-form select, .rx-form input {
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 1rem;
 }
 .rx-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
-.rx-status { margin: 0; font-size: 12px; color: var(--muted); }
+.rx-status { margin: 0; font-size: 1rem; color: var(--muted); }
 
 /* Consultations */
 /* Rows sitting directly in a table-wrap (consultations, overview) align with the 18px heading. */
@@ -6460,7 +6480,7 @@ details.metrics summary {
   margin-left: 8px;
   padding: 2px 7px;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--coral-dark);
   background: color-mix(in srgb, var(--coral) 22%, transparent);
@@ -6473,14 +6493,14 @@ details.metrics summary {
   background: var(--white);
   text-align: left;
 }
-.pending-consult-title { margin: 0 0 2px; font-weight: 700; font-size: 13px; }
-.pending-consult-time { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
+.pending-consult-title { margin: 0 0 2px; font-weight: 700; font-size: 1rem; }
+.pending-consult-time { margin: 0 0 8px; font-size: 1rem; color: var(--muted); }
 .pending-consult-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.pending-consult-status { margin: 6px 0 0; font-size: 11px; color: var(--coral-dark); }
+.pending-consult-status { margin: 6px 0 0; font-size: 1rem; color: var(--coral-dark); }
 .consult-status {
   padding: 3px 9px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 1rem;
   font-weight: 700;
   text-transform: capitalize;
   text-align: center;
@@ -6521,7 +6541,7 @@ details.metrics summary {
   color: rgba(255,255,255,.56);
   background: transparent;
   text-align: left;
-  font-size: 11px;
+  font-size: 1rem;
   cursor: pointer;
 }
 
@@ -6532,7 +6552,7 @@ details.metrics summary {
 
 .therapist-sidebar nav button span {
   color: var(--coral);
-  font-size: 15px;
+  font-size: 1rem;
 }
 
 .clinician-profile {
@@ -6549,8 +6569,8 @@ details.metrics summary {
   display: block;
 }
 
-.clinician-profile strong { font-size: 11px; }
-.clinician-profile span { color: rgba(255,255,255,.5); font-size: 9px; }
+.clinician-profile strong { font-size: 1rem; }
+.clinician-profile span { color: rgba(255,255,255,.5); font-size: 1rem; }
 
 .slack-connect {
   margin-top: 12px;
@@ -6559,7 +6579,7 @@ details.metrics summary {
 .slack-connect-status {
   margin: 8px 0 0;
   color: rgba(255,255,255,.6);
-  font-size: 10px;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
@@ -6570,7 +6590,7 @@ details.metrics summary {
   background: rgba(255,255,255,.1);
   border-radius: 4px;
   color: #fff;
-  font-size: 11px;
+  font-size: 1rem;
 }
 
 .therapist-content {
@@ -6588,7 +6608,7 @@ details.metrics summary {
 
 .therapist-heading h2 {
   margin: 0;
-  font-size: 40px;
+  font-size: 2.5rem;
 }
 
 .clinician-stats {
@@ -6618,12 +6638,12 @@ details.metrics summary {
 .invite-card-copy span {
   display: block;
   color: var(--muted, #6b7280);
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .invite-status {
   margin: 0;
-  font-size: 0.88rem;
+  font-size: 1rem;
   color: var(--muted, #6b7280);
 }
 
@@ -6645,7 +6665,7 @@ details.metrics summary {
 }
 
 .invite-expiry {
-  font-size: 0.82rem;
+  font-size: 1rem;
   color: var(--muted, #6b7280);
 }
 
@@ -6664,7 +6684,7 @@ details.metrics summary {
 
 .clinician-stats span {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 1rem;
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -6672,13 +6692,13 @@ details.metrics summary {
 .clinician-stats strong {
   margin: 10px 0 4px;
   font-family: var(--font-display);
-  font-size: 31px;
+  font-size: 1.9375rem;
   letter-spacing: -0.06em;
 }
 
 .clinician-stats em {
   color: var(--green);
-  font-size: 9px;
+  font-size: 1rem;
   font-style: normal;
 }
 
@@ -6687,7 +6707,7 @@ details.metrics summary {
 }
 
 .clinician-stats strong.demo-status {
-  font-size: 22px;
+  font-size: 1.375rem;
   letter-spacing: -0.02em;
 }
 
@@ -6701,7 +6721,7 @@ details.metrics summary {
   border-radius: 11px;
   color: #715225;
   background: #fff0d2;
-  font-size: 12px;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
@@ -6713,7 +6733,7 @@ details.metrics summary {
 .clinician-access-message strong {
   margin-bottom: 3px;
   color: var(--ink);
-  font-size: 14px;
+  font-size: 1rem;
 }
 
 .clinician-auth-actions {
@@ -6761,13 +6781,13 @@ details.metrics summary {
 .invite-code-result span,
 .invite-code-result small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 1rem;
 }
 
 .invite-code-result strong {
   margin: 5px 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 25px;
+  font-size: 1.5625rem;
   letter-spacing: 0.14em;
 }
 
@@ -6780,7 +6800,7 @@ details.metrics summary {
   display: block;
   margin-bottom: 5px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -6803,7 +6823,7 @@ details.metrics summary {
   margin: 0;
   padding: 18px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 1rem;
 }
 
 .patient-table-wrap {
@@ -6825,8 +6845,8 @@ details.metrics summary {
   display: block;
 }
 
-.table-heading strong { font-size: 13px; }
-.table-heading span { color: var(--muted); font-size: 9px; }
+.table-heading strong { font-size: 1rem; }
+.table-heading span { color: var(--muted); font-size: 1rem; }
 
 .patient-row {
   display: grid;
@@ -6836,14 +6856,14 @@ details.metrics summary {
   min-height: 67px;
   padding: 10px 18px;
   border-top: 1px solid var(--line);
-  font-size: 10px;
+  font-size: 1rem;
 }
 
 .patient-row-head {
   min-height: 35px;
   color: var(--muted);
   background: var(--cream);
-  font-size: 8px;
+  font-size: 1rem;
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -6861,16 +6881,16 @@ details.metrics summary {
 
 .patient-name strong {
   color: var(--ink);
-  font-size: 11px;
+  font-size: 1rem;
 }
 
 .patient-name small {
   color: var(--muted);
-  font-size: 8px;
+  font-size: 1rem;
 }
 
 .mini-trend {
-  font-size: 18px;
+  font-size: 1.125rem;
 }
 
 .trend-falling { color: var(--coral-dark); }
@@ -6918,13 +6938,13 @@ details.metrics summary {
 .toast p {
   margin: 0;
   color: rgba(255,255,255,.6);
-  font-size: 10px;
+  font-size: 1rem;
 }
 
 .toast strong {
   display: block;
   color: var(--white);
-  font-size: 12px;
+  font-size: 1rem;
 }
 
 @media (min-width: 1181px) and (max-width: 1500px) {
@@ -6935,13 +6955,13 @@ details.metrics summary {
   }
 
   .brand {
-    font-size: 21px;
+    font-size: 1.3125rem;
   }
 
   .desktop-nav {
     gap: 13px;
     margin-left: 0;
-    font-size: 15px;
+    font-size: 1rem;
   }
 
   .header-actions {
@@ -6949,19 +6969,26 @@ details.metrics summary {
   }
 
   .header-actions > .text-button {
-    font-size: 15px;
+    font-size: 1rem;
   }
 
-  .language-picker {
+  .language-picker,
+  .text-size-picker {
     gap: 5px;
     min-height: 44px;
     padding: 5px 7px;
-    font-size: 14px;
+    font-size: 1rem;
   }
 
-  .language-picker select {
+  .language-picker select,
+  .text-size-picker select {
     min-width: 92px;
     max-width: 142px;
+  }
+
+  .language-picker-label,
+  .text-size-picker-label {
+    display: none;
   }
 }
 
@@ -6983,7 +7010,7 @@ details.metrics summary {
   }
 
   .hero h1 {
-    font-size: clamp(65px, 8.7vw, 104px);
+    font-size: clamp(4.0625rem, 8.7vw, 6.5rem);
   }
 
   .journey-grid {
@@ -7018,7 +7045,8 @@ details.metrics summary {
     display: none;
   }
 
-  .header-actions > .language-picker {
+  .header-actions > .language-picker,
+  .header-actions > .text-size-picker {
     display: none;
   }
 
@@ -7049,13 +7077,18 @@ details.metrics summary {
     transition: all .25s ease;
   }
 
-  .mobile-nav .language-picker-mobile {
+  .mobile-nav .language-picker-mobile,
+  .mobile-nav .text-size-picker-mobile {
     display: flex;
     align-self: flex-start;
     margin-bottom: 10px;
     color: var(--ink);
     border-color: var(--line);
     background: var(--soft);
+  }
+
+  .mobile-nav .text-size-picker-mobile {
+    margin-bottom: 16px;
   }
 
   .mobile-nav.is-open {
@@ -7068,7 +7101,7 @@ details.metrics summary {
     padding: 16px 0;
     border-bottom: 1px solid var(--line);
     font-family: var(--font-display);
-    font-size: 20px;
+    font-size: 1.25rem;
     font-weight: 600;
   }
 
@@ -7077,7 +7110,7 @@ details.metrics summary {
     border-bottom: 1px solid var(--line);
     text-align: left;
     font-family: var(--font-display);
-    font-size: 20px;
+    font-size: 1.25rem;
     font-weight: 600;
   }
 
@@ -7102,7 +7135,7 @@ details.metrics summary {
   }
 
   .hero h1 {
-    font-size: clamp(72px, 15vw, 115px);
+    font-size: clamp(4.5rem, 15vw, 7.1875rem);
   }
 
   .hero-visual {
@@ -7220,7 +7253,7 @@ details.metrics summary {
   }
 
   .therapist-sidebar nav button span {
-    font-size: 18px;
+    font-size: 1.125rem;
   }
 
   .clinician-profile div:last-child {
@@ -7234,11 +7267,11 @@ details.metrics summary {
 
 @media (max-width: 640px) {
   body {
-    font-size: 16px;
+    font-size: 1rem;
   }
 
   .brand {
-    font-size: 17px;
+    font-size: 1.0625rem;
   }
 
   .hero-copy {
@@ -7248,7 +7281,7 @@ details.metrics summary {
 
   .hero h1 {
     margin-bottom: 28px;
-    font-size: clamp(62px, 20vw, 91px);
+    font-size: clamp(3.875rem, 20vw, 5.6875rem);
   }
 
   .hero-actions {
@@ -7293,7 +7326,7 @@ details.metrics summary {
   .progress-story h2,
   .safety-content h2,
   .final-cta h2 {
-    font-size: clamp(43px, 13vw, 65px);
+    font-size: clamp(2.6875rem, 13vw, 4.0625rem);
   }
 
   .journey-grid {
@@ -7320,7 +7353,7 @@ details.metrics summary {
 
   .public-preview-copy h2,
   .practice-role-gate h2 {
-    font-size: clamp(42px, 13vw, 62px);
+    font-size: clamp(2.625rem, 13vw, 3.875rem);
   }
 
   .public-preview-motion {
@@ -7344,7 +7377,7 @@ details.metrics summary {
   }
 
   .practice-heading h2 {
-    font-size: clamp(46px, 14vw, 68px);
+    font-size: clamp(2.875rem, 14vw, 4.25rem);
   }
 
   .exercise-library {
@@ -7379,7 +7412,7 @@ details.metrics summary {
   }
 
   .sound-toggle span {
-    font-size: 13px;
+    font-size: 1rem;
   }
 
   .panel {
@@ -7510,7 +7543,7 @@ details.metrics summary {
   }
 
   .calibration-dialog h3 {
-    font-size: 23px;
+    font-size: 1.4375rem;
   }
 
   .calibration-actions {
@@ -7643,7 +7676,7 @@ details.metrics summary {
 .pain-checkin.hands-free-checkin:not(.safety-interview-active) { display: none; }
 .pain-checkin-context {
   color: var(--green);
-  font-size: 0.72rem;
+  font-size: 1rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -7668,7 +7701,7 @@ details.metrics summary {
   border-radius: 8px;
   border: 1.5px solid #d0d8d4;
   background: #fff;
-  font-size: 0.85rem;
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
@@ -7715,7 +7748,7 @@ details.metrics summary {
   border-radius: 999px;
   color: var(--green);
   background: #fff;
-  font: 700 0.84rem/1.2 var(--font-body);
+  font: 700 1rem/1.2 var(--font-body);
   cursor: pointer;
 }
 .pain-confirmation-actions button:first-child {
@@ -7725,7 +7758,7 @@ details.metrics summary {
 .recovery-choices.hidden { display: none; }
 .recovery-choices p {
   margin: 0 0 0.6rem;
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 700;
 }
 .recovery-choices > div {
@@ -7740,7 +7773,7 @@ details.metrics summary {
   border-radius: 8px;
   color: var(--ink);
   background: #fff;
-  font: 700 0.82rem/1.2 var(--font-body);
+  font: 700 1rem/1.2 var(--font-body);
   cursor: pointer;
 }
 .pain-safety-interview.hidden { display: none; }
@@ -7759,22 +7792,78 @@ details.metrics summary {
 .pain-safety-reassurance strong {
   display: block;
   margin-bottom: 0.35rem;
-  font-size: 1rem;
+  font-size: 1.25rem;
 }
 .pain-safety-reassurance p,
 .pain-safety-question,
 .pain-safety-help {
   margin: 0;
 }
+
+body :is(
+  button:not(.menu-toggle),
+  input,
+  select,
+  textarea,
+  [role="button"],
+  .button,
+  .text-button,
+  .text-link,
+  .voice-setup-option,
+  .pain-confirmation-actions button,
+  .recovery-choices button,
+  .pain-safety-choices button
+) {
+  font-size: 1.125rem;
+}
+
+body .voice-setup-option strong,
+.planner-history-question legend,
+.pain-checkin-label,
+.pain-confirmation p,
+.recovery-choices p {
+  font-size: 1.25rem;
+  line-height: 1.55;
+}
+
+@media (min-width: 1181px) {
+  html[data-text-size="large"] body:not(.patient-app-active):not(.patient-practice-active) .site-header,
+  html[data-text-size="extra-large"] body:not(.patient-app-active):not(.patient-practice-active) .site-header {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    row-gap: 10px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  html[data-text-size="large"] body:not(.patient-app-active):not(.patient-practice-active) .header-actions,
+  html[data-text-size="extra-large"] body:not(.patient-app-active):not(.patient-practice-active) .header-actions {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  html[data-text-size="large"] body:not(.patient-app-active):not(.patient-practice-active) .desktop-nav,
+  html[data-text-size="extra-large"] body:not(.patient-app-active):not(.patient-practice-active) .desktop-nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: center;
+    margin-left: 0;
+  }
+
+  html[data-text-size="large"] .hero-grid,
+  html[data-text-size="extra-large"] .hero-grid {
+    padding-top: 148px;
+  }
+}
 .pain-safety-question {
   color: var(--ink);
-  font-size: 1rem;
+  font-size: 1.25rem;
   font-weight: 800;
-  line-height: 1.45;
+  line-height: 1.55;
 }
 .pain-safety-help {
   color: #52655d;
-  font-size: 0.84rem;
+  font-size: 1rem;
   line-height: 1.45;
 }
 .pain-safety-choices {
@@ -7851,7 +7940,7 @@ details.metrics summary {
   border-radius: 10px;
   color: var(--ink);
   background: #fff;
-  font: 750 0.86rem/1.25 var(--font-body);
+  font: 750 1rem/1.25 var(--font-body);
   text-align: left;
   cursor: pointer;
 }
@@ -7875,7 +7964,7 @@ details.metrics summary {
   min-height: 1.25rem;
   margin: 0;
   color: #4f6159;
-  font-size: 0.82rem;
+  font-size: 1rem;
 }
 .pain-checkin-actions {
   display: flex;
@@ -7909,11 +7998,11 @@ details.metrics summary {
 }
 .pain-safety-note {
   color: #68766f;
-  font-size: 0.75rem;
+  font-size: 1rem;
   line-height: 1.45;
 }
 #painSkip {
-  font-size: 0.8rem;
+  font-size: 1rem;
   color: #888;
   align-self: flex-start;
 }
@@ -7933,13 +8022,13 @@ details.metrics summary {
   color: var(--white);
   background: var(--ink-deep);
   box-shadow: 0 14px 40px rgba(6, 24, 25, 0.28);
-  font: 700 14px/1 var(--font-body);
+  font: 700 1rem/1 var(--font-body);
   cursor: pointer;
 }
 
 .agent-chat-launcher span {
   color: var(--coral);
-  font-size: 18px;
+  font-size: 1.125rem;
 }
 
 .agent-chat-panel {
@@ -7975,7 +8064,7 @@ details.metrics summary {
   display: block;
   margin-bottom: 5px;
   color: rgba(255, 255, 255, 0.62);
-  font-size: 10px;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -7984,7 +8073,7 @@ details.metrics summary {
 .agent-chat-header h2 {
   margin: 0;
   color: inherit;
-  font-size: 19px;
+  font-size: 1.1875rem;
 }
 
 .agent-chat-header button {
@@ -7994,7 +8083,7 @@ details.metrics summary {
   border-radius: 50%;
   color: var(--white);
   background: transparent;
-  font-size: 22px;
+  font-size: 1.375rem;
   line-height: 1;
   cursor: pointer;
 }
@@ -8012,7 +8101,7 @@ details.metrics summary {
   margin: 0;
   padding: 11px 13px;
   border-radius: 15px;
-  font-size: 14px;
+  font-size: 1rem;
   line-height: 1.45;
   white-space: pre-wrap;
 }
@@ -8042,7 +8131,7 @@ details.metrics summary {
   margin: 0;
   padding: 0 18px;
   color: #637172;
-  font-size: 11px;
+  font-size: 1rem;
 }
 
 .agent-chat-form {
@@ -8071,7 +8160,7 @@ details.metrics summary {
   border-radius: 12px;
   color: var(--ink);
   background: var(--white);
-  font: 14px/1.35 var(--font-body);
+  font: 1rem/1.35 var(--font-body);
 }
 
 .agent-chat-form .button {
@@ -8088,7 +8177,7 @@ details.metrics summary {
   border-radius: 12px;
   color: var(--green);
   background: var(--white);
-  font-size: 18px;
+  font-size: 1.125rem;
   cursor: pointer;
 }
 
@@ -8101,7 +8190,7 @@ details.metrics summary {
   margin: 0;
   padding: 0 16px 13px;
   color: #6c7778;
-  font-size: 10px;
+  font-size: 1rem;
   line-height: 1.35;
 }
 

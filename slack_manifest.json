@@ -11,17 +11,24 @@
     "oauth_config": {
         "scopes": {
             "bot": [
+                "im:history",
+                "app_mentions:read",
                 "chat:write",
-                "app_mentions:read"
+                "im:write"
             ]
         }
     },
     "settings": {
         "event_subscriptions": {
-            "request_url": "https://unsuited-premiere-tray.ngrok-free.dev/api/slack/events/",
+            "request_url": "https://physiovision.onrender.com/api/slack/events/",
             "bot_events": [
-                "app_mention"
+                "app_mention",
+                "message.im"
             ]
+        },
+        "interactivity": {
+            "is_enabled": true,
+            "request_url": "https://physiovision.onrender.com/api/slack/events/"
         },
         "org_deploy_enabled": false,
         "socket_mode_enabled": false,

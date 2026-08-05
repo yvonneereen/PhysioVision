@@ -1,3 +1,4 @@
+import json
 import re
 
 from django.conf import settings
@@ -5,8 +6,29 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 
+def _url_verification_response(request):
+    """Echo Slack's one-time Events API verification challenge.
+
+    This handshake contains no event data. Normal Slack events continue through
+    Bolt below, where their request signatures are verified.
+    """
+    if request.method != "POST":
+        return None
+    try:
+        payload = json.loads(request.body)
+    except (TypeError, ValueError, UnicodeDecodeError):
+        return None
+    if payload.get("type") != "url_verification" or not payload.get("challenge"):
+        return None
+    return JsonResponse({"challenge": payload["challenge"]})
+
+
+@csrf_exempt
 def slack_events(request):
     """Keep the rest of the API available when Slack is not configured."""
+    verification = _url_verification_response(request)
+    if verification is not None:
+        return verification
     return JsonResponse(
         {"detail": "Slack integration is not configured."},
         status=503,
@@ -430,4 +452,7 @@ if settings.SLACK_BOT_TOKEN and settings.SLACK_SIGNING_SECRET:
 
         @csrf_exempt
         def slack_events(request):
+            verification = _url_verification_response(request)
+            if verification is not None:
+                return verification
             return handler.handle(request)

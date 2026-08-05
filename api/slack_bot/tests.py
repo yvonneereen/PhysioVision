@@ -433,6 +433,16 @@ class PlanBuilderTests(TestCase):
 
 
 class OptionalSlackIntegrationTests(TestCase):
+    def test_url_verification_echoes_slack_challenge(self):
+        response = self.client.post(
+            '/api/slack/events/',
+            data='{"type":"url_verification","challenge":"test-challenge"}',
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {'challenge': 'test-challenge'})
+
     @override_settings(
         SLACK_BOT_TOKEN='',
         SLACK_SIGNING_SECRET='',

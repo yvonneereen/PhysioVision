@@ -1,7 +1,7 @@
 import {
   getSpeechLocale,
   translateText,
-} from "./i18n.js?v=6";
+} from "./i18n.js?v=7";
 
 const VOICE_PREFERENCE_KEY = "physiovision.voice.enabled.v1";
 const DEFAULT_SPEECH_VOLUME = 1;
@@ -587,6 +587,11 @@ export class VoiceGuidance {
         this.synthesis?.getVoices?.() ?? [],
         event.detail?.speechLocale || getSpeechLocale()
       );
+    });
+    this.window?.addEventListener?.("pagehide", () => {
+      // Explicitly release Safari's speech-recognition capture before a
+      // refresh or history navigation so the next page can use the microphone.
+      this.cancel();
     });
   }
 

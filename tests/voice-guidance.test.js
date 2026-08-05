@@ -290,6 +290,7 @@ class MockRecognition {
   constructor() {
     this.listeners = {};
     this.stopCalled = false;
+    this.abortCalled = false;
     activeRecognitionInstance = this;
     recognitionInstances.push(this);
   }
@@ -308,6 +309,7 @@ class MockRecognition {
   }
 
   abort() {
+    this.abortCalled = true;
     this.listeners.end?.();
   }
 
@@ -390,5 +392,21 @@ assert.match(retryStatuses.join(" "), /Listening again/i);
 assert.equal(retryError, "");
 activeRecognitionInstance.emitResult("four");
 assert.equal(retryTranscript, "four");
+
+const pageLifecycleListeners = {};
+const lifecycleGuidance = new VoiceGuidance({
+  ...listeningWindow,
+  addEventListener: (event, callback) => {
+    pageLifecycleListeners[event] = callback;
+  },
+});
+lifecycleGuidance.listen();
+const recognitionBeforeRefresh = activeRecognitionInstance;
+pageLifecycleListeners.pagehide();
+assert.equal(
+  recognitionBeforeRefresh.abortCalled,
+  true,
+  "refreshing should explicitly release the active speech-recognition microphone"
+);
 
 console.log("voice-guidance tests passed");

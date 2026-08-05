@@ -50,6 +50,7 @@ const mobileSignOut = document.getElementById("mobileSignOut");
 const mobilePatientDashboard = document.getElementById("mobilePatientDashboard");
 const mobileProfile = document.getElementById("mobileProfile");
 const mobileTherapistView = document.getElementById("mobileTherapistView");
+const therapistSignOut = document.getElementById("therapistSignOut");
 const profileAccountInitials = document.getElementById("profileAccountInitials");
 const profileAccountName = document.getElementById("profileAccountName");
 const profileAccountEmail = document.getElementById("profileAccountEmail");
@@ -661,6 +662,7 @@ async function performLogout() {
 
 headerSignOut?.addEventListener("click", performLogout);
 mobileSignOut?.addEventListener("click", performLogout);
+therapistSignOut?.addEventListener("click", performLogout);
 
 // Retain the public helper for any older controls or external integrations.
 window.pvLogout = performLogout;

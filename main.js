@@ -41,7 +41,7 @@ import {
   describeMicrophoneAccessFailure,
   readMicrophonePermissionState,
   voiceGuidance,
-} from "./voice-guidance.js?v=13";
+} from "./voice-guidance.js?v=15";
 import { isWellnessEligible } from "./wellness-screening.js";
 import {
   PRACTICE_VIEWS,
@@ -320,6 +320,8 @@ let handsFreeVoiceEnabled = false;
 let voiceModeChosenThisSession = false;
 let voiceModeChoicePromise = null;
 let resolveVoiceModeChoice = null;
+const MICROPHONE_ACCESS_CONFIRMED_KEY =
+  "physiovision.microphone.access-confirmed.v1";
 let preExerciseCheckinCompleted = false;
 let confirmedPreExercisePain = null;
 let cameraSetupCountdown = null;
@@ -346,6 +348,30 @@ function finishVoiceModeChoice(handsFree) {
   resolveVoiceModeChoice = null;
   voiceModeChoicePromise = null;
   resolve?.(true);
+}
+
+function hasConfirmedMicrophoneAccess() {
+  try {
+    return window.sessionStorage.getItem(MICROPHONE_ACCESS_CONFIRMED_KEY) === "true";
+  } catch (_) {
+    return false;
+  }
+}
+
+function rememberMicrophoneAccess() {
+  try {
+    window.sessionStorage.setItem(MICROPHONE_ACCESS_CONFIRMED_KEY, "true");
+  } catch (_) {
+    // The current hands-free session can continue when storage is unavailable.
+  }
+}
+
+function forgetMicrophoneAccess() {
+  try {
+    window.sessionStorage.removeItem(MICROPHONE_ACCESS_CONFIRMED_KEY);
+  } catch (_) {
+    // There is no stored permission hint to clear when storage is unavailable.
+  }
 }
 
 function ensureVoiceModeChosen() {
@@ -389,10 +415,22 @@ async function requestHandsFreeMicrophone() {
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error("Microphone access is unavailable in this browser.");
     }
+    const permissionState = await readMicrophonePermissionState(navigator);
+    const canReuseConfirmedAccess =
+      hasConfirmedMicrophoneAccess() &&
+      permissionState !== "denied" &&
+      permissionState !== "prompt";
+    if (canReuseConfirmedAccess) {
+      voiceSetupStatus.textContent = "Microphone permission confirmed…";
+      await voiceGuidance.prepareSpeechAfterMicrophoneRelease({ settleMs: 0 });
+      finishVoiceModeChoice(true);
+      return;
+    }
     const permissionStream = await navigator.mediaDevices.getUserMedia({
       audio: true,
     });
     permissionStream.getTracks().forEach((track) => track.stop());
+    rememberMicrophoneAccess();
     voiceSetupStatus.textContent = "Preparing consistent voice guidance…";
     // Safari can keep speaker output in its quiet microphone-capture mode for
     // a moment after the permission stream stops. Let that audio session settle
@@ -401,6 +439,7 @@ async function requestHandsFreeMicrophone() {
     finishVoiceModeChoice(true);
   } catch (error) {
     const permissionState = await readMicrophonePermissionState(navigator);
+    if (permissionState === "denied") forgetMicrophoneAccess();
     voiceSetupHandsFree.disabled = false;
     voiceSetupButtons.disabled = false;
     voiceSetupRetry.disabled = false;
@@ -3928,6 +3967,20 @@ function showPainCheckin(context = "after", {
   updatePainCheckinPresentation();
   painCheckinEl.classList.remove("hidden");
   if (startAfter || continuation) toggleBtn.disabled = true;
+
+  if (!handsFreeVoiceEnabled) {
+    if (context === "before" && (startAfter || continuation)) {
+      cameraSetupStatus.textContent =
+        "Choose your pain level in the exercise panel to continue.";
+      cameraSetupStatus.hidden = false;
+    }
+    window.requestAnimationFrame(() => {
+      painCheckinEl.scrollIntoView({ behavior: "smooth", block: "start" });
+      painLevelChoicesEl
+        .querySelector("button:not([disabled])")
+        ?.focus({ preventScroll: true });
+    });
+  }
 
   speakPainPrompt(
     painQuestion(context),

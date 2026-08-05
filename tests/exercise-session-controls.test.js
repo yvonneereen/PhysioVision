@@ -141,6 +141,11 @@ assert.match(
 );
 assert.match(
   voiceChoiceSource,
+  /hasConfirmedMicrophoneAccess\(\)[\s\S]*?permissionState !== "denied"[\s\S]*?permissionState !== "prompt"[\s\S]*?finishVoiceModeChoice\(true\)/,
+  "a refresh should reuse microphone access already confirmed in the same tab"
+);
+assert.match(
+  voiceChoiceSource,
   /finishVoiceModeChoice\(true\)/,
   "successful microphone setup should enable hands-free responses"
 );
@@ -195,6 +200,11 @@ assert.match(
   source,
   /const CALIBRATION_TARGET_MOVEMENTS = 1/,
   "personal calibration should require only one comfortable movement"
+);
+assert.match(
+  source,
+  /if \(!handsFreeVoiceEnabled\)[\s\S]*?Choose your pain level in the exercise panel to continue\.[\s\S]*?painCheckinEl\.scrollIntoView[\s\S]*?focus\(\{ preventScroll: true \}\)/,
+  "on-screen mode should reveal and focus the pain question instead of appearing unresponsive"
 );
 assert.doesNotMatch(
   source,

@@ -76,7 +76,7 @@ const TRANSLATION_ROWS = [
   ["Press Start camera guide below. We’ll ask about your pain level before turning on the camera.", "按下方的“开始摄像头指导”。打开摄像头前，我们会询问您的疼痛程度。", "Tekan Mulakan panduan kamera di bawah. Kami akan bertanya tahap kesakitan anda sebelum menghidupkan kamera.", "கீழே உள்ள கேமரா வழிகாட்டியைத் தொடங்கவும் என்பதை அழுத்தவும். கேமராவை இயக்கும் முன் உங்கள் வலி அளவைக் கேட்போம்."],
   ["Start camera guide", "开始摄像头指导", "Mulakan panduan kamera", "கேமரா வழிகாட்டியைத் தொடங்கவும்"],
   ["Resume camera guide", "继续摄像头指导", "Sambung panduan kamera", "கேமரா வழிகாட்டியைத் தொடரவும்"],
-  ["Face your device and keep a stable chair nearby for support.", "面向设备，并在旁边放一张稳固的椅子作为支撑。", "Hadap peranti anda dan letakkan kerusi yang kukuh berdekatan sebagai sokongan.", "உங்கள் சாதனத்தை நோக்கி நிற்கவும்; ஆதரவுக்காக அருகில் உறுதியான நாற்காலியை வைக்கவும்."],
+  ["Face your device and keep a stable chair nearby.", "面向设备，并在旁边放一张稳固的椅子。", "Hadap peranti anda dan letakkan kerusi yang kukuh berdekatan.", "உங்கள் சாதனத்தை நோக்கி நிற்கவும்; அருகில் உறுதியான நாற்காலியை வைக்கவும்."],
   ["Preparing movement guide…", "正在准备运动指导……", "Sedang menyediakan panduan pergerakan…", "இயக்க வழிகாட்டி தயாராகிறது…"],
   ["Movement guide ready", "运动指导已准备好", "Panduan pergerakan sedia", "இயக்க வழிகாட்டி தயாராக உள்ளது"],
   ["Voice on", "语音已开启", "Suara dihidupkan", "குரல் இயக்கத்தில் உள்ளது"],

@@ -2,10 +2,27 @@ import assert from "node:assert/strict";
 
 import {
   getSpeechLocale,
+  resolveInitialLocale,
   setLocale,
   SUPPORTED_LANGUAGES,
   translateText,
 } from "../i18n.js";
+
+assert.equal(
+  resolveInitialLocale({ browserLocale: "zh-CN" }),
+  "en-SG",
+  "a phone's browser language must not silently change the website language"
+);
+assert.equal(
+  resolveInitialLocale({ storedLocale: "zh-SG", explicitlyChosen: false }),
+  "en-SG",
+  "legacy or automatically derived preferences must reset to English"
+);
+assert.equal(
+  resolveInitialLocale({ storedLocale: "zh-SG", explicitlyChosen: true }),
+  "zh-SG",
+  "an explicit language selection should still be remembered"
+);
 
 assert.deepEqual(
   SUPPORTED_LANGUAGES.map(({ code }) => code),

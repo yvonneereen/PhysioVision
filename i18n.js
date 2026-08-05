@@ -1,4 +1,5 @@
 const LANGUAGE_STORAGE_KEY = "physiovision.language.v1";
+const LANGUAGE_EXPLICIT_STORAGE_KEY = "physiovision.language.explicit.v1";
 
 export const SUPPORTED_LANGUAGES = Object.freeze([
   Object.freeze({ code: "en-SG", label: "English", speech: "en-SG" }),
@@ -311,18 +312,26 @@ function normalizeText(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
+export function resolveInitialLocale({
+  storedLocale = null,
+  explicitlyChosen = false,
+} = {}) {
+  return explicitlyChosen && SUPPORTED_CODES.has(storedLocale)
+    ? storedLocale
+    : "en-SG";
+}
+
 function preferredStoredLocale() {
   try {
     const stored = globalThis.localStorage?.getItem(LANGUAGE_STORAGE_KEY);
-    if (SUPPORTED_CODES.has(stored)) return stored;
+    const explicitlyChosen = globalThis.localStorage?.getItem(
+      LANGUAGE_EXPLICIT_STORAGE_KEY
+    ) === "true";
+    return resolveInitialLocale({ storedLocale: stored, explicitlyChosen });
   } catch (_) {
     // Storage can be unavailable in private browsing; keep the page usable.
+    return "en-SG";
   }
-  const browserLocale = String(globalThis.navigator?.language ?? "");
-  const prefix = browserLocale.toLowerCase().split("-")[0];
-  return SUPPORTED_LANGUAGES.find(({ code }) => (
-    code.toLowerCase().startsWith(`${prefix}-`)
-  ))?.code ?? "en-SG";
 }
 
 let activeLocale = preferredStoredLocale();
@@ -485,6 +494,7 @@ export function setLocale(locale, { persist = true, announce = true } = {}) {
   if (persist) {
     try {
       globalThis.localStorage?.setItem(LANGUAGE_STORAGE_KEY, locale);
+      globalThis.localStorage?.setItem(LANGUAGE_EXPLICIT_STORAGE_KEY, "true");
     } catch (_) {
       // Keep the in-memory preference when persistent storage is unavailable.
     }

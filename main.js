@@ -41,7 +41,7 @@ import {
   describeMicrophoneAccessFailure,
   readMicrophonePermissionState,
   voiceGuidance,
-} from "./voice-guidance.js?v=12";
+} from "./voice-guidance.js?v=13";
 import { isWellnessEligible } from "./wellness-screening.js";
 import {
   PRACTICE_VIEWS,

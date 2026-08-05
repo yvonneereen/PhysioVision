@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   getSpeechLocale,
@@ -7,6 +8,35 @@ import {
   SUPPORTED_LANGUAGES,
   translateText,
 } from "../i18n.js";
+
+const browserEntrySources = [
+  "../index.html",
+  "../patient-dashboard.js",
+  "../voice-guidance.js",
+].map((path) => readFileSync(new URL(path, import.meta.url), "utf8"));
+const i18nCacheVersions = browserEntrySources.flatMap((source) =>
+  [...source.matchAll(/i18n\.js\?v=(\d+)/g)].map((match) => match[1])
+);
+assert.ok(
+  i18nCacheVersions.length >= 3,
+  "the browser entry points should declare their shared i18n module"
+);
+assert.deepEqual(
+  [...new Set(i18nCacheVersions)],
+  ["6"],
+  "all browser entry points must use one i18n URL so only one DOM observer is created"
+);
+
+const voiceConsumerSources = ["../main.js", "../agent-chat.js"]
+  .map((path) => readFileSync(new URL(path, import.meta.url), "utf8"));
+const voiceCacheVersions = voiceConsumerSources.flatMap((source) =>
+  [...source.matchAll(/voice-guidance\.js\?v=(\d+)/g)].map((match) => match[1])
+);
+assert.deepEqual(
+  [...new Set(voiceCacheVersions)],
+  ["13"],
+  "all voice consumers must share one voice-guidance module instance"
+);
 
 assert.equal(
   resolveInitialLocale({ browserLocale: "zh-CN" }),

@@ -1,7 +1,7 @@
 import {
   getSpeechLocale,
   translateText,
-} from "./i18n.js?v=4";
+} from "./i18n.js?v=6";
 
 const VOICE_PREFERENCE_KEY = "physiovision.voice.enabled.v1";
 const DEFAULT_SPEECH_VOLUME = 1;

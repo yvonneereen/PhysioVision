@@ -120,57 +120,6 @@ const ACTIVITY_BROWSER_LABELS = Object.freeze({
   active_most_days: "Active most days",
 });
 
-const DEMO_CLINICIAN_PLAN = Object.freeze([
-  {
-    id: "demo-tka-heel-slides",
-    exercise: "heel_slides",
-    exercise_name: "Heel slides",
-    sets: 2,
-    reps: 10,
-    hold_seconds: 0,
-    days_per_week: "daily",
-    notes:
-      "Demo dose only. Use a comfortable, physiotherapist-approved range and do not force the knee through sharp pain.",
-    is_active: true,
-    valid_from: "2020-01-01",
-    valid_until: null,
-    clinician_name: "Prototype programme",
-    is_demo: true,
-  },
-  {
-    id: "demo-tka-hip-bridge",
-    exercise: "hip_bridge",
-    exercise_name: "Supine bridge",
-    sets: 2,
-    reps: 8,
-    hold_seconds: 0,
-    days_per_week: "3",
-    notes:
-      "Demo dose only. Keep the movement controlled and use it only when it is permitted by the patient’s real post-operative plan.",
-    is_active: true,
-    valid_from: "2020-01-01",
-    valid_until: null,
-    clinician_name: "Prototype programme",
-    is_demo: true,
-  },
-  {
-    id: "demo-tka-clamshell",
-    exercise: "clamshell",
-    exercise_name: "Clamshell",
-    sets: 2,
-    reps: 8,
-    hold_seconds: 0,
-    days_per_week: "3",
-    notes:
-      "Demo dose only. Follow surgical precautions and stop if pain or swelling increases.",
-    is_active: true,
-    valid_from: "2020-01-01",
-    valid_until: null,
-    clinician_name: "Prototype programme",
-    is_demo: true,
-  },
-]);
-
 let currentUser = null;
 let currentData = null;
 let firstExerciseId = null;
@@ -732,17 +681,6 @@ async function loadDashboardData() {
     escalations: read(3),
     consultations: read(4),
   };
-  const pathwayChoice =
-    currentUser.profile?.pathway_choice ??
-    currentUser.profile?.pathwayChoice;
-  if (
-    requests[0].status === "fulfilled" &&
-    pathwayChoice === "physiotherapist" &&
-    currentData.prescriptions.length === 0
-  ) {
-    currentData.prescriptions = DEMO_CLINICIAN_PLAN.map((item) => ({ ...item }));
-  }
-
   window.sessionStorage.setItem(
     "physiovision.prescriptions.v1",
     JSON.stringify(currentData.prescriptions),

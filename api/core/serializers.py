@@ -529,7 +529,11 @@ class PatientListSerializer(serializers.ModelSerializer):
         return checkin.pain_level if checkin else None
 
     def get_active_prescription(self, obj):
-        rx = next((p for p in obj.prescriptions.all() if p.is_active), None)
+        # Keep the roster summary consistent with the patient programme API:
+        # current clinician, active flag, and validity dates must all match.
+        from api.catalogue.services import active_prescriptions_for
+
+        rx = active_prescriptions_for(obj).select_related('exercise').first()
         if not rx:
             return None
         return {

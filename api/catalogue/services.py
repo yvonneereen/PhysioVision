@@ -10,17 +10,31 @@ from api.core.models import (
 from .models import Prescription
 
 
-def active_prescriptions_for(patient):
-    if not patient.primary_clinician_id:
-        return Prescription.objects.none()
+def active_prescriptions_queryset():
+    """Return prescriptions that are active for today's programme."""
     today = timezone.localdate()
     return Prescription.objects.filter(
-        patient=patient,
-        clinician_id=patient.primary_clinician_id,
         is_active=True,
         valid_from__lte=today,
     ).filter(
         Q(valid_until__isnull=True) | Q(valid_until__gte=today)
+    )
+
+
+def active_prescriptions_for(patient):
+    if not patient.primary_clinician_id:
+        return Prescription.objects.none()
+    return active_prescriptions_queryset().filter(
+        patient=patient,
+        clinician_id=patient.primary_clinician_id,
+    )
+
+
+def active_prescriptions_by(clinician):
+    """Return the programmes this clinician and their current roster share."""
+    return active_prescriptions_queryset().filter(
+        clinician=clinician,
+        patient__primary_clinician=clinician,
     )
 
 

@@ -123,6 +123,15 @@ class PrescriptionAccessTests(APITestCase):
         created = self.client.post(self.endpoint, payload, format='json')
         self.assertEqual(created.status_code, 201, created.data)
 
+        clinician_list = self.client.get(self.endpoint)
+        self.assertEqual(clinician_list.status_code, 200)
+        self.assertEqual(clinician_list.data, [])
+
+        roster = self.client.get('/api/patients/')
+        self.assertEqual(roster.status_code, 200)
+        roster_rows = roster.data.get('results', roster.data)
+        self.assertIsNone(roster_rows[0]['active_prescription'])
+
         self.client.force_authenticate(self.patient_user)
         patient_list = self.client.get(self.endpoint)
         self.assertEqual(patient_list.status_code, 200)

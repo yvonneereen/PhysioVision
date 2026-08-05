@@ -6,7 +6,11 @@ from api.core.models import UserRole
 
 from .models import Calibration, Exercise, Prescription
 from .serializers import CalibrationSerializer, ExerciseSerializer, PrescriptionSerializer
-from .services import active_prescriptions_for, sync_patient_care_path
+from .services import (
+    active_prescriptions_by,
+    active_prescriptions_for,
+    sync_patient_care_path,
+)
 
 
 class ExerciseViewSet(ReadOnlyModelViewSet):
@@ -29,8 +33,8 @@ class PrescriptionViewSet(ModelViewSet):
                 'exercise', 'patient__user', 'clinician__user'
             ).order_by('exercise__name')
         if user.role == UserRole.CLINICIAN and hasattr(user, 'clinician_profile'):
-            return base.filter(
-                clinician=user.clinician_profile
+            return active_prescriptions_by(user.clinician_profile).select_related(
+                'exercise', 'patient__user', 'clinician__user'
             ).order_by('-valid_from', 'patient__user__last_name')
         return base.none()
 

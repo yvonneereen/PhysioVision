@@ -31,6 +31,11 @@ assert.match(
 );
 assert.match(
   styles,
+  /\.patient-practice-active #practice > \.section-kicker\s*\{[\s\S]*?justify-content: center;[\s\S]*?text-align: center;[\s\S]*?\.patient-practice-active #practice > \.patient-back-dashboard\s*\{[\s\S]*?left: clamp\(18px, 1\.5vw, 30px\);/,
+  "the live-guide heading should be centered while the home control stays at the left edge"
+);
+assert.match(
+  styles,
   /\.modal-shell\s*\{[\s\S]*?visibility: hidden;[\s\S]*?pointer-events: none;/,
   "closed full-screen modal shells must not intercept page clicks"
 );
@@ -38,6 +43,21 @@ assert.match(
   styles,
   /\.modal-shell\.is-open\s*\{[\s\S]*?visibility: visible;[\s\S]*?pointer-events: auto;/,
   "only an open modal shell should accept pointer input"
+);
+assert.match(
+  styles,
+  /\.voice-setup-overlay\s*\{[\s\S]*?display: flex;[\s\S]*?align-items: flex-start;[\s\S]*?overflow-y: auto;[\s\S]*?overscroll-behavior: contain;/,
+  "the response-mode dialog should remain vertically scrollable at enlarged text sizes"
+);
+assert.match(
+  styles,
+  /\.voice-setup-dialog\s*\{[\s\S]*?flex: 0 0 auto;[\s\S]*?margin: auto 0;[\s\S]*?overflow-wrap: anywhere;/,
+  "the response-mode dialog should safely center without clipping oversized content"
+);
+assert.match(
+  source,
+  /voiceSetupOverlay\.classList\.remove\("hidden"\);\s*voiceSetupOverlay\.scrollTop = 0;/,
+  "each response-mode choice should open at the start of its scrollable content"
 );
 
 function functionSource(name, nextName) {
@@ -141,8 +161,18 @@ assert.match(
 );
 assert.match(
   voiceChoiceSource,
-  /hasConfirmedMicrophoneAccess\(\)[\s\S]*?permissionState !== "denied"[\s\S]*?permissionState !== "prompt"[\s\S]*?finishVoiceModeChoice\(true\)/,
+  /hasConfirmedMicrophoneAccess\(\)[\s\S]*?initialPermissionState !== "denied"[\s\S]*?initialPermissionState !== "prompt"[\s\S]*?finishVoiceModeChoice\(true\)/,
   "a refresh should reuse microphone access already confirmed in the same tab"
+);
+assert.match(
+  voiceChoiceSource,
+  /isExplicitDenial[\s\S]*?permissionState === "denied"[\s\S]*?error\?\.name === "SecurityError"/,
+  "only a confirmed permission denial should block hands-free mode"
+);
+assert.match(
+  voiceChoiceSource,
+  /if \(!isExplicitDenial && voiceGuidance\.canListen\)[\s\S]*?finishVoiceModeChoice\(true\)/,
+  "Safari preflight failures without a denial should defer permission to speech recognition"
 );
 assert.match(
   voiceChoiceSource,
@@ -163,6 +193,26 @@ assert.match(
   voiceChoiceSource,
   /voiceSetupRetry\.addEventListener\("click", requestHandsFreeMicrophone\)/,
   "a denied permission should provide a direct user-triggered retry"
+);
+assert.match(
+  source,
+  /function resetVoiceModeChoice\(\)[\s\S]*?handsFreeVoiceEnabled = false[\s\S]*?voiceModeChosenThisSession = false[\s\S]*?voiceGuidance\.setEnabled\(false\)/,
+  "a new page or account session should clear the previous response-mode choice"
+);
+assert.match(
+  source,
+  /addEventListener\("physiovision:auth-role"[\s\S]*?resetVoiceModeChoice\(\)[\s\S]*?if \(painCheckinState\) hidePainCheckin\(\)/,
+  "sign-out and subsequent sign-in should close stale check-ins and offer the mode choice again"
+);
+assert.match(
+  source,
+  /addEventListener\("pagehide", resetVoiceModeChoice\)[\s\S]*?event\.persisted[\s\S]*?resetVoiceModeChoice\(\)/,
+  "Safari page restoration should require a fresh response-mode choice"
+);
+assert.match(
+  source,
+  /function showPainCheckin[\s\S]*?if \(!voiceModeChosenThisSession\)[\s\S]*?ensureVoiceModeChosen\(\)[\s\S]*?showPainCheckin\(context/,
+  "a pain question must not appear before the response-mode choice"
 );
 
 const calibrationFlowStart = source.indexOf(

@@ -342,12 +342,31 @@ function finishVoiceModeChoice(handsFree) {
   voiceSetupOverlay.classList.add("hidden");
   voiceSetupHandsFree.disabled = false;
   voiceSetupButtons.disabled = false;
+  voiceSetupRetry.disabled = false;
   voiceSetupStatus.textContent = "";
   voiceSetupRecovery.classList.add("hidden");
   const resolve = resolveVoiceModeChoice;
   resolveVoiceModeChoice = null;
   voiceModeChoicePromise = null;
   resolve?.(true);
+}
+
+function resetVoiceModeChoice() {
+  voiceGuidance.cancel();
+  handsFreeVoiceEnabled = false;
+  voiceModeChosenThisSession = false;
+  voiceGuidance.setEnabled(false);
+  voiceSetupOverlay.classList.add("hidden");
+  voiceSetupHandsFree.disabled = false;
+  voiceSetupButtons.disabled = false;
+  voiceSetupRetry.disabled = false;
+  voiceSetupStatus.textContent = "";
+  voiceSetupRecovery.classList.add("hidden");
+
+  const resolve = resolveVoiceModeChoice;
+  resolveVoiceModeChoice = null;
+  voiceModeChoicePromise = null;
+  resolve?.(false);
 }
 
 function hasConfirmedMicrophoneAccess() {
@@ -379,6 +398,7 @@ function ensureVoiceModeChosen() {
   if (voiceModeChoicePromise) return voiceModeChoicePromise;
 
   voiceSetupOverlay.classList.remove("hidden");
+  voiceSetupOverlay.scrollTop = 0;
   voiceSetupRecovery.classList.add("hidden");
   voiceSetupHandsFree.disabled =
     !voiceGuidance.canSpeak || !voiceGuidance.canListen;
@@ -411,20 +431,19 @@ async function requestHandsFreeMicrophone() {
   voiceSetupRecovery.classList.add("hidden");
   voiceSetupStatus.textContent = "Checking microphone permission…";
 
+  const initialPermissionState = await readMicrophonePermissionState(navigator);
+  const canReuseConfirmedAccess =
+    hasConfirmedMicrophoneAccess() &&
+    initialPermissionState !== "denied" &&
+    initialPermissionState !== "prompt";
+  if (canReuseConfirmedAccess) {
+    finishVoiceModeChoice(true);
+    return;
+  }
+
   try {
     if (!navigator.mediaDevices?.getUserMedia) {
-      throw new Error("Microphone access is unavailable in this browser.");
-    }
-    const permissionState = await readMicrophonePermissionState(navigator);
-    const canReuseConfirmedAccess =
-      hasConfirmedMicrophoneAccess() &&
-      permissionState !== "denied" &&
-      permissionState !== "prompt";
-    if (canReuseConfirmedAccess) {
-      voiceSetupStatus.textContent = "Microphone permission confirmed…";
-      await voiceGuidance.prepareSpeechAfterMicrophoneRelease({ settleMs: 0 });
-      finishVoiceModeChoice(true);
-      return;
+      throw new Error("Microphone preflight is unavailable in this browser.");
     }
     const permissionStream = await navigator.mediaDevices.getUserMedia({
       audio: true,
@@ -435,11 +454,31 @@ async function requestHandsFreeMicrophone() {
     // Safari can keep speaker output in its quiet microphone-capture mode for
     // a moment after the permission stream stops. Let that audio session settle
     // before the first prompt so its full sentence has one consistent volume.
-    await voiceGuidance.prepareSpeechAfterMicrophoneRelease();
+    try {
+      await voiceGuidance.prepareSpeechAfterMicrophoneRelease();
+    } catch (error) {
+      console.warn("Voice-output preparation could not complete.", error);
+    }
     finishVoiceModeChoice(true);
   } catch (error) {
     const permissionState = await readMicrophonePermissionState(navigator);
-    if (permissionState === "denied") forgetMicrophoneAccess();
+    const isExplicitDenial =
+      permissionState === "denied" || error?.name === "SecurityError";
+
+    // Safari can fail a separate getUserMedia preflight without showing its
+    // permission sheet, even though webkitSpeechRecognition can still request
+    // and use the microphone when listening actually begins. Do not trap the
+    // user on this setup screen unless the browser confirms access is denied.
+    if (!isExplicitDenial && voiceGuidance.canListen) {
+      console.warn(
+        "Microphone preflight failed; deferring permission to speech recognition.",
+        error
+      );
+      finishVoiceModeChoice(true);
+      return;
+    }
+
+    forgetMicrophoneAccess();
     voiceSetupHandsFree.disabled = false;
     voiceSetupButtons.disabled = false;
     voiceSetupRetry.disabled = false;
@@ -1511,6 +1550,19 @@ window.addEventListener("physiovision:prescriptions-updated", (event) => {
 });
 
 window.addEventListener("physiovision:auth-role", (event) => {
+  // Signing out and back in happens inside this single page. Clear the prior
+  // exercise-session preference so each authenticated session chooses voice
+  // or on-screen answers for itself.
+  resetVoiceModeChoice();
+  preExerciseCheckinCompleted = false;
+  confirmedPreExercisePain = null;
+  if (painCheckinState) hidePainCheckin();
+  if (running) {
+    deactivateCameraGuide({
+      statusMessage: "Camera paused because the signed-in account changed",
+    });
+  }
+
   const nextRole = event.detail?.role ?? null;
   const stillLoggedIn = Boolean(event.detail?.user) || isLoggedIn();
 
@@ -3332,6 +3384,14 @@ document.addEventListener("visibilitychange", () => {
   });
 });
 
+// Safari can restore a page from its back-forward cache without rebuilding the
+// JavaScript context. Treat that restoration like a fresh page so the patient
+// is offered the response-mode choice again on the next camera-guide start.
+window.addEventListener("pagehide", resetVoiceModeChoice);
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) resetVoiceModeChoice();
+});
+
 // Derive a 0–100 movement-quality score from how often form cues fired and
 // symmetry warnings triggered, relative to the reps performed. A clean session
 // (no faults) scores 100; each fault-per-rep costs up to 50 points.
@@ -3929,6 +3989,21 @@ function showPainCheckin(context = "after", {
       startAfter,
       continuation,
       calibrationTrigger,
+    });
+    return;
+  }
+
+  // Every new page/account session must make an explicit response-mode choice
+  // before any pain question appears, including less-common restored flows.
+  if (!voiceModeChosenThisSession) {
+    void ensureVoiceModeChosen().then((chosen) => {
+      if (chosen) {
+        showPainCheckin(context, {
+          startAfter,
+          continuation,
+          calibrationTrigger,
+        });
+      }
     });
     return;
   }

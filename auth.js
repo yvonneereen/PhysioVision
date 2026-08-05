@@ -45,13 +45,11 @@ const headerSignOut = document.getElementById("headerSignOut");
 const headerPatientDashboard = document.getElementById("headerPatientDashboard");
 const headerProfile = document.getElementById("headerProfile");
 const headerTherapistView = document.getElementById("headerTherapistView");
-const headerPlanButton = document.getElementById("headerPlanButton");
 const mobileSignIn  = document.getElementById("mobileSignIn");
 const mobileSignOut = document.getElementById("mobileSignOut");
 const mobilePatientDashboard = document.getElementById("mobilePatientDashboard");
 const mobileProfile = document.getElementById("mobileProfile");
 const mobileTherapistView = document.getElementById("mobileTherapistView");
-const mobilePlanButton = document.getElementById("mobilePlanButton");
 const profileAccountInitials = document.getElementById("profileAccountInitials");
 const profileAccountName = document.getElementById("profileAccountName");
 const profileAccountEmail = document.getElementById("profileAccountEmail");
@@ -140,8 +138,6 @@ function updateAuthButtons(loggedIn, user = null) {
   setControlVisible(mobileProfile, state.showPatientProfile);
   setControlVisible(headerTherapistView, state.showTherapistView);
   setControlVisible(mobileTherapistView, state.showTherapistView);
-  setControlVisible(headerPlanButton, state.showPlan);
-  setControlVisible(mobilePlanButton, state.showPlan);
   if (loggedIn && user) renderAccountIdentity(user);
 }
 

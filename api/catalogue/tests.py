@@ -12,6 +12,7 @@ from api.core.models import (
 )
 
 from .models import Exercise
+from api.sessions.models import Session
 
 
 class PrescriptionAccessTests(APITestCase):
@@ -83,6 +84,31 @@ class PrescriptionAccessTests(APITestCase):
         self.assertEqual(prescriptions[0]['exercise'], self.exercise.id)
         self.assertEqual(prescriptions[0]['reps'], 8)
 
+    def test_prescription_reports_completion_from_finished_target_session(self):
+        self.client.force_authenticate(self.clinician_user)
+        created = self.client.post(self.endpoint, self.payload(), format='json')
+        self.assertEqual(created.status_code, 201, created.data)
+
+        prescription = self.patient.prescriptions.get(pk=created.data['id'])
+        now = timezone.now()
+        Session.objects.create(
+            patient=self.patient,
+            exercise=self.exercise,
+            prescription=prescription,
+            started_at=now - timedelta(minutes=5),
+            ended_at=now,
+            sets_completed=2,
+            reps_completed=8,
+            sets_target=2,
+            reps_target=8,
+            affected_side='left',
+        )
+
+        response = self.client.get(self.endpoint)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data[0]['exercise_completed'])
+        self.assertIsNotNone(response.data[0]['last_completed_at'])
+
     def test_patient_cannot_create_or_change_prescription(self):
         self.client.force_authenticate(self.patient_user)
         response = self.client.post(
@@ -111,7 +137,7 @@ class PrescriptionAccessTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('patient', response.data)
 
-    def test_expired_prescription_is_hidden_from_patient(self):
+    def test_expired_prescription_is_visible_to_clinician_but_hidden_from_patient(self):
         self.client.force_authenticate(self.clinician_user)
         payload = self.payload()
         payload['valid_from'] = (
@@ -125,11 +151,16 @@ class PrescriptionAccessTests(APITestCase):
 
         clinician_list = self.client.get(self.endpoint)
         self.assertEqual(clinician_list.status_code, 200)
-        self.assertEqual(clinician_list.data, [])
+        self.assertEqual(len(clinician_list.data), 1)
+        self.assertEqual(clinician_list.data[0]['id'], created.data['id'])
 
         roster = self.client.get('/api/patients/')
         self.assertEqual(roster.status_code, 200)
-        roster_rows = roster.data.get('results', roster.data)
+        roster_rows = (
+            roster.data.get('results', roster.data)
+            if isinstance(roster.data, dict)
+            else roster.data
+        )
         self.assertIsNone(roster_rows[0]['active_prescription'])
 
         self.client.force_authenticate(self.patient_user)

@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=83" />
+  <link rel="stylesheet" href="style.css?v=84" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -2392,7 +2392,33 @@
               <p class="rx-status" id="rx-status"></p>
             </form>
             <div class="rx-list-wrap">
-              <div class="table-heading"><div><strong>Active programmes</strong><span>Current prescriptions</span></div></div>
+              <div class="table-heading programme-list-heading">
+                <div><strong>Programmes</strong><span>Filter prescriptions by patient and status</span></div>
+                <div class="programme-filters" aria-label="Programme filters">
+                  <label>
+                    <span>Patient</span>
+                    <select id="rx-filter-patient">
+                      <option value="all">All patients</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Assignment</span>
+                    <select id="rx-filter-status">
+                      <option value="all">All assignments</option>
+                      <option value="active">Active</option>
+                      <option value="ended">Ended</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Exercise progress</span>
+                    <select id="rx-filter-completion">
+                      <option value="all">All progress</option>
+                      <option value="completed">Completed</option>
+                      <option value="not-completed">Not completed</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
               <div id="rx-list"><p class="empty-state">Loading…</p></div>
             </div>
           </div>
@@ -2684,7 +2710,7 @@
   <script type="module" src="auth.js?v=31"></script>
   <script type="module" src="ui.js?v=23"></script>
   <script type="module" src="patient-dashboard.js?v=33"></script>
-  <script type="module" src="therapist.js?v=25"></script>
+  <script type="module" src="therapist.js?v=26"></script>
   <script type="module" src="exercise-library.js?v=15"></script>
   <script type="module" src="main.js?v=93"></script>
   <script type="module" src="agent-chat.js?v=26"></script>

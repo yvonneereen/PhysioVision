@@ -21,6 +21,8 @@ class PrescriptionSerializer(serializers.ModelSerializer):
     exercise_name = serializers.CharField(source='exercise.name', read_only=True)
     patient_name = serializers.SerializerMethodField()
     clinician_name = serializers.SerializerMethodField()
+    exercise_completed = serializers.SerializerMethodField()
+    last_completed_at = serializers.SerializerMethodField()
 
     class Meta:
         model  = Prescription
@@ -29,6 +31,7 @@ class PrescriptionSerializer(serializers.ModelSerializer):
             'clinician', 'clinician_name',
             'sets', 'reps', 'hold_seconds', 'days_per_week', 'notes',
             'is_active', 'valid_from', 'valid_until',
+            'exercise_completed', 'last_completed_at',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'clinician', 'created_at', 'updated_at']
@@ -43,6 +46,24 @@ class PrescriptionSerializer(serializers.ModelSerializer):
             obj.clinician.user.get_full_name().strip()
             or obj.clinician.user.email
         )
+
+    def _completed_sessions(self, obj):
+        sessions = getattr(obj, '_prefetched_objects_cache', {}).get('sessions')
+        if sessions is None:
+            sessions = obj.sessions.all()
+        return [
+            session for session in sessions
+            if session.ended_at
+            and session.sets_completed >= session.sets_target
+            and session.reps_completed >= session.reps_target
+        ]
+
+    def get_exercise_completed(self, obj):
+        return bool(self._completed_sessions(obj))
+
+    def get_last_completed_at(self, obj):
+        completed = self._completed_sessions(obj)
+        return max((session.ended_at for session in completed), default=None)
 
     def validate(self, attrs):
         valid_from = attrs.get('valid_from', getattr(self.instance, 'valid_from', None))

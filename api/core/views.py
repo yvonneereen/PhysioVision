@@ -111,6 +111,7 @@ class IsClinician(BasePermission):
 class PatientViewSet(ReadOnlyModelViewSet):
     serializer_class   = PatientListSerializer
     permission_classes = [IsAuthenticated, IsClinician]
+    pagination_class   = None
 
     def get_queryset(self):
         return (

@@ -369,6 +369,9 @@ function renderOverview(patients, consultations) {
 function renderProgrammes() {
   const patientSel  = document.getElementById("rx-patient");
   const exerciseSel = document.getElementById("rx-exercise");
+  const filterPatientSel = document.getElementById("rx-filter-patient");
+  const filterStatusSel = document.getElementById("rx-filter-status");
+  const filterCompletionSel = document.getElementById("rx-filter-completion");
   const list        = document.getElementById("rx-list");
 
   if (patientSel) {
@@ -382,19 +385,42 @@ function renderProgrammes() {
       ? active.map(e => `<option value="${e.id}">${escapeHtml(e.name)}</option>`).join("")
       : `<option value="">No exercises available</option>`;
   }
+  if (filterPatientSel) {
+    const selectedPatient = filterPatientSel.value || "all";
+    filterPatientSel.innerHTML = `
+      <option value="all">All patients</option>
+      ${state.patients.map(p => `<option value="${p.id}">${escapeHtml(p.full_name)}</option>`).join("")}`;
+    filterPatientSel.value = [...filterPatientSel.options].some(option => option.value === selectedPatient)
+      ? selectedPatient
+      : "all";
+  }
   if (list) {
     const today = new Date().toISOString().slice(0, 10);
-    const current = state.prescriptions.filter(p =>
-      p.is_active && p.valid_from <= today && (!p.valid_until || p.valid_until >= today));
-    list.innerHTML = current.length
-      ? current.map(p => `
-          <div class="detail-row">
+    const patientFilter = filterPatientSel?.value || "all";
+    const statusFilter = filterStatusSel?.value || "all";
+    const completionFilter = filterCompletionSel?.value || "all";
+    const withStatus = state.prescriptions.map(p => ({
+      ...p,
+      programmeStatus: p.is_active && (!p.valid_until || p.valid_until >= today)
+        ? "active"
+        : "ended",
+      completionStatus: p.exercise_completed ? "completed" : "not-completed",
+    }));
+    const filtered = withStatus.filter(p =>
+      (patientFilter === "all" || String(p.patient) === patientFilter)
+      && (statusFilter === "all" || p.programmeStatus === statusFilter)
+      && (completionFilter === "all" || p.completionStatus === completionFilter));
+    list.innerHTML = filtered.length
+      ? filtered.map(p => `
+          <div class="detail-row programme-row">
             <span><strong>${escapeHtml(p.patient_name)}</strong></span>
             <span>${escapeHtml(p.exercise_name)}</span>
             <span>${p.sets}×${p.reps}</span>
             <span>${escapeHtml(p.days_per_week)}×/wk</span>
+            <span class="programme-status programme-status-${p.programmeStatus}">${p.programmeStatus}</span>
+            <span class="programme-status programme-status-${p.completionStatus}">${p.exercise_completed ? "Completed" : "Not completed"}</span>
           </div>`).join("")
-      : `<p class="empty-state">No active programmes yet.</p>`;
+      : `<p class="empty-state">No programmes match these filters.</p>`;
   }
 }
 
@@ -773,6 +799,12 @@ document.addEventListener("click", (e) => {
 
 document.addEventListener("input", (e) => {
   if (e.target.id === "patient-search") renderPatientTable(state.patients);
+});
+
+document.addEventListener("change", (e) => {
+  if (["rx-filter-patient", "rx-filter-status", "rx-filter-completion"].includes(e.target.id)) {
+    renderProgrammes();
+  }
 });
 
 document.getElementById("rx-form")?.addEventListener("submit", submitPrescription);

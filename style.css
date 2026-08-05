@@ -168,7 +168,7 @@ textarea:focus-visible {
   gap: 12px;
   width: fit-content;
   font-family: var(--font-display);
-  font-size: 19px;
+  font-size: clamp(21px, 1.25vw, 24px);
   font-weight: 750;
   letter-spacing: -0.04em;
 }
@@ -203,7 +203,7 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   gap: clamp(20px, 2.4vw, 42px);
-  font-size: 14px;
+  font-size: 17px;
   font-weight: 600;
 }
 
@@ -237,24 +237,28 @@ textarea:focus-visible {
   gap: 17px;
 }
 
+.header-actions > .text-button {
+  font-size: 17px;
+}
+
 .language-picker {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-height: 42px;
-  padding: 5px 8px;
+  min-height: 46px;
+  padding: 6px 10px;
   border: 1px solid rgba(255, 255, 255, 0.34);
   border-radius: 999px;
   color: inherit;
   background: rgba(255, 255, 255, 0.08);
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 700;
 }
 
 .language-picker select {
-  min-width: 86px;
-  max-width: 132px;
-  padding: 5px 22px 5px 7px;
+  min-width: 104px;
+  max-width: 164px;
+  padding: 6px 24px 6px 9px;
   border: 0;
   border-radius: 999px;
   color: var(--ink);
@@ -4684,7 +4688,7 @@ details.metrics summary {
   border-radius: 0;
   color: inherit;
   background: transparent;
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 650;
   box-shadow: none;
   transition: color 0.2s ease;

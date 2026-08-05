@@ -1,7 +1,7 @@
 import {
   getSpeechLocale,
   translateText,
-} from "./i18n.js?v=1";
+} from "./i18n.js?v=2";
 
 const VOICE_PREFERENCE_KEY = "physiovision.voice.enabled.v1";
 const DEFAULT_SPEECH_VOLUME = 1;
@@ -82,6 +82,68 @@ function normalizeSpeech(transcript) {
     .replace(/[’]/g, "'")
     .replace(/[^\p{L}\p{M}\p{N}'\s]/gu, " ")
     .replace(/\s+/g, " ");
+}
+
+function isSafariBrowser(userAgent) {
+  const value = String(userAgent ?? "");
+  return /safari/i.test(value)
+    && !/(chrome|chromium|crios|android|edg|opr|firefox|fxios)/i.test(value);
+}
+
+export async function readMicrophonePermissionState(browserNavigator) {
+  try {
+    const status = await browserNavigator?.permissions?.query?.({
+      name: "microphone",
+    });
+    return ["granted", "prompt", "denied"].includes(status?.state)
+      ? status.state
+      : "unknown";
+  } catch (_) {
+    // Safari versions that do not expose microphone through Permissions API
+    // should still continue to the real getUserMedia request.
+    return "unknown";
+  }
+}
+
+export function describeMicrophoneAccessFailure(error, {
+  userAgent = "",
+  permissionState = "unknown",
+} = {}) {
+  const errorName = String(error?.name ?? "");
+  const permissionBlocked = permissionState === "denied"
+    || ["NotAllowedError", "PermissionDeniedError", "SecurityError"]
+      .includes(errorName);
+
+  if (permissionBlocked && isSafariBrowser(userAgent)) {
+    return (
+      "Safari did not show a permission prompt because microphone access is "
+      + "blocked. Open Safari > Settings > Websites > Microphone, set this "
+      + "website to Allow, then select Try microphone again. If needed, also "
+      + "turn on Safari in System Settings > Privacy & Security > Microphone."
+    );
+  }
+  if (permissionBlocked) {
+    return (
+      "Microphone access is blocked for this website. Allow microphone access "
+      + "in your browser settings, then select Try microphone again."
+    );
+  }
+  if (["NotFoundError", "DevicesNotFoundError"].includes(errorName)) {
+    return (
+      "No microphone was found. Connect or enable a microphone, then select "
+      + "Try microphone again."
+    );
+  }
+  if (["NotReadableError", "TrackStartError", "AbortError"].includes(errorName)) {
+    return (
+      "The microphone is unavailable or being used by another application. "
+      + "Close the other application, then select Try microphone again."
+    );
+  }
+  return (
+    "The microphone could not start. Check your browser and system microphone "
+    + "settings, then select Try microphone again."
+  );
 }
 
 export function parsePainLevel(transcript) {

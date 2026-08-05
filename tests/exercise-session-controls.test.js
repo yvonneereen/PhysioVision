@@ -87,7 +87,7 @@ assert.doesNotMatch(
 );
 
 const voiceChoiceStart = source.indexOf(
-  'voiceSetupHandsFree.addEventListener("click"'
+  "async function requestHandsFreeMicrophone()"
 );
 const voiceChoiceEnd = source.indexOf(
   'voiceSetupButtons.addEventListener("click"',
@@ -113,6 +113,16 @@ assert.match(
   voiceChoiceSource,
   /permissionStream\.getTracks\(\)\.forEach\(\(track\) => track\.stop\(\)\)[\s\S]*?prepareSpeechAfterMicrophoneRelease\(\)[\s\S]*?finishVoiceModeChoice\(true\)/,
   "the first spoken prompt should wait for Safari to leave microphone-capture mode"
+);
+assert.match(
+  voiceChoiceSource,
+  /describeMicrophoneAccessFailure\(error/,
+  "microphone failures should show an accurate browser-specific recovery path"
+);
+assert.match(
+  voiceChoiceSource,
+  /voiceSetupRetry\.addEventListener\("click", requestHandsFreeMicrophone\)/,
+  "a denied permission should provide a direct user-triggered retry"
 );
 
 const calibrationFlowStart = source.indexOf(

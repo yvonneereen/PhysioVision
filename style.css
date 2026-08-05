@@ -1888,6 +1888,35 @@ html[lang="en-SG"] body {
   font-weight: 700;
 }
 
+.voice-setup-recovery {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.voice-setup-retry {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid var(--mint);
+  border-radius: 999px;
+  color: var(--ink-deep);
+  background: var(--mint);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.voice-setup-retry:focus-visible {
+  outline: 3px solid rgba(185, 217, 200, 0.35);
+  outline-offset: 3px;
+}
+
+.voice-setup-recovery span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+}
+
 .voice-setup-privacy {
   display: block;
   margin-top: 8px;

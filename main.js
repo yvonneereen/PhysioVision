@@ -38,8 +38,10 @@ import {
   parsePainLevel,
   parsePainSafetyResponse,
   parseRecoveryStatus,
+  describeMicrophoneAccessFailure,
+  readMicrophonePermissionState,
   voiceGuidance,
-} from "./voice-guidance.js?v=9";
+} from "./voice-guidance.js?v=10";
 import { isWellnessEligible } from "./wellness-screening.js";
 import {
   PRACTICE_VIEWS,
@@ -203,6 +205,8 @@ const voiceSetupOverlay     = document.getElementById("voiceSetupOverlay");
 const voiceSetupHandsFree   = document.getElementById("voiceSetupHandsFree");
 const voiceSetupButtons     = document.getElementById("voiceSetupButtons");
 const voiceSetupStatus      = document.getElementById("voiceSetupStatus");
+const voiceSetupRecovery    = document.getElementById("voiceSetupRecovery");
+const voiceSetupRetry       = document.getElementById("voiceSetupRetry");
 const publicPracticePreview = document.getElementById("publicPracticePreview");
 const patientPracticeGate   = document.getElementById("patientPracticeGate");
 const patientPracticeGateTitle =
@@ -337,6 +341,7 @@ function finishVoiceModeChoice(handsFree) {
   voiceSetupHandsFree.disabled = false;
   voiceSetupButtons.disabled = false;
   voiceSetupStatus.textContent = "";
+  voiceSetupRecovery.classList.add("hidden");
   const resolve = resolveVoiceModeChoice;
   resolveVoiceModeChoice = null;
   voiceModeChoicePromise = null;
@@ -348,6 +353,7 @@ function ensureVoiceModeChosen() {
   if (voiceModeChoicePromise) return voiceModeChoicePromise;
 
   voiceSetupOverlay.classList.remove("hidden");
+  voiceSetupRecovery.classList.add("hidden");
   voiceSetupHandsFree.disabled =
     !voiceGuidance.canSpeak || !voiceGuidance.canListen;
   voiceSetupStatus.textContent = voiceSetupHandsFree.disabled
@@ -370,11 +376,13 @@ function ensureVoiceModeChosen() {
   return voiceModeChoicePromise;
 }
 
-voiceSetupHandsFree.addEventListener("click", async () => {
+async function requestHandsFreeMicrophone() {
   if (!voiceGuidance.canSpeak || !voiceGuidance.canListen) return;
 
   voiceSetupHandsFree.disabled = true;
   voiceSetupButtons.disabled = true;
+  voiceSetupRetry.disabled = true;
+  voiceSetupRecovery.classList.add("hidden");
   voiceSetupStatus.textContent = "Checking microphone permission…";
 
   try {
@@ -391,15 +399,22 @@ voiceSetupHandsFree.addEventListener("click", async () => {
     // before the first prompt so its full sentence has one consistent volume.
     await voiceGuidance.prepareSpeechAfterMicrophoneRelease();
     finishVoiceModeChoice(true);
-  } catch (_) {
+  } catch (error) {
+    const permissionState = await readMicrophonePermissionState(navigator);
     voiceSetupHandsFree.disabled = false;
     voiceSetupButtons.disabled = false;
-    voiceSetupStatus.textContent =
-      "Microphone access was not allowed. Allow it and try again, "
-      + "or choose on-screen buttons.";
-    voiceSetupButtons.focus({ preventScroll: true });
+    voiceSetupRetry.disabled = false;
+    voiceSetupStatus.textContent = describeMicrophoneAccessFailure(error, {
+      userAgent: navigator.userAgent,
+      permissionState,
+    });
+    voiceSetupRecovery.classList.remove("hidden");
+    voiceSetupRetry.focus({ preventScroll: true });
   }
-});
+}
+
+voiceSetupHandsFree.addEventListener("click", requestHandsFreeMicrophone);
+voiceSetupRetry.addEventListener("click", requestHandsFreeMicrophone);
 
 voiceSetupButtons.addEventListener("click", () => {
   finishVoiceModeChoice(false);

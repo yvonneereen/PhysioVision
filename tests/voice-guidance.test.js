@@ -1,15 +1,52 @@
 import assert from "node:assert/strict";
 
 import {
+  describeMicrophoneAccessFailure,
   parseConfirmationResponse,
   parsePainLevel,
   parsePainSafetyResponse,
   parseRecoveryStatus,
   conversationalProsody,
   prepareGentleSpeech,
+  readMicrophonePermissionState,
   selectGentleVoice,
   VoiceGuidance,
 } from "../voice-guidance.js";
+
+assert.equal(
+  await readMicrophonePermissionState({
+    permissions: { query: async () => ({ state: "denied" }) },
+  }),
+  "denied"
+);
+assert.equal(
+  await readMicrophonePermissionState({
+    permissions: { query: async () => { throw new TypeError("unsupported"); } },
+  }),
+  "unknown",
+  "Safari without microphone Permissions API support should remain usable"
+);
+assert.match(
+  describeMicrophoneAccessFailure(
+    { name: "NotAllowedError" },
+    { userAgent: "Mozilla/5.0 Version/18.0 Safari/605.1.15" }
+  ),
+  /Safari > Settings > Websites > Microphone/,
+  "Safari denial should explain why no prompt appeared and how to recover"
+);
+assert.match(
+  describeMicrophoneAccessFailure(
+    { name: "NotAllowedError" },
+    { userAgent: "Mozilla/5.0 Chrome/128.0 Safari/537.36" }
+  ),
+  /browser settings/,
+  "non-Safari denial should use browser-neutral recovery guidance"
+);
+assert.match(
+  describeMicrophoneAccessFailure({ name: "NotFoundError" }),
+  /No microphone was found/,
+  "a missing input device should not be misreported as permission denial"
+);
 
 assert.equal(parsePainLevel("My pain is 7 out of 10"), 7);
 assert.equal(parsePainLevel("I would say ten"), 10);

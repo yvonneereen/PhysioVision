@@ -5646,24 +5646,6 @@ details.metrics summary {
   font-weight: 700;
 }
 
-.patient-back-dashboard {
-  position: relative;
-  z-index: 3;
-  margin: 18px clamp(20px, 5vw, 76px) 0;
-  padding: 10px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 999px;
-  color: var(--white);
-  background: rgba(255, 255, 255, 0.06);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.patient-back-dashboard:hover {
-  background: rgba(255, 255, 255, 0.13);
-}
-
 .booking-columns label {
   display: grid;
   gap: 7px;
@@ -5762,9 +5744,6 @@ details.metrics summary {
     flex-direction: column;
   }
 
-  .patient-back-dashboard {
-    margin-inline: 14px;
-  }
 }
 
 .profile-modal {
@@ -8290,24 +8269,21 @@ body .voice-setup-option strong,
     position: relative;
   }
 
-  .patient-practice-active #practice > .section-kicker {
-    display: flex;
+  .patient-practice-active #practice > .practice-guide-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1.56fr) minmax(320px, 0.6fr);
     align-items: center;
-    justify-content: center;
     min-height: 150px;
     padding: 28px 24px 22px;
     text-align: center;
   }
 
-  .patient-practice-active #practice > .section-kicker > span:first-child {
+  .patient-practice-active #practice > .practice-guide-heading > span:first-child {
     display: none;
   }
 
-  .patient-practice-active #practice > .patient-back-dashboard {
-    position: absolute;
-    top: 75px;
-    left: clamp(18px, 1.5vw, 30px);
-    margin: 0;
-    transform: translateY(-50%);
+  .patient-practice-active #practice > .practice-guide-heading > span:last-child {
+    grid-column: 1;
+    justify-self: center;
   }
 }

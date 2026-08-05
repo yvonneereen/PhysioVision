@@ -31,8 +31,13 @@ assert.match(
 );
 assert.match(
   styles,
-  /\.patient-practice-active #practice > \.section-kicker\s*\{[\s\S]*?justify-content: center;[\s\S]*?text-align: center;[\s\S]*?\.patient-practice-active #practice > \.patient-back-dashboard\s*\{[\s\S]*?left: clamp\(18px, 1\.5vw, 30px\);/,
-  "the live-guide heading should be centered while the home control stays at the left edge"
+  /\.patient-practice-active #practice > \.practice-guide-heading\s*\{[\s\S]*?grid-template-columns: minmax\(0, 1\.56fr\) minmax\(320px, 0\.6fr\);[\s\S]*?\.practice-guide-heading > span:last-child\s*\{[\s\S]*?grid-column: 1;[\s\S]*?justify-self: center;/,
+  "the live-guide heading should be centered over the camera column"
+);
+assert.doesNotMatch(
+  markup,
+  /patientBackToDashboard|Back to my home/,
+  "the exercise workspace should not render a redundant back-to-home control"
 );
 assert.match(
   styles,
@@ -159,20 +164,20 @@ assert.match(
   /getUserMedia\(\{\s*audio:\s*true,\s*\}\)/,
   "hands-free mode should request microphone permission while the user is near the device"
 );
-assert.match(
+assert.doesNotMatch(
   voiceChoiceSource,
-  /hasConfirmedMicrophoneAccess\(\)[\s\S]*?initialPermissionState !== "denied"[\s\S]*?initialPermissionState !== "prompt"[\s\S]*?finishVoiceModeChoice\(true\)/,
-  "a refresh should reuse microphone access already confirmed in the same tab"
+  /sessionStorage|hasConfirmedMicrophoneAccess|canReuseConfirmedAccess/,
+  "a refresh must perform a real microphone check instead of trusting a stored hint"
 );
-assert.match(
+assert.doesNotMatch(
   voiceChoiceSource,
-  /isExplicitDenial[\s\S]*?permissionState === "denied"[\s\S]*?error\?\.name === "SecurityError"/,
-  "only a confirmed permission denial should block hands-free mode"
+  /await readMicrophonePermissionState\(navigator\)[\s\S]*?getUserMedia/,
+  "the browser permission request should start before any awaited permission query"
 );
-assert.match(
+assert.doesNotMatch(
   voiceChoiceSource,
-  /if \(!isExplicitDenial && voiceGuidance\.canListen\)[\s\S]*?finishVoiceModeChoice\(true\)/,
-  "Safari preflight failures without a denial should defer permission to speech recognition"
+  /preflight failed; deferring permission|finishVoiceModeChoice\(true\);\s*return;\s*\}\s*voiceSetupHandsFree\.disabled = false/,
+  "a failed real microphone check must stay visible instead of silently enabling voice mode"
 );
 assert.match(
   voiceChoiceSource,

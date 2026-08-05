@@ -320,8 +320,6 @@ let handsFreeVoiceEnabled = false;
 let voiceModeChosenThisSession = false;
 let voiceModeChoicePromise = null;
 let resolveVoiceModeChoice = null;
-const MICROPHONE_ACCESS_CONFIRMED_KEY =
-  "physiovision.microphone.access-confirmed.v1";
 let preExerciseCheckinCompleted = false;
 let confirmedPreExercisePain = null;
 let cameraSetupCountdown = null;
@@ -369,30 +367,6 @@ function resetVoiceModeChoice() {
   resolve?.(false);
 }
 
-function hasConfirmedMicrophoneAccess() {
-  try {
-    return window.sessionStorage.getItem(MICROPHONE_ACCESS_CONFIRMED_KEY) === "true";
-  } catch (_) {
-    return false;
-  }
-}
-
-function rememberMicrophoneAccess() {
-  try {
-    window.sessionStorage.setItem(MICROPHONE_ACCESS_CONFIRMED_KEY, "true");
-  } catch (_) {
-    // The current hands-free session can continue when storage is unavailable.
-  }
-}
-
-function forgetMicrophoneAccess() {
-  try {
-    window.sessionStorage.removeItem(MICROPHONE_ACCESS_CONFIRMED_KEY);
-  } catch (_) {
-    // There is no stored permission hint to clear when storage is unavailable.
-  }
-}
-
 function ensureVoiceModeChosen() {
   if (voiceModeChosenThisSession) return Promise.resolve(true);
   if (voiceModeChoicePromise) return voiceModeChoicePromise;
@@ -431,25 +405,21 @@ async function requestHandsFreeMicrophone() {
   voiceSetupRecovery.classList.add("hidden");
   voiceSetupStatus.textContent = "Checking microphone permission…";
 
-  const initialPermissionState = await readMicrophonePermissionState(navigator);
-  const canReuseConfirmedAccess =
-    hasConfirmedMicrophoneAccess() &&
-    initialPermissionState !== "denied" &&
-    initialPermissionState !== "prompt";
-  if (canReuseConfirmedAccess) {
-    finishVoiceModeChoice(true);
-    return;
-  }
-
   try {
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error("Microphone preflight is unavailable in this browser.");
     }
+
+    // Start the real browser permission request immediately inside the user's
+    // click. In Safari, awaiting another API first can lose the transient user
+    // activation and prevent the native microphone prompt from appearing.
+    // Never replace this check with a stored permission hint: a stored hint can
+    // survive a refresh even when the browser or operating system can no longer
+    // provide microphone access.
     const permissionStream = await navigator.mediaDevices.getUserMedia({
       audio: true,
     });
     permissionStream.getTracks().forEach((track) => track.stop());
-    rememberMicrophoneAccess();
     voiceSetupStatus.textContent = "Preparing consistent voice guidance…";
     // Safari can keep speaker output in its quiet microphone-capture mode for
     // a moment after the permission stream stops. Let that audio session settle
@@ -462,23 +432,6 @@ async function requestHandsFreeMicrophone() {
     finishVoiceModeChoice(true);
   } catch (error) {
     const permissionState = await readMicrophonePermissionState(navigator);
-    const isExplicitDenial =
-      permissionState === "denied" || error?.name === "SecurityError";
-
-    // Safari can fail a separate getUserMedia preflight without showing its
-    // permission sheet, even though webkitSpeechRecognition can still request
-    // and use the microphone when listening actually begins. Do not trap the
-    // user on this setup screen unless the browser confirms access is denied.
-    if (!isExplicitDenial && voiceGuidance.canListen) {
-      console.warn(
-        "Microphone preflight failed; deferring permission to speech recognition.",
-        error
-      );
-      finishVoiceModeChoice(true);
-      return;
-    }
-
-    forgetMicrophoneAccess();
     voiceSetupHandsFree.disabled = false;
     voiceSetupButtons.disabled = false;
     voiceSetupRetry.disabled = false;

@@ -89,7 +89,6 @@ const trendRequestStatus = document.getElementById(
 const consultationCard = document.getElementById("patientConsultationCard");
 const upcomingConsultation = document.getElementById("patientUpcomingConsultation");
 const pendingConsultsEl = document.getElementById("patientPendingConsults");
-const backToDashboard = document.getElementById("patientBackToDashboard");
 const bookingForm = document.getElementById("bookingForm");
 const bookingDate = document.getElementById("bookingDate");
 const bookingStatus = document.getElementById("bookingStatus");
@@ -159,7 +158,6 @@ function setView(mode) {
   const isPatientDashboard = mode === "dashboard";
   dashboard.hidden = !isPatientDashboard;
   publicMain.hidden = isPatientDashboard;
-  backToDashboard?.classList.toggle("hidden", isPatientDashboard);
   document.body.classList.toggle("patient-app-active", isPatientDashboard);
   document.body.classList.toggle("patient-practice-active", !isPatientDashboard);
   if (skipLink) {

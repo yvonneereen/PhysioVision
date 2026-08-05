@@ -43,6 +43,31 @@ const deactivateSource = functionSource(
   "startHandPreview"
 );
 
+const practiceAccessSource = functionSource(
+  "syncPracticeAccess",
+  "hasLivePracticeAccess"
+);
+assert.doesNotMatch(
+  practiceAccessSource,
+  /ensureMovementModels\(\)/,
+  "opening an eligible dashboard must not initialize the movement models"
+);
+
+const activateGuideSource = functionSource(
+  "activateCameraGuide",
+  "deactivateCameraGuide"
+);
+assert.match(
+  activateGuideSource,
+  /await ensureMovementModels\(\)/,
+  "the movement models should load lazily from the explicit camera action"
+);
+assert.match(
+  source,
+  /visibilitychange[\s\S]*?document\.hidden[\s\S]*?deactivateCameraGuide/,
+  "an active camera guide should pause when its browser tab becomes hidden"
+);
+
 assert.doesNotMatch(
   deactivateSource,
   /showPainCheckin\("after"\)/,

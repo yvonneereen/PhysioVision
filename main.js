@@ -1059,7 +1059,12 @@ function syncPracticeAccess() {
 
   if (showPatient) {
     refreshExerciseAccess();
-    ensureMovementModels();
+    // Loading MediaPipe here made every signed-in dashboard tab allocate a
+    // second pose/hand model before the user opened the live guide. Besides
+    // wasting battery, multiple Safari tabs could overwhelm the graphics
+    // process and leave a tab only partially painted. Keep the dashboard
+    // lightweight and load the models from the explicit camera action.
+    renderPersonalization();
   } else {
     if (running) deactivateCameraGuide();
     discardExerciseSession();
@@ -2263,12 +2268,14 @@ function renderPersonalization() {
 
   renderPrimaryCameraAction({ supportsCalibration });
 
-  const requiredModelsReady = Boolean(
-    poseLandmarker && (!exerciseUsesHand(engine.exercise) || handLandmarker)
+  const cameraActionAvailable =
+    practiceDecision.view === PRACTICE_VIEWS.PATIENT_WORKSPACE
+    && supportsCalibration;
+  openCalibrationBtn.disabled = !cameraActionAvailable;
+  openCalibrationPrimary.disabled = !cameraActionAvailable;
+  handTrackingToggle.disabled = !(
+    cameraActionAvailable && exerciseUsesHand(engine.exercise)
   );
-  openCalibrationBtn.disabled = !requiredModelsReady || !supportsCalibration;
-  openCalibrationPrimary.disabled =
-    !requiredModelsReady || !supportsCalibration;
 }
 
 function renderPrimaryCameraAction({
@@ -3109,6 +3116,15 @@ async function activateCameraGuide({ announceInstruction = true } = {}) {
   if (running) return true;
   if (!(await ensureVoiceModeChosen())) return false;
   if (!hasPathwayAccess()) return false;
+  await ensureMovementModels();
+  if (!poseLandmarker) {
+    statusEl.textContent = "The movement-tracking model is unavailable";
+    setFeedbackBanner(
+      "tracking",
+      "Check your internet connection, then try Start camera guide again"
+    );
+    return false;
+  }
   if (exerciseUsesHand(engine.exercise) && !handLandmarker) {
     statusEl.textContent = "The hand-tracking model is unavailable";
     setFeedbackBanner(
@@ -3201,7 +3217,16 @@ function deactivateCameraGuide({
 
 async function startHandPreview() {
   if (!hasLivePracticeAccess()) return false;
-  if (!handLandmarker || running) return false;
+  if (running) return false;
+  await ensureMovementModels();
+  if (!handLandmarker) {
+    statusEl.textContent = "The hand-tracking model is unavailable";
+    setFeedbackBanner(
+      "tracking",
+      "Check your internet connection, then try the hand check again"
+    );
+    return false;
+  }
   handPreviewMode = true;
   handTrackingToggle.disabled = true;
   toggleBtn.disabled = true;
@@ -3253,6 +3278,20 @@ function stopHandPreview() {
   statusEl.textContent = "Movement guide ready";
   setFeedbackBanner("ready");
 }
+
+// A camera and MediaPipe render loop should never keep running in a tab that
+// the patient can no longer see. This also prevents duplicated Safari tabs
+// from competing for the camera/GPU and making the browser or laptop hot.
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden || !running) return;
+  if (handPreviewMode) {
+    stopHandPreview();
+    return;
+  }
+  deactivateCameraGuide({
+    statusMessage: "Camera paused because this tab is no longer active",
+  });
+});
 
 // Derive a 0–100 movement-quality score from how often form cues fired and
 // symmetry warnings triggered, relative to the reps performed. A clean session

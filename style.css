@@ -136,7 +136,8 @@ textarea:focus-visible {
   left: 0;
   z-index: 50;
   display: grid;
-  grid-template-columns: minmax(210px, 1fr) auto minmax(210px, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: clamp(24px, 2.8vw, 54px);
   align-items: center;
   width: 100%;
   min-height: 88px;
@@ -202,9 +203,12 @@ textarea:focus-visible {
 .desktop-nav {
   display: flex;
   align-items: center;
-  gap: clamp(20px, 2.4vw, 42px);
+  justify-self: start;
+  gap: clamp(16px, 1.65vw, 32px);
+  margin-left: clamp(12px, 2vw, 38px);
   font-size: 17px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .desktop-nav a {
@@ -235,6 +239,7 @@ textarea:focus-visible {
   align-items: center;
   justify-content: flex-end;
   gap: 17px;
+  white-space: nowrap;
 }
 
 .header-actions > .text-button {
@@ -6920,6 +6925,44 @@ details.metrics summary {
   display: block;
   color: var(--white);
   font-size: 12px;
+}
+
+@media (min-width: 1181px) and (max-width: 1500px) {
+  .site-header {
+    column-gap: 16px;
+    padding-right: 2vw;
+    padding-left: 2vw;
+  }
+
+  .brand {
+    font-size: 21px;
+  }
+
+  .desktop-nav {
+    gap: 13px;
+    margin-left: 0;
+    font-size: 15px;
+  }
+
+  .header-actions {
+    gap: 10px;
+  }
+
+  .header-actions > .text-button {
+    font-size: 15px;
+  }
+
+  .language-picker {
+    gap: 5px;
+    min-height: 44px;
+    padding: 5px 7px;
+    font-size: 14px;
+  }
+
+  .language-picker select {
+    min-width: 92px;
+    max-width: 142px;
+  }
 }
 
 @media (max-width: 1180px) {

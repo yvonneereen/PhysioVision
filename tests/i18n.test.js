@@ -64,6 +64,8 @@ const dashboardSources = [
   "Talk to a professional whenever you choose.",
   "Booking is always available—you do not need to wait for a warning from the AI.",
   "Book a consultation",
+  "Consultation",
+  "Request consultation",
   "No consultation currently scheduled.",
   "We are loading the exercises available for your care pathway.",
   "Complete guided sessions and pain check-ins to begin your trend.",

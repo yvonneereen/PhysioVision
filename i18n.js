@@ -314,6 +314,8 @@ const TRANSLATION_ROWS = [
   ["Talk to a professional whenever you choose.", "您可以随时与专业人员沟通。", "Berbincang dengan profesional pada bila-bila masa yang anda pilih.", "நீங்கள் விரும்பும் நேரத்தில் நிபுணருடன் பேசலாம்."],
   ["Booking is always available—you do not need to wait for a warning from the AI.", "您随时都可以预约——无需等待AI发出警示。", "Tempahan sentiasa tersedia—anda tidak perlu menunggu amaran daripada AI.", "முன்பதிவு எப்போதும் கிடைக்கும்—AI எச்சரிக்கைக்காக நீங்கள் காத்திருக்க வேண்டியதில்லை."],
   ["Book a consultation", "预约咨询", "Tempah konsultasi", "ஆலோசனையை முன்பதிவு செய்யவும்"],
+  ["Consultation", "咨询", "Konsultasi", "ஆலோசனை"],
+  ["Request consultation", "请求咨询", "Minta konsultasi", "ஆலோசனையைக் கோரவும்"],
   ["No consultation currently scheduled.", "目前没有已安排的咨询。", "Tiada konsultasi yang dijadualkan buat masa ini.", "தற்போது ஆலோசனை எதுவும் திட்டமிடப்படவில்லை."],
   ["Send your recent movement and pain history to the care team. A physiotherapist will pick up your case and take over your plan.", "将您近期的动作和疼痛记录发送给护理团队。物理治疗师将接手您的个案和计划。", "Hantar sejarah pergerakan dan kesakitan terkini anda kepada pasukan penjagaan. Seorang ahli fisioterapi akan mengambil kes anda dan mengurus pelan anda.", "உங்கள் சமீபத்திய இயக்க மற்றும் வலி வரலாற்றைப் பராமரிப்புக் குழுவிற்கு அனுப்பவும். ஒரு உடற்பயிற்சி சிகிச்சையாளர் உங்கள் வழக்கையும் திட்டத்தையும் ஏற்றுக்கொள்வார்."],
   ["Set up your patient home", "设置您的患者主页", "Sediakan halaman pesakit anda", "உங்கள் நோயாளர் முகப்பை அமைக்கவும்"],

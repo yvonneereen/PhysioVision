@@ -5410,7 +5410,8 @@ details.metrics summary {
   gap: 12px 16px;
 }
 
-.patient-refer-physio[hidden] {
+.patient-refer-physio[hidden],
+.patient-refer-physio.is-hidden {
   display: none !important;
 }
 

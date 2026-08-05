@@ -136,4 +136,22 @@ assert.equal(
   false,
 );
 
+assert.equal(
+  shouldShowPhysiotherapistRequest({
+    pathwayChoice: "wellness",
+    medical_history: "Recent knee replacement",
+  }),
+  false,
+  "a patient with medical history must not see the self-referral action",
+);
+
+assert.equal(
+  shouldShowPhysiotherapistRequest({
+    pathwayChoice: "wellness",
+    hasRelevantHistory: true,
+  }),
+  false,
+  "the browser profile medical-history flag must also hide self-referral",
+);
+
 console.log("patient dashboard state tests passed");

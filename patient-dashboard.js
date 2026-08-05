@@ -274,6 +274,14 @@ function planRow({ label, title, detail, exerciseId = null, note = "" }) {
   return row;
 }
 
+function setPhysiotherapistRequestVisibility(visible) {
+  if (!referPhysio) return;
+  referPhysio.hidden = !visible;
+  referPhysio.classList.toggle("is-hidden", !visible);
+  referPhysio.setAttribute("aria-hidden", String(!visible));
+  referPhysio.style.display = visible ? "" : "none";
+}
+
 function renderClinicianPlan(prescriptions) {
   const active = prescriptions.filter((item) => isCurrentPrescription(item));
   firstExerciseId = active[0]?.exercise ?? null;
@@ -281,11 +289,10 @@ function renderClinicianPlan(prescriptions) {
   primaryActions.hidden = false;
   dashboardSide.hidden = false;
   consultationCard.hidden = false;
-  if (referPhysio) {
-    referPhysio.hidden = !shouldShowPhysiotherapistRequest(
-      currentUser?.profile,
-    );
-  }
+  // Entering this renderer already proves that this is a clinician-guided
+  // patient. They can use the consultation card for their existing care team
+  // and must never see the self-referral action.
+  setPhysiotherapistRequestVisibility(false);
   setupPatientMessaging(currentUser?.profile);
   const isDemo = active.some((item) => item.is_demo);
   demoNotice.hidden = !isDemo;
@@ -351,9 +358,9 @@ function renderWellnessPlan(profile) {
   dashboardSide.hidden = true;
   consultationCard.hidden = true;
   demoNotice.hidden = true;
-  if (referPhysio) {
-    referPhysio.hidden = !shouldShowPhysiotherapistRequest(profile);
-  }
+  setPhysiotherapistRequestVisibility(
+    shouldShowPhysiotherapistRequest(profile),
+  );
   if (messagesLauncher) messagesLauncher.hidden = true;
   closeMessagesPanel();
 
@@ -1153,6 +1160,10 @@ pathwaySelfRefer?.addEventListener("click", async () => {
 // physiotherapist pathway (no clinician yet) — the backend posts their log to
 // the triage queue for the care team to claim.
 referPhysioButton?.addEventListener("click", async () => {
+  if (!shouldShowPhysiotherapistRequest(currentUser?.profile)) {
+    setPhysiotherapistRequestVisibility(false);
+    return;
+  }
   const confirmed = window.confirm(translateText(
     "Request a physiotherapist? This pauses your self-guided wellness plan "
     + "and shares your recent history with the care team.",

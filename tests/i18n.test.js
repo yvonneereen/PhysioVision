@@ -51,6 +51,63 @@ assert.equal(
   "谢谢。我会问几个简短的问题，以确认您是否适合继续。请停止动作，并在安全的地方休息。 您哪里感到疼痛？"
 );
 
+const dashboardSources = [
+  "Review your physiotherapist-assigned plan, start approved exercises and follow your progress.",
+  "Specialist-assigned programme",
+  "Approved movement guidance",
+  "Progress and pain trends",
+  "Prototype sample",
+  "Example: early rehabilitation after total knee replacement. These sample doses are interface data, not instructions for a real patient.",
+  "Prototype display programme—not a personal prescription",
+  "This sample shows an early total-knee-replacement rehabilitation pathway. A real patient must follow their own surgeon and physiotherapist’s instructions.",
+  "Physiotherapist support",
+  "Talk to a professional whenever you choose.",
+  "Booking is always available—you do not need to wait for a warning from the AI.",
+  "Book a consultation",
+  "No consultation currently scheduled.",
+  "We are loading the exercises available for your care pathway.",
+  "Complete guided sessions and pain check-ins to begin your trend.",
+  "Early indicators only. The final clinical trend criteria are still being validated and will remain separate from AI interpretation.",
+  "Which type of exercise support are you using?",
+  "I have a physiotherapist-assigned plan",
+  "I am here for general wellness",
+  "No self-guided plan has been created. Review your safety-screen answers before using general-wellness exercises.",
+  "Start with your AI movement companion",
+  "Ready for an AI draft",
+  "Create and review your AI plan",
+  "Plan refresh needed",
+  "Create a new AI wellness plan",
+  "Your accepted AI wellness plan uses reviewed, camera-trackable exercises.",
+  "Pause your wellness plan and seek professional advice",
+  "Ask my physiotherapist to review",
+  "Your physiotherapist suggested a consultation",
+  "No messages yet. Say hello or ask a question.",
+  "Request sent. The physiotherapist will confirm the appointment.",
+  "Request a physiotherapist? This pauses your self-guided wellness plan and shares your recent history with the care team.",
+];
+
+for (const locale of ["zh-SG", "ms-SG", "ta-SG"]) {
+  for (const source of dashboardSources) {
+    assert.notEqual(
+      translateText(source, locale),
+      source,
+      `${locale} is missing a patient-dashboard translation for: ${source}`
+    );
+  }
+}
+
+assert.equal(
+  translateText("2 sets × 10 reps · 3 days/week", "zh-SG"),
+  "2组 × 10次 · 每周3天"
+);
+assert.equal(
+  translateText(
+    "Detailed plan assigned by Dr Tan. Follow these doses and notes exactly.",
+    "ms-SG"
+  ),
+  "Pelan terperinci ditetapkan oleh Dr Tan. Ikuti dos dan nota ini dengan tepat."
+);
+
 setLocale("ms-SG", { persist: false, announce: false });
 assert.equal(getSpeechLocale(), "ms-MY");
 assert.equal(translateText("Choose text size"), "Pilih saiz teks");

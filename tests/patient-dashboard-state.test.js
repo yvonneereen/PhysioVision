@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   analysePatientTrend,
   findUpcomingConsultation,
+  isClinicianGuidedProfile,
   isCurrentPrescription,
+  shouldShowPhysiotherapistRequest,
 } from "../patient-dashboard-state.js";
 
 const dates = [
@@ -101,6 +103,37 @@ assert.equal(
     new Date("2026-08-01T09:00:00Z"),
   ),
   null,
+);
+
+assert.equal(
+  isClinicianGuidedProfile({ pathway_choice: "physiotherapist" }),
+  true,
+);
+
+assert.equal(
+  isClinicianGuidedProfile({ carePath: "clinician" }),
+  true,
+);
+
+assert.equal(
+  isClinicianGuidedProfile({ primaryClinician: { id: 12 } }),
+  true,
+);
+
+assert.equal(
+  shouldShowPhysiotherapistRequest({
+    pathwayChoice: "wellness",
+    wellnessScreeningStatus: "eligible",
+  }),
+  true,
+);
+
+assert.equal(
+  shouldShowPhysiotherapistRequest({
+    pathwayChoice: "physiotherapist",
+    primaryClinician: { id: 12 },
+  }),
+  false,
 );
 
 console.log("patient dashboard state tests passed");

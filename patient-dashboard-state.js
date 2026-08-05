@@ -4,6 +4,22 @@ export const PROVISIONAL_TREND_THRESHOLDS = Object.freeze({
   minimumReadings: 3,
 });
 
+export function isClinicianGuidedProfile(profile = {}) {
+  const pathwayChoice =
+    profile.pathway_choice ?? profile.pathwayChoice ?? "unselected";
+  const carePath = profile.care_path ?? profile.carePath;
+  return Boolean(
+    pathwayChoice === "physiotherapist"
+      || carePath === "clinician"
+      || profile.primary_clinician
+      || profile.primaryClinician,
+  );
+}
+
+export function shouldShowPhysiotherapistRequest(profile = {}) {
+  return !isClinicianGuidedProfile(profile);
+}
+
 function number(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;

@@ -18,9 +18,12 @@ import {
 import {
   analysePatientTrend,
   findUpcomingConsultation,
+  isClinicianGuidedProfile,
   isCurrentPrescription,
-} from "./patient-dashboard-state.js?v=2";
+  shouldShowPhysiotherapistRequest,
+} from "./patient-dashboard-state.js?v=3";
 import { saveProfile } from "./personalization.js?v=9";
+import { getLocale, translateText } from "./i18n.js?v=5";
 import { EXERCISE_MAP } from "./exercises/registry.js";
 
 const dashboard = document.getElementById("patientDashboard");
@@ -144,7 +147,7 @@ function formatDate(value, options = {}) {
   if (!value) return "—";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "—";
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(getLocale(), {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -278,7 +281,11 @@ function renderClinicianPlan(prescriptions) {
   primaryActions.hidden = false;
   dashboardSide.hidden = false;
   consultationCard.hidden = false;
-  if (referPhysio) referPhysio.hidden = true;
+  if (referPhysio) {
+    referPhysio.hidden = !shouldShowPhysiotherapistRequest(
+      currentUser?.profile,
+    );
+  }
   setupPatientMessaging(currentUser?.profile);
   const isDemo = active.some((item) => item.is_demo);
   demoNotice.hidden = !isDemo;
@@ -344,7 +351,9 @@ function renderWellnessPlan(profile) {
   dashboardSide.hidden = true;
   consultationCard.hidden = true;
   demoNotice.hidden = true;
-  if (referPhysio) referPhysio.hidden = false;
+  if (referPhysio) {
+    referPhysio.hidden = !shouldShowPhysiotherapistRequest(profile);
+  }
   if (messagesLauncher) messagesLauncher.hidden = true;
   closeMessagesPanel();
 
@@ -458,15 +467,7 @@ function renderPlan(user, prescriptions) {
   planList.innerHTML = "";
   if (planChange) planChange.hidden = true;
   const profile = user.profile ?? {};
-  const carePath = profile.care_path ?? profile.carePath;
-  const pathwayChoice =
-    profile.pathway_choice ?? profile.pathwayChoice ?? "unselected";
-  if (
-    pathwayChoice === "physiotherapist" ||
-    carePath === "clinician" ||
-    profile.primary_clinician ||
-    profile.primaryClinician
-  ) {
+  if (isClinicianGuidedProfile(profile)) {
     renderClinicianPlan(prescriptions);
   } else {
     renderWellnessPlan(profile);
@@ -503,10 +504,7 @@ function renderTrendChart(series) {
 function renderTrend(data) {
   const trend = analysePatientTrend(data);
   const profile = currentUser?.profile ?? {};
-  const isPhysiotherapistPath = (
-    (profile.pathway_choice ?? profile.pathwayChoice) === "physiotherapist"
-    || (profile.care_path ?? profile.carePath) === "clinician"
-  );
+  const isPhysiotherapistPath = isClinicianGuidedProfile(profile);
   trendStatus.textContent = TREND_STATUS_LABELS[trend.status];
   trendStatus.className =
     trend.status === "review_suggested"
@@ -537,7 +535,10 @@ function renderTrend(data) {
         + "available PhysioVision physiotherapist; the request is not "
         + "confirmed until it is accepted."
       );
-    renderTrendConsultationAction(data.consultations);
+    renderTrendConsultationAction(
+      data.consultations,
+      isPhysiotherapistPath,
+    );
   }
 }
 
@@ -551,7 +552,10 @@ function describeConsultation(consultation) {
   })} with ${consultation.clinician_name || "the PhysioVision care team"}.`;
 }
 
-function renderTrendConsultationAction(consultations) {
+function renderTrendConsultationAction(
+  consultations,
+  isPhysiotherapistPath = false,
+) {
   if (!trendRequestButton || !trendRequestStatus) return;
   const next = findUpcomingConsultation(consultations);
 
@@ -565,10 +569,12 @@ function renderTrendConsultationAction(consultations) {
   }
 
   trendRequestButton.disabled = false;
-  trendRequestButton.innerHTML =
-    'Request a physiotherapist <span aria-hidden="true">→</span>';
-  trendRequestStatus.textContent =
-    "Choose a preferred time. The request must be accepted before it is confirmed.";
+  trendRequestButton.innerHTML = isPhysiotherapistPath
+    ? 'Ask my physiotherapist to review <span aria-hidden="true">→</span>'
+    : 'Request a physiotherapist <span aria-hidden="true">→</span>';
+  trendRequestStatus.textContent = isPhysiotherapistPath
+    ? "Choose a preferred time for your existing physiotherapist to review this pattern."
+    : "Choose a preferred time. The request must be accepted before it is confirmed.";
 }
 
 function renderUpcomingConsultation(consultations) {
@@ -628,7 +634,7 @@ async function handlePendingConsultClick(event) {
     } else if (proposeId) {
       const current = event.target.closest(".pending-consult")?.dataset.consultWhen;
       const input = window.prompt(
-        "Propose a new date & time (e.g. 2026-08-05 15:30):",
+        translateText("Propose a new date & time (e.g. 2026-08-05 15:30):"),
         current ? current.slice(0, 16).replace("T", " ") : ""
       );
       if (!input) return;
@@ -1147,10 +1153,10 @@ pathwaySelfRefer?.addEventListener("click", async () => {
 // physiotherapist pathway (no clinician yet) — the backend posts their log to
 // the triage queue for the care team to claim.
 referPhysioButton?.addEventListener("click", async () => {
-  const confirmed = window.confirm(
+  const confirmed = window.confirm(translateText(
     "Request a physiotherapist? This pauses your self-guided wellness plan "
     + "and shares your recent history with the care team.",
-  );
+  ));
   if (!confirmed) return;
   referPhysioButton.disabled = true;
   referPhysioStatus.textContent = "Sending your request…";

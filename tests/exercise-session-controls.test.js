@@ -29,6 +29,16 @@ assert.match(
   /\.feedback-detail\s*\{[\s\S]*?color: #3d6d53;[\s\S]*?overflow-wrap: break-word;/,
   "guidance detail should use readable dark text and safe word wrapping"
 );
+assert.match(
+  styles,
+  /\.modal-shell\s*\{[\s\S]*?visibility: hidden;[\s\S]*?pointer-events: none;/,
+  "closed full-screen modal shells must not intercept page clicks"
+);
+assert.match(
+  styles,
+  /\.modal-shell\.is-open\s*\{[\s\S]*?visibility: visible;[\s\S]*?pointer-events: auto;/,
+  "only an open modal shell should accept pointer input"
+);
 
 function functionSource(name, nextName) {
   const start = source.indexOf(`function ${name}(`);

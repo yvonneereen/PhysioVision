@@ -108,7 +108,7 @@ export const EXERCISES = [
     prescription: { sets: 3, reps: 10, holdSeconds: 5, daysPerWeek: "4–5" },
     camera: "front", // required for bilateral symmetry and facing-direction checks
     trackingWarning:
-      "Face the camera and keep both feet, knees, hips, and shoulders fully visible.",
+      "Face the camera and keep one complete shoulder, hip, knee, and ankle line visible. Keep both legs visible when possible for symmetry feedback.",
     trackedAngles: {
       leftKnee:  { points: ["leftHip",  "leftKnee",  "leftAnkle"]  },
       rightKnee: { points: ["rightHip", "rightKnee", "rightAnkle"] },
@@ -124,71 +124,56 @@ export const EXERCISES = [
         points: ["nose", "rightKnee", "rightAnkle", "rightFootIndex"],
       },
     },
+    // Home cameras often give the farther leg a weaker confidence score. One
+    // complete kinetic chain is enough to recognize the movement; the second
+    // leg remains useful for optional symmetry coaching.
+    allowOppositeSideFallback: true,
+    trackingVisibilityThreshold: 0.35,
+    matchThreshold: 0.85,
     // Require a position to remain stable before advancing the rep state.
-    phaseConfirmationMs: 300,
+    phaseConfirmationMs: 400,
     maxCues: 1,
     calibration: {
       startPhase: "standing",
       targetPhase: "squat",
-      captureKeys: [
-        "leftKnee",
-        "rightKnee",
-        "leftHip",
-        "rightHip",
-        "torsoLean",
-      ],
+      captureKeys: ["knee", "hip"],
       // Knee-forward depth is retained as an optional coaching measurement,
       // but it must not block calibration or repetition recognition. Its
       // camera-depth estimate is unreliable from a front-facing camera.
-      personalizedKeys: ["leftKnee", "rightKnee", "leftHip", "rightHip"],
+      personalizedKeys: ["knee", "hip"],
       toleranceDegrees: 12,
       safeRanges: {
         start: {
-          leftKnee: [145, 180],
-          rightKnee: [145, 180],
-          leftHip: [145, 180],
-          rightHip: [145, 180],
-          torsoLean: [0, 25],
+          knee: [145, 180],
+          hip: [145, 180],
         },
         target: {
           // A shallower comfortable squat can be calibrated, while 90° remains
           // the deepest permitted knee angle in this prototype.
-          leftKnee: [90, 145],
-          rightKnee: [90, 145],
-          leftHip: [90, 150],
-          rightHip: [90, 150],
-          torsoLean: [0, 40],
+          knee: [90, 145],
+          hip: [90, 150],
         },
       },
       captureErrors: {
-        leftKnee: "Use a comfortable half-squat depth and do not bend past 90°.",
-        rightKnee: "Use a comfortable half-squat depth and do not bend past 90°.",
-        leftHip: "Use a smaller, comfortable movement for this calibration.",
-        rightHip: "Use a smaller, comfortable movement for this calibration.",
-        torsoLean: "Lift your chest and try the measurement again.",
+        knee: "Use a comfortable half-squat depth and do not bend past 90°.",
+        hip: "Use a smaller, comfortable movement for this calibration.",
       },
     },
     phases: [
       {
         name: "standing",
-        leftKnee: [160, 180],
-        rightKnee: [160, 180],
-        leftHip: [155, 180],
-        rightHip: [155, 180],
-        torsoLean: [0, 25],
+        knee: [160, 180],
+        hip: [155, 180],
       },
       {
         name: "squat",
-        leftKnee: [90, 130],
-        rightKnee: [90, 130],
-        leftHip: [90, 135],
-        rightHip: [90, 135],
-        torsoLean: [0, 40],
+        knee: [90, 130],
+        hip: [90, 135],
       },
     ],
     repRule: "standing → squat → standing",
     stageImages: ["standing", "squat", "standing"],
-    symmetry: { joint: "knee", maxDiffDeg: 15 },
+    symmetry: { joint: "knee", maxDiffDeg: 15, requiredForTracking: false },
     cues: {
       "leftKnee<90": "Don't go too deep — this is a half squat only",
       "rightKnee<90": "Don't go too deep — this is a half squat only",

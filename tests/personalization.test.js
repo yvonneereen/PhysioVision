@@ -22,13 +22,10 @@ const halfSquat = EXERCISE_MAP["half-squats"];
     lowConfidence: false,
     weakPoints: [],
   });
-  const angles = Object.fromEntries(
-    halfSquat.calibration.captureKeys.map((key) => [key, visible(120)])
-  );
-  angles.leftKnee = {
-    value: NaN,
-    lowConfidence: true,
-    weakPoints: ["leftHip", "leftKnee", "leftAnkle"],
+  const angles = {
+    leftKnee: visible(120),
+    leftHip: visible(125),
+    rightHip: visible(125),
   };
   angles.rightKnee = {
     value: NaN,
@@ -36,15 +33,19 @@ const halfSquat = EXERCISE_MAP["half-squats"];
     weakPoints: ["rightHip", "rightKnee", "rightAnkle"],
   };
   const inspection = inspectCalibrationFrame(halfSquat, angles, "right");
-  assert.equal(inspection.frame, null);
-  assert.deepEqual(
-    inspection.missingMeasurements,
-    ["leftKnee", "rightKnee"]
-  );
-  assert.deepEqual(inspection.weakPoints, [
-    "leftHip",
-    "leftKnee",
-    "leftAnkle",
+  assert.deepEqual(inspection.frame, { knee: 120, hip: 125 });
+  assert.deepEqual(inspection.missingMeasurements, []);
+  assert.equal(inspection.trackingSide, "left");
+
+  angles.leftKnee = {
+    value: NaN,
+    lowConfidence: true,
+    weakPoints: ["leftHip", "leftKnee", "leftAnkle"],
+  };
+  const unavailable = inspectCalibrationFrame(halfSquat, angles, "right");
+  assert.equal(unavailable.frame, null);
+  assert.deepEqual(unavailable.missingMeasurements, ["knee"]);
+  assert.deepEqual(unavailable.weakPoints, [
     "rightHip",
     "rightKnee",
     "rightAnkle",
@@ -63,42 +64,22 @@ function frames(values, count = 12) {
 }
 
 const standing = frames({
-  leftKnee: 172,
-  rightKnee: 170,
-  leftHip: 166,
-  rightHip: 165,
-  torsoLean: 8,
-  leftKneeForwardRatio: 0,
-  rightKneeForwardRatio: 0,
+  knee: 170,
+  hip: 165,
 });
 
 const targetCaptures = [
   frames({
-    leftKnee: 132,
-    rightKnee: 130,
-    leftHip: 138,
-    rightHip: 136,
-    torsoLean: 22,
-    leftKneeForwardRatio: 0.05,
-    rightKneeForwardRatio: 0.04,
+    knee: 132,
+    hip: 138,
   }),
   frames({
-    leftKnee: 128,
-    rightKnee: 126,
-    leftHip: 134,
-    rightHip: 132,
-    torsoLean: 23,
-    leftKneeForwardRatio: 0.04,
-    rightKneeForwardRatio: 0.03,
+    knee: 128,
+    hip: 134,
   }),
   frames({
-    leftKnee: 130,
-    rightKnee: 128,
-    leftHip: 136,
-    rightHip: 134,
-    torsoLean: 21,
-    leftKneeForwardRatio: 0.03,
-    rightKneeForwardRatio: 0.04,
+    knee: 130,
+    hip: 136,
   }),
 ];
 
@@ -109,9 +90,9 @@ const targetCaptures = [
     targetCaptures: [targetCaptures[1]],
   });
 
-  assert.equal(calibration.target.leftKnee.median, 128);
-  assert.equal(calibration.target.leftKnee.repetitions, 1);
-  assert.ok(calibration.target.leftKnee.variability > 0);
+  assert.equal(calibration.target.knee.median, 128);
+  assert.equal(calibration.target.knee.repetitions, 1);
+  assert.ok(calibration.target.knee.variability > 0);
 }
 
 {
@@ -121,46 +102,52 @@ const targetCaptures = [
     targetCaptures,
   });
 
-  assert.equal(calibration.target.leftKnee.median, 130);
-  assert.equal(calibration.target.rightKnee.median, 128);
-  assert.deepEqual(calibration.phaseRanges.squat.leftKnee, [118, 142]);
-  assert.deepEqual(calibration.phaseRanges.squat.rightKnee, [116, 140]);
-  assert.equal(calibration.naturalKneeDifference, 2);
+  assert.equal(calibration.target.knee.median, 130);
+  assert.deepEqual(calibration.phaseRanges.squat.knee, [118, 142]);
+  assert.equal(calibration.naturalKneeDifference, null);
 
   const personalised = applyCalibration(halfSquat, calibration);
   const squat = personalised.phases.find((phase) => phase.name === "squat");
-  assert.deepEqual(squat.leftKnee, [118, 142]);
-  assert.deepEqual(squat.torsoLean, [0, 40]);
-  assert.equal(personalised.symmetry.maxDiffDeg, 8);
+  assert.deepEqual(squat.knee, [118, 142]);
+  assert.equal(personalised.symmetry.maxDiffDeg, 15);
 
   const tampered = applyCalibration(halfSquat, {
     ...calibration,
     phaseRanges: {
       squat: {
-        leftKnee: [-100, 999],
-        torsoLean: [-100, 999],
+        knee: [-100, 999],
+        hip: [-100, 999],
       },
     },
   });
   const tamperedSquat = tampered.phases.find((phase) => phase.name === "squat");
-  assert.deepEqual(tamperedSquat.leftKnee, [90, 145]);
-  assert.deepEqual(tamperedSquat.torsoLean, [0, 40]);
+  assert.deepEqual(tamperedSquat.knee, [90, 145]);
+  assert.deepEqual(tamperedSquat.hip, [90, 150]);
+}
+
+{
+  const legacy = applyCalibration(halfSquat, {
+    version: 1,
+    exerciseId: "half-squats",
+    affectedSide: "right",
+    phaseRanges: {
+      standing: { rightKnee: [158, 180], rightHip: [153, 180] },
+      squat: { rightKnee: [118, 142], rightHip: [122, 146] },
+    },
+  });
+  const squat = legacy.phases.find((phase) => phase.name === "squat");
+  assert.deepEqual(squat.knee, [118, 142]);
+  assert.deepEqual(squat.hip, [122, 146]);
 }
 
 {
   const standingFrame = {
-    leftKnee: 172,
-    rightKnee: 170,
-    leftHip: 166,
-    rightHip: 165,
-    torsoLean: 8,
+    knee: 170,
+    hip: 165,
   };
   const squatFrame = {
-    leftKnee: 130,
-    rightKnee: 128,
-    leftHip: 136,
-    rightHip: 134,
-    torsoLean: 21,
+    knee: 130,
+    hip: 136,
   };
 
   assert.equal(
@@ -178,19 +165,14 @@ const targetCaptures = [
 }
 
 {
-  const unsafeLean = frames({
-    leftKnee: 130,
-    rightKnee: 130,
-    leftHip: 135,
-    rightHip: 135,
-    torsoLean: 45,
-    leftKneeForwardRatio: 0,
-    rightKneeForwardRatio: 0,
+  const unsafeDepth = frames({
+    knee: 85,
+    hip: 135,
   });
 
   assert.throws(
-    () => validateCalibrationCapture(halfSquat, unsafeLean, "target"),
-    /Lift your chest/
+    () => validateCalibrationCapture(halfSquat, unsafeDepth, "target"),
+    /comfortable half-squat/
   );
 }
 

@@ -2043,27 +2043,6 @@ html[lang="en-SG"] body {
   color: rgba(255, 255, 255, 0.74);
 }
 
-.calibration-result {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
-.calibration-result span {
-  padding: 11px;
-  border-radius: 9px;
-  color: rgba(255, 255, 255, 0.62);
-  background: rgba(255, 255, 255, 0.08);
-  font-size: 1rem;
-}
-
-.calibration-result strong {
-  display: block;
-  color: var(--white);
-  font-size: 1.25rem;
-}
-
 .camera-safety {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 0.9fr);

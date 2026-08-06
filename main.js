@@ -7,7 +7,7 @@ import {
   measureHandExerciseFrame,
   measurePoseExerciseFrame,
 } from "./exercise-tracking.js?v=2";
-import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=41";
+import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=42";
 import { POSES } from "./poses.js";
 import {
   calibrationFrameMatchesPhase,
@@ -19,7 +19,7 @@ import {
   loadProfile,
   saveCalibration,
   validateCalibrationCapture,
-} from "./personalization.js?v=11";
+} from "./personalization.js?v=12";
 import {
   buildCalibrationSafetyContext,
   evaluateCalibrationReuse,
@@ -192,8 +192,6 @@ const calibrationStepLabel  = document.getElementById("calibrationStepLabel");
 const calibrationTitle      = document.getElementById("calibrationTitle");
 const calibrationInstructions = document.getElementById("calibrationInstructions");
 const calibrationStatus     = document.getElementById("calibrationStatus");
-const calibrationResult     = document.getElementById("calibrationResult");
-const calibrationAction     = document.getElementById("calibrationAction");
 const calibrationCancel     = document.getElementById("calibrationCancel");
 const setupTip              = document.getElementById("setupTip");
 const handFrameGuide        = document.getElementById("handFrameGuide");
@@ -1224,8 +1222,8 @@ function queueSpokenMovementCue(state, cue, timestampMs) {
     return;
   }
 
-  const stableForMs = state === "adjust" ? 800 : 1400;
-  const repeatAfterMs = state === "adjust" ? 8000 : 10000;
+  const stableForMs = state === "adjust" ? 800 : 800;
+  const repeatAfterMs = state === "adjust" ? 8000 : 8000;
   if (
     timestampMs - spokenCoachingCandidate.firstSeenAt < stableForMs ||
     timestampMs - spokenCoachingCandidate.lastRequestedAt < repeatAfterMs
@@ -1928,7 +1926,8 @@ function renderFrame() {
             poseHistory: combinedPoseHistory,
             visibilityThreshold: calibrationSession
               ? CALIBRATION_VISIBILITY_THRESHOLD
-              : VISIBILITY_THRESHOLD,
+              : engine.exercise.trackingVisibilityThreshold
+                ?? VISIBILITY_THRESHOLD,
           });
           const angles = Object.fromEntries(
             Object.entries(raw).map(([k, a]) => [k, smoother.smooth(k, a)])
@@ -1942,8 +1941,12 @@ function renderFrame() {
             updateSetStartingPositionCheck(angles, frameTimestamp);
             processFallMonitoring(landmarks, frameTimestamp);
           } else {
-            updateFeedbackPanel(angles, frameTimestamp);
-            statusEl.textContent = "Tracking your movement";
+            const feedback = updateFeedbackPanel(angles, frameTimestamp);
+            statusEl.textContent = !feedback.trackingReady
+              ? movementTrackingGuidance(feedback)
+              : feedback.limitedTracking
+                ? `Tracking reps from your ${feedback.trackingSide} side`
+                : "Tracking your movement";
             processFallMonitoring(landmarks, frameTimestamp);
           }
         } else {
@@ -2234,17 +2237,18 @@ function updateFeedbackPanel(angles, timestampMs) {
     bannerState = "tracking";
     bannerCue = fb.inHold
       ? "Hold reset — keep the required joints visible to restart"
-      : "Keep every required joint visible so I can guide you safely";
+      : movementTrackingGuidance(fb);
   } else if (!fb.sequenceOnTrack && fb.positionRecognized) {
     bannerState = "adjust";
     bannerCue =
       `Follow the order — move to ${fb.expectedNextPhase.replaceAll("_", " ")} next`;
   } else if (!fb.positionRecognized && !personalizedCues.length) {
-    const nextIdx = fb.stageIndex + 1;
-    const nextPhase = fb.stages[nextIdx] ?? fb.stages[0];
     bannerState = "adjust";
+    bannerCue = movementPhaseGuidance(fb);
+  } else if (fb.limitedTracking && !personalizedCues.length) {
+    bannerState = "good";
     bannerCue =
-      `Move slowly toward the ${nextPhase.replaceAll("_", " ")} position`;
+      `Rep tracking is working from your ${fb.trackingSide} side. Keep both legs visible when possible for symmetry feedback.`;
   } else {
     bannerState = personalizedCues.length ? "adjust" : "good";
     bannerCue = personalizedCues[0] ?? "";
@@ -2309,6 +2313,28 @@ function setSymRow(key, left, right) {
 
 // ── Personal profile and calibration ─────────────────────────────────────────
 
+function calibrationUsesJointAngles(config = engine?.exercise?.calibration) {
+  return (config?.personalizedKeys ?? []).some((key) =>
+    /(knee|hip|ankle|shoulder|elbow|wrist|inclination)/i.test(key)
+  );
+}
+
+function calibrationPurposeMessage(config = engine?.exercise?.calibration) {
+  return calibrationUsesJointAngles(config)
+    ? (
+      "Your measured joint angles are saved automatically and will help the "
+      + "guide recognize your comfortable movement range. Safety limits are unchanged."
+    )
+    : (
+      "Your movement baseline is saved automatically and will help the guide "
+      + "recognize your movement. Safety limits are unchanged."
+    );
+}
+
+function calibrationCompletionSpeech(config = engine?.exercise?.calibration) {
+  return `${calibrationPurposeMessage(config)} Begin when you are comfortable.`;
+}
+
 function renderPersonalization() {
   const savedProfile = hasSavedProfile();
   const calibration = getCalibration(exSelect.value, sideSelect.value);
@@ -2329,12 +2355,17 @@ function renderPersonalization() {
     calibrationDetail.textContent = `${calibrationSummary(
       calibration,
       engine.exercise.calibration
-    )} · safety limits unchanged`;
+    )} · ${calibrationUsesJointAngles(engine.exercise.calibration)
+      ? "used to recognize your comfortable movement angles"
+      : "used to recognize your comfortable movement"} · safety limits unchanged`;
     openCalibrationBtn.textContent = "Recalibrate";
   } else if (supportsCalibration) {
     calibrationBadge.textContent = "Standard range";
-    calibrationDetail.textContent =
-      `Calibrate ${engine.exercise.name} to your movement.`;
+    calibrationDetail.textContent = calibrationUsesJointAngles(
+      engine.exercise.calibration
+    )
+      ? "Measures your comfortable joint angles so the guide can better recognize your movement."
+      : "Measures your comfortable movement so the guide can better recognize it.";
     openCalibrationBtn.textContent = "Calibrate";
   } else {
     calibrationBadge.textContent = "Standard range";
@@ -2394,7 +2425,9 @@ function calibrationSummary(calibration, config) {
   const keys = config?.personalizedKeys ?? [];
   const summaries = keys
     .map((key) => {
-      const value = calibration.target?.[key]?.median;
+      const legacySideKey = `${calibration.affectedSide ?? "right"}${key[0].toUpperCase()}${key.slice(1)}`;
+      const value = calibration.target?.[key]?.median
+        ?? calibration.target?.[legacySideKey]?.median;
       if (!Number.isFinite(value)) return null;
       const angleLike = /(knee|hip|ankle|shoulder|elbow|wrist|inclination)/i
         .test(key);
@@ -2410,6 +2443,40 @@ function friendlyMeasurement(key) {
   return key
     .replace(/([A-Z])/g, " $1")
     .replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function movementTrackingGuidance(feedback) {
+  if (feedback.exercise.id === "half-squats") {
+    const missing = (feedback.missingMeasurements ?? [])
+      .slice(0, 2)
+      .map((key) => friendlyMeasurement(key).toLowerCase());
+    const measurement = missing.length
+      ? `I cannot measure your ${missing.join(" and ")} angle${missing.length > 1 ? "s" : ""}. `
+      : "I cannot measure a complete leg angle. ";
+    return (
+      measurement
+      + "Step farther back or turn slightly until one complete shoulder, hip, "
+      + "knee, and ankle line is visible. Keep the chair beside you, not in "
+      + "front of the visible leg."
+    );
+  }
+  const labels = (feedback.missingMeasurements ?? [])
+    .slice(0, 2)
+    .map((key) => friendlyMeasurement(key).toLowerCase());
+  return labels.length
+    ? `Reposition so I can see and measure your ${labels.join(" and ")}.`
+    : "Keep every required joint visible so I can guide you safely.";
+}
+
+function movementPhaseGuidance(feedback) {
+  const nextPhase = feedback.expectedNextPhase?.replaceAll("_", " ")
+    ?? "next";
+  if (feedback.exercise.id === "half-squats") {
+    return nextPhase === "squat"
+      ? "Bend the visible knee and hip a little more, only as far as is comfortable, then hold briefly."
+      : "Stand tall and straighten the visible knee and hip, then hold briefly.";
+  }
+  return `Move slowly toward the ${nextPhase} position`;
 }
 
 function cueStyleLabel(style) {
@@ -2562,50 +2629,52 @@ calibrationCancel.addEventListener("click", () => {
   }
 });
 
-calibrationAction.addEventListener("click", () => {
-  if (!calibrationSession) return;
+function saveCompletedCalibration(draft) {
+  const hasPersonalRange = Boolean(
+    engine.exercise.calibration.personalizedKeys.length
+  );
+  const purposeMessage = calibrationPurposeMessage(
+    engine.exercise.calibration
+  );
 
-  if (calibrationSession.step === "result" && calibrationDraft) {
-    saveCalibration(calibrationDraft);
-    if (isPracticeAccountAuthenticated()) {
-      postCalibration({
-        exercise:             calibrationDraft.exerciseId,
-        affected_side:        calibrationDraft.affectedSide,
-        captured_at:          calibrationDraft.capturedAt,
-        start_measurements:   calibrationDraft.start,
-        target_measurements:  calibrationDraft.target,
-        phase_ranges:         calibrationDraft.phaseRanges,
-        natural_knee_difference: calibrationDraft.naturalKneeDifference,
-      }).catch(() => {});
-    }
-    engine.changeExercise(
-      exSelect.value,
-      sideSelect.value,
-      calibrationDraft
-    );
-    smoother.state = {};
-    combinedPoseHistory = [];
-    renderPersonalization();
-    setFeedbackBanner("ready");
-    cancelCalibration();
-    statusEl.textContent = engine.exercise.calibration.personalizedKeys.length
-      ? "Personal range saved — movement guide ready"
-      : "Personal tracking baseline saved — movement guide ready";
-    announceExerciseInstruction("Personal movement setup saved.");
+  saveCalibration(draft);
+  if (isPracticeAccountAuthenticated()) {
+    postCalibration({
+      exercise: draft.exerciseId,
+      affected_side: draft.affectedSide,
+      captured_at: draft.capturedAt,
+      start_measurements: draft.start,
+      target_measurements: draft.target,
+      phase_ranges: draft.phaseRanges,
+      natural_knee_difference: draft.naturalKneeDifference,
+    }).catch(() => {});
   }
-});
+  engine.changeExercise(exSelect.value, sideSelect.value, draft);
+  smoother.state = {};
+  combinedPoseHistory = [];
+  renderPersonalization();
+  cancelCalibration();
+  statusEl.textContent = hasPersonalRange
+    ? "Personal range saved automatically — movement guide ready"
+    : "Personal tracking baseline saved automatically — movement guide ready";
+  setFeedbackBanner("good", purposeMessage);
+  speakCalibrationGuidance(
+    calibrationCompletionSpeech(engine.exercise.calibration),
+    {
+      key: `calibration:${engine.exercise.id}:saved-automatically`,
+      interrupt: true,
+    }
+  );
+}
 
 function renderCalibrationStep() {
   if (!calibrationSession) return;
   const dots = [...calibrationOverlay.querySelectorAll(".calibration-dots span")];
-  const stepIndex = { start: 0, target: 1, result: 2 }[
+  const stepIndex = { start: 0, target: 1 }[
     calibrationSession.step
   ];
   dots.forEach((dot, index) => dot.classList.toggle("active", index <= stepIndex));
   calibrationStatus.textContent = "";
-  calibrationResult.classList.add("hidden");
-  calibrationAction.hidden = true;
-  calibrationAction.disabled = false;
 
   if (calibrationSession.step === "start") {
     const isPositionCheck = calibrationSession.mode === "position-check";
@@ -2630,7 +2699,7 @@ function renderCalibrationStep() {
         + `${startInstruction} No extra button is needed—measurement starts `
         + "automatically when you hold the position."
       );
-  } else if (calibrationSession.step === "target") {
+  } else {
     calibrationStepLabel.textContent = "Step 2 · One comfortable movement";
     calibrationTitle.textContent = engine.exercise.calibration.targetTitle
       ?? `Move to ${engine.exercise.calibration.targetPhase.replaceAll("_", " ")}`;
@@ -2640,37 +2709,6 @@ function renderCalibrationStep() {
         ?? "Move only as far as is comfortable, then hold the position."
       )
       + " Spoken guidance will lead you, and measurement starts automatically.";
-  } else {
-    calibrationStepLabel.textContent = "Step 3 · Review";
-    calibrationTitle.textContent = engine.exercise.calibration.personalizedKeys.length
-      ? "Your personal range is ready"
-      : "Your personal tracking baseline is ready";
-    calibrationInstructions.textContent =
-      engine.exercise.calibration.safetyStatement
-      ?? "This adjusts recognition around your movement. Safety limits are not relaxed.";
-    const summaryKeys = engine.exercise.calibration.personalizedKeys.slice(0, 2);
-    const resultItems = summaryKeys.map((key) => {
-      const value = calibrationDraft?.target?.[key]?.median;
-      const angleLike = /(knee|hip|ankle|shoulder|elbow|wrist|inclination)/i
-        .test(key);
-      const display = Number.isFinite(value)
-        ? angleLike ? `${Math.round(value)}°` : value.toFixed(2)
-        : "—";
-      return `<span><strong>${display}</strong>${escapeHtml(friendlyMeasurement(key))}</span>`;
-    });
-    if (!resultItems.length) {
-      resultItems.push("<span><strong>✓</strong>tracking baseline captured</span>");
-    }
-    if (Number.isFinite(calibrationDraft?.naturalKneeDifference)) {
-      resultItems.push(`<span><strong>${calibrationDraft.naturalKneeDifference}°</strong>natural left/right difference</span>`);
-    }
-    calibrationResult.innerHTML = resultItems.join("");
-    calibrationResult.classList.remove("hidden");
-    calibrationAction.hidden = false;
-    calibrationAction.textContent = engine.exercise.calibration.personalizedKeys.length
-      ? "Save personal range"
-      : "Save tracking baseline";
-    calibrationAction.focus();
   }
 }
 
@@ -2695,7 +2733,6 @@ function beginCalibrationCapture(
     guidanceFirstSeenAt: null,
     lastGuidanceAt: -Infinity,
   };
-  calibrationAction.hidden = true;
   calibrationStatus.textContent = awaitingReturn
     ? "Sample saved. Return to your starting position; the next sample will begin automatically."
     : calibrationWaitingMessage(type);
@@ -2845,6 +2882,13 @@ function calibrationVisibilityGuidance({ missingMeasurements, weakPoints }) {
   const missing = new Set(missingMeasurements);
   const missingKnees = [...missing].filter((key) => /knee/i.test(key));
   if (missingKnees.length) {
+    if (engine.exercise.id === "half-squats") {
+      return (
+        "I cannot measure a complete knee angle. Step farther back or turn "
+        + "slightly until one shoulder, hip, knee, and ankle line is visible. "
+        + "Keep the chair beside you, not in front of the visible leg."
+      );
+    }
     const bothKnees = missingKnees.some((key) => /^left/i.test(key))
       && missingKnees.some((key) => /^right/i.test(key));
     return bothKnees
@@ -2860,6 +2904,12 @@ function calibrationVisibilityGuidance({ missingMeasurements, weakPoints }) {
 
   const missingHips = [...missing].filter((key) => /hip/i.test(key));
   if (missingHips.length) {
+    if (engine.exercise.id === "half-squats") {
+      return (
+        "I cannot measure a complete hip angle. Reposition until one shoulder, "
+        + "hip, knee, and ankle line is visible from head to foot."
+      );
+    }
     return (
       "I cannot measure the required hip angle. Step farther back and keep "
       + "your shoulders, hips, and knees visible."
@@ -3003,15 +3053,7 @@ function finishCalibrationCapture(capture) {
         });
         calibrationDraft.safetyContext = calibrationSession.safetyContext;
         calibrationDraft.lastPositionCheckedAt = new Date().toISOString();
-        calibrationSession.step = "result";
-        renderCalibrationStep();
-        speakCalibrationGuidance(
-          "Personal movement setup complete. Review and save your range.",
-          {
-            key: `calibration:${engine.exercise.id}:complete`,
-            interrupt: true,
-          }
-        );
+        saveCompletedCalibration(calibrationDraft);
       } else {
         renderCalibrationStep();
         beginCalibrationCapture("target", { awaitingReturn: true });

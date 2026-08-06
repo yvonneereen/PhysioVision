@@ -1,4 +1,4 @@
-import { EXERCISES, EXERCISE_MAP } from "../exercises/registry.js?v=52";
+import { EXERCISES, EXERCISE_MAP } from "../exercises/registry.js?v=53";
 import { applyCalibration } from "../personalization.js";
 
 export { EXERCISES };
@@ -19,6 +19,7 @@ export class FeedbackEngine {
       : calibration;
     this.exercise = applyCalibration(EXERCISE_MAP[exerciseId], sideCalibration);
     this.side = affectedSide;
+    this.frameTrackingSide = affectedSide;
     // Parse "standing → squat → standing"; drop "hold" (handled by UI timer)
     this.stages = this.exercise.repRule
       .split("→")
@@ -39,6 +40,7 @@ export class FeedbackEngine {
 
   update(angles, timestampMs = Date.now()) {
     const tracking = this._trackingStatus(angles);
+    this.frameTrackingSide = tracking.trackingSide ?? this.side;
     const detected = tracking.ready ? this._detectPhase(angles) : null;
     let canAdvance = tracking.ready;
 
@@ -100,6 +102,9 @@ export class FeedbackEngine {
         this.inHold && tracking.ready && detected === this.currentPhase,
       trackingReady: tracking.ready,
       missingMeasurements: tracking.missingMeasurements,
+      trackingSide: tracking.trackingSide,
+      limitedTracking: tracking.limitedTracking,
+      symmetryAvailable: tracking.symmetryAvailable,
       startConfirmed: this.startConfirmed,
       progress: tracking.ready ? this._progressToNext(angles) : 0,
       cues: tracking.ready ? this._evaluateCues(angles) : [],
@@ -145,9 +150,9 @@ export class FeedbackEngine {
   }
 
   // Map generic key "knee" → "rightKnee" using affected side.
-  _resolve(key, angles) {
+  _resolve(key, angles, side = this.frameTrackingSide ?? this.side) {
     if (key in angles) return angles[key];
-    const sideKey = `${this.side}${key[0].toUpperCase()}${key.slice(1)}`;
+    const sideKey = `${side}${key[0].toUpperCase()}${key.slice(1)}`;
     return angles[sideKey] ?? null;
   }
 
@@ -157,46 +162,77 @@ export class FeedbackEngine {
         Object.keys(phase).filter((key) => key !== "name")
       )
     );
-    const missingMeasurements = new Set();
-
-    for (const key of requiredKeys) {
-      const measurement = this._resolve(key, angles);
-      if (
-        !measurement ||
-        measurement.lowConfidence ||
-        !_hasUsableValue(measurement.value)
-      ) {
-        missingMeasurements.add(this._resolvedKeyName(key, angles));
+    const oppositeSide = this.side === "left" ? "right" : "left";
+    const candidateSides = this.exercise.allowOppositeSideFallback
+      ? [...new Set([this.frameTrackingSide, this.side, oppositeSide])]
+      : [this.side];
+    const candidates = candidateSides.map((side) => {
+      const missingMeasurements = new Set();
+      for (const key of requiredKeys) {
+        const measurement = this._resolve(key, angles, side);
+        if (
+          !measurement
+          || measurement.lowConfidence
+          || !_hasUsableValue(measurement.value)
+        ) {
+          missingMeasurements.add(this._resolvedKeyName(key, angles, side));
+        }
       }
-    }
+      return { side, missingMeasurements };
+    });
+    const candidate = candidates.find(({ missingMeasurements }) =>
+      missingMeasurements.size === 0
+    ) ?? candidates.reduce((best, current) =>
+      current.missingMeasurements.size < best.missingMeasurements.size
+        ? current
+        : best
+    );
 
-    // A symmetry check needs both sides. Do not report a bilateral movement as
-    // good when only one side is visible enough to measure.
+    let symmetryAvailable = true;
     if (this.exercise.symmetry) {
       const joint = this.exercise.symmetry.joint;
       const cap = joint[0].toUpperCase() + joint.slice(1);
-      for (const side of ["left", "right"]) {
-        const key = `${side}${cap}`;
-        const measurement = angles[key];
-        if (
-          !measurement ||
-          measurement.lowConfidence ||
-          !Number.isFinite(measurement.value)
-        ) {
-          missingMeasurements.add(key);
+      symmetryAvailable = ["left", "right"].every((side) => {
+        const measurement = angles[`${side}${cap}`];
+        return measurement
+          && !measurement.lowConfidence
+          && Number.isFinite(measurement.value);
+      });
+      if (
+        !symmetryAvailable
+        && this.exercise.symmetry.requiredForTracking !== false
+      ) {
+        for (const side of ["left", "right"]) {
+          const key = `${side}${cap}`;
+          const measurement = angles[key];
+          if (
+            !measurement
+            || measurement.lowConfidence
+            || !Number.isFinite(measurement.value)
+          ) {
+            candidate.missingMeasurements.add(key);
+          }
         }
       }
     }
 
+    const ready = candidate.missingMeasurements.size === 0;
+
     return {
-      ready: missingMeasurements.size === 0,
-      missingMeasurements: [...missingMeasurements],
+      ready,
+      missingMeasurements: [...candidate.missingMeasurements],
+      trackingSide: candidate.side,
+      symmetryAvailable,
+      limitedTracking: ready && (
+        candidate.side !== this.side
+        || (Boolean(this.exercise.symmetry) && !symmetryAvailable)
+      ),
     };
   }
 
-  _resolvedKeyName(key, angles) {
+  _resolvedKeyName(key, angles, side = this.frameTrackingSide ?? this.side) {
     if (key in angles) return key;
-    return `${this.side}${key[0].toUpperCase()}${key.slice(1)}`;
+    return `${side}${key[0].toUpperCase()}${key.slice(1)}`;
   }
 
   _phaseConfirmed(phase, timestampMs) {

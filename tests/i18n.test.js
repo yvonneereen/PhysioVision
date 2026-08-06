@@ -23,7 +23,7 @@ assert.ok(
 );
 assert.deepEqual(
   [...new Set(i18nCacheVersions)],
-  ["13"],
+  ["14"],
   "all browser entry points must use one i18n URL so only one DOM observer is created"
 );
 
@@ -155,7 +155,8 @@ const liveGuideSources = [
   "Tracking the hand-shape sequence",
   "Camera paused because the exercise changed",
   "Automatic session position check",
-  "Your personal range is ready",
+  "Personal range saved automatically — movement guide ready",
+  "Your measured joint angles are saved automatically and will help the guide recognize your comfortable movement range. Safety limits are unchanged.",
   "This movement is not in your active prescription",
   "The server could not register this alert. No automatic contact notification is available.",
   "No automatic contact alert was sent",

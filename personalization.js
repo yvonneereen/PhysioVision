@@ -284,32 +284,42 @@ export function inspectCalibrationFrame(exercise, angles, affectedSide) {
   }
 
   const availableAngles = angles ?? {};
-  const frame = {};
-  const missingMeasurements = [];
-  const weakPoints = [];
-
-  for (const key of calibration.captureKeys) {
-    const measurement = resolveMeasurement(
-      key,
-      availableAngles,
-      affectedSide
-    );
-    if (
-      !measurement
-      || measurement.lowConfidence
-      || !isCalibrationValue(measurement.value)
-    ) {
-      missingMeasurements.push(key);
-      weakPoints.push(...(measurement?.weakPoints ?? []));
-      continue;
+  const oppositeSide = affectedSide === "left" ? "right" : "left";
+  const candidateSides = exercise.allowOppositeSideFallback
+    ? [affectedSide, oppositeSide]
+    : [affectedSide];
+  const candidates = candidateSides.map((side) => {
+    const frame = {};
+    const missingMeasurements = [];
+    const weakPoints = [];
+    for (const key of calibration.captureKeys) {
+      const measurement = resolveMeasurement(key, availableAngles, side);
+      if (
+        !measurement
+        || measurement.lowConfidence
+        || !isCalibrationValue(measurement.value)
+      ) {
+        missingMeasurements.push(key);
+        weakPoints.push(...(measurement?.weakPoints ?? []));
+        continue;
+      }
+      frame[key] = measurement.value;
     }
-    frame[key] = measurement.value;
-  }
+    return { frame, missingMeasurements, weakPoints, trackingSide: side };
+  });
+  const candidate = candidates.find(({ missingMeasurements }) =>
+    missingMeasurements.length === 0
+  ) ?? candidates.reduce((best, current) =>
+    current.missingMeasurements.length < best.missingMeasurements.length
+      ? current
+      : best
+  );
 
   return {
-    frame: missingMeasurements.length ? null : frame,
-    missingMeasurements,
-    weakPoints: [...new Set(weakPoints.filter(Boolean))],
+    frame: candidate.missingMeasurements.length ? null : candidate.frame,
+    missingMeasurements: candidate.missingMeasurements,
+    weakPoints: [...new Set(candidate.weakPoints.filter(Boolean))],
+    trackingSide: candidate.trackingSide,
   };
 }
 
@@ -540,9 +550,11 @@ export function applyCalibration(exercise, calibration) {
     const safeRanges = safeByPhase[phase.name] ?? {};
     const storedRanges = calibration.phaseRanges?.[phase.name] ?? {};
     const acceptedRanges = {};
-    for (const [key, stored] of Object.entries(storedRanges)) {
+    for (const key of allowedKeys) {
       const safe = safeRanges[key];
-      if (!allowedKeys.has(key) || !isNumericRange(stored) || !isNumericRange(safe)) {
+      const legacySideKey = `${calibration.affectedSide ?? "right"}${key[0].toUpperCase()}${key.slice(1)}`;
+      const stored = storedRanges[key] ?? storedRanges[legacySideKey];
+      if (!isNumericRange(stored) || !isNumericRange(safe)) {
         continue;
       }
       const clamped = [

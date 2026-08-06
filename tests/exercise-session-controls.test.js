@@ -363,13 +363,27 @@ const finishCalibrationSource = functionSource(
 );
 assert.match(
   finishCalibrationSource,
-  /renderCalibrationStep\(\);[\s\S]*?speakCalibrationGuidance\([\s\S]*?Personal movement setup complete\. Review and save your range\./,
-  "the visible personal-range result should be followed immediately by its spoken announcement"
+  /createCalibration\([\s\S]*?saveCompletedCalibration\(calibrationDraft\)/,
+  "a completed personal range should save automatically without another action"
 );
 assert.doesNotMatch(
   finishCalibrationSource,
-  /voiceGuidance\.speak/,
-  "calibration completion must not use delayed generated speech"
+  /step = "result"|Review and save|calibrationAction/,
+  "calibration completion must not pause on a manual review-and-save step"
+);
+const saveCalibrationSource = functionSource(
+  "saveCompletedCalibration",
+  "renderCalibrationStep"
+);
+assert.match(
+  saveCalibrationSource,
+  /saveCalibration\(draft\)[\s\S]*?engine\.changeExercise[\s\S]*?cancelCalibration\(\)[\s\S]*?speakCalibrationGuidance/,
+  "automatic saving should activate the measured range and return to the guide"
+);
+assert.doesNotMatch(
+  markup,
+  /id="calibrationAction"|Save personal range|Save tracking baseline/,
+  "the calibration dialog should not require a save button"
 );
 assert.match(
   source,

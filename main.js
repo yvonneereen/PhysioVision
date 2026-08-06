@@ -42,7 +42,7 @@ import {
   readMicrophonePermissionState,
   shouldDeferMicrophonePreflightToSpeechRecognition,
   voiceGuidance,
-} from "./voice-guidance.js?v=16";
+} from "./voice-guidance.js?v=17";
 import { isWellnessEligible } from "./wellness-screening.js";
 import {
   PRACTICE_VIEWS,
@@ -827,7 +827,7 @@ function requestFallSafetyAiClarification(prompt) {
   const spoken = voiceGuidance.speak(fixedPrompt, {
     key: `possible-fall:ai-clarification:${fallSafetyAiAttempts}`,
     interrupt: true,
-    rate: 0.88,
+    rate: 0.97,
     onEnd: () => armVoiceListening(listenAfterQuestion),
   });
   if (!spoken) listenAfterQuestion();
@@ -3868,7 +3868,7 @@ async function interpretPainSafetyTranscript(stage, transcript) {
         retryPrompt,
         `checkin:${expectedState.context}:safety:${stage}:simpler`,
         expectedStage,
-        { rate: 0.88 }
+        { rate: 0.97 }
       );
     }
   } catch (_) {

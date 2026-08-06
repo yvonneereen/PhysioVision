@@ -8,13 +8,44 @@ const DEFAULT_SPEECH_VOLUME = 1;
 const MICROPHONE_RELEASE_SETTLE_MS = 1200;
 
 const GENTLE_VOICE_NAME =
-  /\b(samantha|karen|moira|tessa|serena|fiona|ava|aria|jenny|sonia|allison|zoe|jamie)\b|google (us|uk) english/i;
+  /\b(samantha|ava|jenny|aria|sonia|allison|susan|serena|karen|moira|tessa|fiona|zoe|kathy|amira|yasmin|tingting|meijia|sinji|xiaoxiao|vani|pallavi)\b|google (us|uk) english/i;
 const NATURAL_VOICE_NAME =
   /\b(natural|neural|enhanced|premium|siri|personal voice)\b/i;
 const SYNTHETIC_VOICE_NAME =
   /\b(compact|eloquence|espeak|festival|robot|classic)\b/i;
 const NOVELTY_VOICE_NAME =
-  /\b(albert|bad news|bells|boing|bubbles|cellos|deranged|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox)\b/i;
+  /\b(albert|bad news|bahh|bells|boing|bubbles|cellos|deranged|eddy|fred|good news|grandma|grandpa|jester|junior|organ|ralph|reed|rocko|superstar|trinoids|whisper|wobble|zarvox)\b/i;
+
+// Prefer familiar, clearly articulated voices before considering a browser or
+// operating-system default. A user's default can be a novelty accessibility
+// voice (including Apple's Grandpa voice), which is unsuitable for calm health
+// guidance. Earlier entries receive the strongest preference.
+const CLEAR_VOICE_PREFERENCES = Object.freeze({
+  en: Object.freeze([
+    /\bsamantha\b/i,
+    /\bava\b/i,
+    /\bjenny\b/i,
+    /\baria\b/i,
+    /\bsonia\b/i,
+    /\ballison\b/i,
+    /\bsusan\b/i,
+    /\bserena\b/i,
+    /\bkaren\b/i,
+    /\bmoira\b/i,
+    /\btessa\b/i,
+    /\bfiona\b/i,
+    /google uk english female/i,
+    /google us english/i,
+  ]),
+  zh: Object.freeze([
+    /\btingting\b/i,
+    /\bxiaoxiao\b/i,
+    /\bmeijia\b/i,
+    /\bsinji\b/i,
+  ]),
+  ms: Object.freeze([/\bamira\b/i, /\byasmin\b/i]),
+  ta: Object.freeze([/\bvani\b/i, /\bpallavi\b/i]),
+});
 
 const NUMBER_WORDS = Object.freeze({
   zero: 0,
@@ -505,8 +536,16 @@ function voiceScore(voice, requestedLanguage) {
   const name = `${voice?.name ?? ""} ${voice?.voiceURI ?? ""}`;
 
   if (language && !language.startsWith(requestedBase)) return -Infinity;
+  if (NOVELTY_VOICE_NAME.test(name)) return -Infinity;
 
   let score = 0;
+  const clearPreferences = CLEAR_VOICE_PREFERENCES[requestedBase] ?? [];
+  const clearPreferenceIndex = clearPreferences.findIndex((pattern) =>
+    pattern.test(name)
+  );
+  if (clearPreferenceIndex >= 0) {
+    score += 320 - clearPreferenceIndex * 10;
+  }
   if (language === requested) score += 80;
   else if (language.startsWith(requestedBase)) score += 55;
   if (NATURAL_VOICE_NAME.test(name)) score += 75;
@@ -514,7 +553,6 @@ function voiceScore(voice, requestedLanguage) {
   if (voice?.default) score += 8;
   if (voice?.localService) score += 4;
   if (SYNTHETIC_VOICE_NAME.test(name)) score -= 80;
-  if (NOVELTY_VOICE_NAME.test(name)) score -= 200;
   return score;
 }
 
@@ -559,11 +597,14 @@ export function conversationalProsody(text) {
     /\b(stop exercising|get help now|call 995|emergency|cannot get up)\b/i
       .test(message);
 
-  if (isUrgent) return { rate: 0.87, pitch: 0.98 };
-  if (isQuestion) return { rate: 0.91, pitch: 1.02 };
-  if (wordCount > 34) return { rate: 0.89, pitch: 1 };
-  if (wordCount <= 8) return { rate: 0.94, pitch: 1.01 };
-  return { rate: 0.92, pitch: 1 };
+  // Stay close to normal conversational speed. Rates below about 0.9 made the
+  // browser voices sound old, drawn out and harder to understand. A slight
+  // lift in pitch avoids a dull monotone without creating a cartoon voice.
+  if (isUrgent) return { rate: 0.95, pitch: 1.02 };
+  if (isQuestion) return { rate: 0.98, pitch: 1.04 };
+  if (wordCount > 34) return { rate: 0.96, pitch: 1.02 };
+  if (wordCount <= 8) return { rate: 1, pitch: 1.04 };
+  return { rate: 0.98, pitch: 1.03 };
 }
 
 function readStoredPreference(browserWindow) {

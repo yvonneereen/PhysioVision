@@ -174,6 +174,12 @@ const noveltyVoice = {
   default: true,
   localService: true,
 };
+const grandpaVoice = {
+  name: "Grandpa (English (US))",
+  lang: "en-US",
+  default: true,
+  localService: true,
+};
 const standardVoice = {
   name: "Standard English",
   lang: "en-US",
@@ -187,7 +193,12 @@ const gentleVoice = {
   localService: true,
 };
 assert.equal(
-  selectGentleVoice([noveltyVoice, standardVoice, gentleVoice]),
+  selectGentleVoice([
+    noveltyVoice,
+    grandpaVoice,
+    standardVoice,
+    gentleVoice,
+  ]),
   gentleVoice
 );
 assert.equal(
@@ -196,11 +207,11 @@ assert.equal(
 );
 assert.deepEqual(
   conversationalProsody("How is your pain right now?"),
-  { rate: 0.91, pitch: 1.02 }
+  { rate: 0.98, pitch: 1.04 }
 );
 assert.deepEqual(
   conversationalProsody("Stop exercising and call 995 now."),
-  { rate: 0.87, pitch: 0.98 }
+  { rate: 0.95, pitch: 1.02 }
 );
 
 class MockUtterance {
@@ -234,16 +245,16 @@ const guidance = new VoiceGuidance(mockWindow);
 assert.equal(guidance.speak("You are ready — take your time."), true);
 assert.equal(spoken[0].voice, gentleVoice);
 assert.equal(spoken[0].text, "You are ready, take your time.");
-assert.equal(spoken[0].rate, 0.94);
-assert.equal(spoken[0].pitch, 1.01);
+assert.equal(spoken[0].rate, 1);
+assert.equal(spoken[0].pitch, 1.04);
 assert.equal(spoken[0].volume, 1);
 
 guidance.speak("How is your pain right now?", {
   key: "conversational-question",
   interrupt: true,
 });
-assert.equal(spoken[1].rate, 0.91);
-assert.equal(spoken[1].pitch, 1.02);
+assert.equal(spoken[1].rate, 0.98);
+assert.equal(spoken[1].pitch, 1.04);
 
 guidance.speak("Custom pace", {
   key: "custom-prosody",

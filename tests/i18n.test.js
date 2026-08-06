@@ -23,9 +23,35 @@ assert.ok(
 );
 assert.deepEqual(
   [...new Set(i18nCacheVersions)],
-  ["11"],
+  ["12"],
   "all browser entry points must use one i18n URL so only one DOM observer is created"
 );
+
+const initialLiveGuideMarkup = browserEntrySources[0].slice(
+  browserEntrySources[0].indexOf('<div id="patientPracticeWorkspace"'),
+  browserEntrySources[0].indexOf('class="exercise-library-section"')
+);
+const initialLiveGuideText = [
+  ...initialLiveGuideMarkup.matchAll(/>([^<>]+)</gs),
+].map((match) => match[1].replace(/\s+/g, " ").trim()).filter(
+  (text) => /[A-Za-z]/.test(text) && !text.startsWith("<!--")
+);
+const initialLiveGuideAttributes = [
+  ...initialLiveGuideMarkup.matchAll(
+    /(?:aria-label|placeholder|title)="([^"]+)"/g
+  ),
+].map((match) => match[1]);
+
+for (const source of new Set([
+  ...initialLiveGuideText,
+  ...initialLiveGuideAttributes,
+])) {
+  assert.notEqual(
+    translateText(source, "zh-SG"),
+    source,
+    `zh-SG is missing initial live-guide copy for: ${source}`
+  );
+}
 
 const voiceConsumerSources = ["../main.js", "../agent-chat.js"]
   .map((path) => readFileSync(new URL(path, import.meta.url), "utf8"));
@@ -79,6 +105,63 @@ assert.equal(
     "Thank you. I will ask a few short questions to help check whether it is safe for you to proceed. Please stop moving and rest somewhere safe. Where are you feeling the pain?"
   ),
   "谢谢。我会问几个简短的问题，以确认您是否适合继续。请停止动作，并在安全的地方休息。 您哪里感到疼痛？"
+);
+
+const liveGuideSources = [
+  "Hands-free mode asks for microphone permission. The exact approved guidance text may be sent securely to Gemini to generate a clearer, more natural voice. Voice recognition may be processed by your browser provider. If fixed safety rules cannot match an answer, the recognized text may be sent to Gemini for constrained language interpretation. Gemini cannot change the safety wording or decide whether exercise is safe. Use the on-screen buttons to avoid voice generation and recognition.",
+  "Your camera feed is processed for movement guidance and is not recorded in this prototype.",
+  "Local possible-fall check available",
+  "The camera check is available. Verify an emergency contact in My profile before automatic alerts can be sent.",
+  "Face the camera and keep both feet, knees, hips, and shoulders fully visible.",
+  "Close-up camera check",
+  "Hand and wrist tracking",
+  "Loading model…",
+  "Use this before a hand exercise. Bring one complete hand close to the camera; full-body framing is usually too far away.",
+  "Check hand tracking",
+  "Detected side",
+  "Image coverage",
+  "Palm direction",
+  "Pause camera guide",
+  "Finish exercise and check in",
+  "Stopping the camera does not mark an exercise as finished.",
+  "Technical movement details",
+  "Left knee",
+  "Knee L/R difference",
+  "Ready",
+  "Show one complete hand to the camera",
+  "Hand landmarks are clear",
+  "Starting camera…",
+  "Pausing only stops the camera. Choose “Finish exercise and check in” when you decide you are done.",
+  "The movement-tracking model is unavailable",
+  "The hand-tracking model is unavailable",
+  "Floor exercise: visibility check active",
+  "Possible-fall check unavailable for this movement",
+];
+
+for (const locale of ["zh-SG", "ms-SG", "ta-SG"]) {
+  for (const source of liveGuideSources) {
+    assert.notEqual(
+      translateText(source, locale),
+      source,
+      `${locale} is missing a live-guide translation for: ${source}`
+    );
+  }
+}
+
+assert.equal(
+  translateText(
+    "Face the camera and keep both feet, knees, hips, and shoulders fully visible.",
+    "zh-SG"
+  ),
+  "面向摄像头，并确保双脚、双膝、髋部和双肩完全可见。"
+);
+assert.equal(
+  translateText("Hand and wrist tracking", "zh-SG"),
+  "手部和手腕追踪"
+);
+assert.equal(
+  translateText("Finish exercise and check in", "zh-SG"),
+  "结束运动并进行检查"
 );
 
 const dashboardSources = [

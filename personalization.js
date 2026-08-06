@@ -273,23 +273,48 @@ export function resolveMeasurement(key, angles, affectedSide = "right") {
   return angles[sideKey] ?? null;
 }
 
-export function extractCalibrationFrame(exercise, angles, affectedSide) {
-  const calibration = exercise.calibration;
-  if (!calibration) return null;
+export function inspectCalibrationFrame(exercise, angles, affectedSide) {
+  const calibration = exercise?.calibration;
+  if (!calibration) {
+    return {
+      frame: null,
+      missingMeasurements: [],
+      weakPoints: [],
+    };
+  }
 
+  const availableAngles = angles ?? {};
   const frame = {};
+  const missingMeasurements = [];
+  const weakPoints = [];
+
   for (const key of calibration.captureKeys) {
-    const measurement = resolveMeasurement(key, angles, affectedSide);
+    const measurement = resolveMeasurement(
+      key,
+      availableAngles,
+      affectedSide
+    );
     if (
-      !measurement ||
-      measurement.lowConfidence ||
-      !isCalibrationValue(measurement.value)
+      !measurement
+      || measurement.lowConfidence
+      || !isCalibrationValue(measurement.value)
     ) {
-      return null;
+      missingMeasurements.push(key);
+      weakPoints.push(...(measurement?.weakPoints ?? []));
+      continue;
     }
     frame[key] = measurement.value;
   }
-  return frame;
+
+  return {
+    frame: missingMeasurements.length ? null : frame,
+    missingMeasurements,
+    weakPoints: [...new Set(weakPoints.filter(Boolean))],
+  };
+}
+
+export function extractCalibrationFrame(exercise, angles, affectedSide) {
+  return inspectCalibrationFrame(exercise, angles, affectedSide).frame;
 }
 
 /**

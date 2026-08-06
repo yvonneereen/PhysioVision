@@ -321,6 +321,21 @@ assert.match(
 );
 assert.match(
   source,
+  /const CALIBRATION_STALL_REMINDER_MS = 5000;[\s\S]*?const CALIBRATION_STALL_REPEAT_MS = 12000;/,
+  "a stalled calibration should prompt after a short delay without repeating continuously"
+);
+assert.match(
+  source,
+  /inspectCalibrationFrame\([\s\S]*?calibrationVisibilityGuidance\(inspection\)[\s\S]*?presentCalibrationIssue/,
+  "calibration should turn missing measurement diagnostics into visible and spoken positioning guidance"
+);
+assert.match(
+  source,
+  /I cannot measure either knee angle\.[\s\S]*?both hips, knees, ankles, and feet are visible/,
+  "a blocked squat measurement should name the missing knee angles and required landmarks"
+);
+assert.match(
+  source,
   /Choose your pain level in the exercise panel to continue\.[\s\S]*?painCheckinEl\.scrollIntoView[\s\S]*?if \(!handsFreeVoiceEnabled\)[\s\S]*?focus\(\{ preventScroll: true \}\)/,
   "the pain question should be revealed immediately and focused in on-screen mode"
 );

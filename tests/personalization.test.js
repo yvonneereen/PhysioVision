@@ -7,6 +7,7 @@ import {
   clearCalibration,
   createCalibration,
   getCalibration,
+  inspectCalibrationFrame,
   loadProfile,
   saveCalibration,
   saveProfile,
@@ -14,6 +15,41 @@ import {
 } from "../personalization.js";
 
 const halfSquat = EXERCISE_MAP["half-squats"];
+
+{
+  const visible = (value) => ({
+    value,
+    lowConfidence: false,
+    weakPoints: [],
+  });
+  const angles = Object.fromEntries(
+    halfSquat.calibration.captureKeys.map((key) => [key, visible(120)])
+  );
+  angles.leftKnee = {
+    value: NaN,
+    lowConfidence: true,
+    weakPoints: ["leftHip", "leftKnee", "leftAnkle"],
+  };
+  angles.rightKnee = {
+    value: NaN,
+    lowConfidence: true,
+    weakPoints: ["rightHip", "rightKnee", "rightAnkle"],
+  };
+  const inspection = inspectCalibrationFrame(halfSquat, angles, "right");
+  assert.equal(inspection.frame, null);
+  assert.deepEqual(
+    inspection.missingMeasurements,
+    ["leftKnee", "rightKnee"]
+  );
+  assert.deepEqual(inspection.weakPoints, [
+    "leftHip",
+    "leftKnee",
+    "leftAnkle",
+    "rightHip",
+    "rightKnee",
+    "rightAnkle",
+  ]);
+}
 
 function frames(values, count = 12) {
   return Array.from({ length: count }, (_, index) =>

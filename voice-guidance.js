@@ -1,7 +1,7 @@
 import {
   getSpeechLocale,
   translateText,
-} from "./i18n.js?v=11";
+} from "./i18n.js?v=12";
 import { generateGuidanceSpeech } from "./api.js?v=29";
 
 const VOICE_PREFERENCE_KEY = "physiovision.voice.enabled.v1";

@@ -15,10 +15,11 @@ import {
   extractCalibrationFrame,
   getCalibration,
   hasSavedProfile,
+  inspectCalibrationFrame,
   loadProfile,
   saveCalibration,
   validateCalibrationCapture,
-} from "./personalization.js?v=10";
+} from "./personalization.js?v=11";
 import {
   buildCalibrationSafetyContext,
   evaluateCalibrationReuse,
@@ -1256,6 +1257,8 @@ const CALIBRATION_CAPTURE_MS = 1200;
 const CALIBRATION_POSITION_STABLE_MS = 500;
 const CALIBRATION_TARGET_MOVEMENTS = 1;
 const CALIBRATION_RETURN_STABLE_MS = 350;
+const CALIBRATION_STALL_REMINDER_MS = 5000;
+const CALIBRATION_STALL_REPEAT_MS = 12000;
 // Calibration is a deliberate hold, so accept lower-confidence landmarks than
 // live tracking (0.5). This lets occluded side-lying/floor poses (e.g. clamshell,
 // where one knee/hip overlaps the other) still measure and cache a personal range.
@@ -2680,6 +2683,9 @@ function beginCalibrationCapture(
     measuringStartedAt: null,
     previousFrame: null,
     retryAfter,
+    guidanceKey: "",
+    guidanceFirstSeenAt: null,
+    lastGuidanceAt: -Infinity,
   };
   calibrationAction.hidden = true;
   calibrationStatus.textContent = awaitingReturn
@@ -2694,13 +2700,21 @@ function updateCalibrationCapture(angles, timestampMs) {
   if (capture.retryAfter && timestampMs < capture.retryAfter) return;
   capture.retryAfter = 0;
 
-  const frame = angles
-    ? extractCalibrationFrame(engine.exercise, angles, sideSelect.value)
-    : null;
+  const inspection = inspectCalibrationFrame(
+    engine.exercise,
+    angles,
+    sideSelect.value
+  );
+  const frame = inspection.frame;
   if (!frame) {
     resetCalibrationPositionTimer(capture);
-    calibrationStatus.textContent =
-      "Keep your full body and every required joint visible. I will measure automatically.";
+    presentCalibrationIssue(
+      capture,
+      `visibility:${inspection.missingMeasurements.join(",")}`,
+      calibrationVisibilityGuidance(inspection),
+      timestampMs,
+      "position"
+    );
     return;
   }
 
@@ -2708,15 +2722,25 @@ function updateCalibrationCapture(angles, timestampMs) {
     if (!calibrationFrameMatchesPhase(engine.exercise, frame, "start")) {
       capture.phaseDetectedAt = null;
       capture.previousFrame = frame;
-      calibrationStatus.textContent =
-        "Return to your comfortable starting position. I will tell you when to move again.";
+      presentCalibrationIssue(
+        capture,
+        "return-to-start",
+        "I can see the required joints. Return to your comfortable starting position and hold still; I will tell you when to move again.",
+        timestampMs,
+        "adjust"
+      );
       return;
     }
     if (!calibrationFrameIsStable(capture.previousFrame, frame)) {
       capture.phaseDetectedAt = timestampMs;
       capture.previousFrame = frame;
-      calibrationStatus.textContent =
-        "Starting position found—hold still for a moment.";
+      presentCalibrationIssue(
+        capture,
+        "return-hold-still",
+        "Starting position found—finish moving and hold still for a moment.",
+        timestampMs,
+        "adjust"
+      );
       return;
     }
     capture.previousFrame = frame;
@@ -2725,6 +2749,7 @@ function updateCalibrationCapture(angles, timestampMs) {
       timestampMs - capture.phaseDetectedAt
       < CALIBRATION_RETURN_STABLE_MS
     ) {
+      clearCalibrationIssue(capture);
       calibrationStatus.textContent =
         "Starting position found—hold still for a moment.";
       return;
@@ -2739,7 +2764,13 @@ function updateCalibrationCapture(angles, timestampMs) {
 
   if (!calibrationFrameMatchesPhase(engine.exercise, frame, capture.type)) {
     resetCalibrationPositionTimer(capture);
-    calibrationStatus.textContent = calibrationWaitingMessage(capture.type);
+    presentCalibrationIssue(
+      capture,
+      `phase:${capture.type}`,
+      calibrationPhaseGuidance(capture.type),
+      timestampMs,
+      "adjust"
+    );
     return;
   }
 
@@ -2748,8 +2779,13 @@ function updateCalibrationCapture(angles, timestampMs) {
     capture.phaseDetectedAt = timestampMs;
     capture.measuringStartedAt = null;
     capture.previousFrame = frame;
-    calibrationStatus.textContent =
-      "Position found—finish moving, then hold still. Measurement will start automatically.";
+    presentCalibrationIssue(
+      capture,
+      `unstable:${capture.type}`,
+      "I can see the required joints and the position. Finish moving, then hold still so I can record the measurement.",
+      timestampMs,
+      "adjust"
+    );
     return;
   }
 
@@ -2760,14 +2796,20 @@ function updateCalibrationCapture(angles, timestampMs) {
       timestampMs - capture.phaseDetectedAt
       < CALIBRATION_POSITION_STABLE_MS
     ) {
+      clearCalibrationIssue(capture);
       calibrationStatus.textContent =
         "Position found—hold still. Automatic measurement is about to begin.";
       return;
     }
+    clearCalibrationIssue(capture);
     capture.measuringStartedAt = timestampMs;
     capture.frames = [frame];
     calibrationStatus.textContent =
       "Measuring automatically… keep holding this comfortable position.";
+    setFeedbackBanner(
+      "good",
+      "Required joints found. Hold still while the personal measurement is recorded."
+    );
     voiceGuidance.speak(
       "Position found. Hold still while I measure.",
       {
@@ -2789,6 +2831,117 @@ function updateCalibrationCapture(angles, timestampMs) {
     `Measuring automatically… ${remaining || "almost done"}`;
   if (elapsed < captureDurationMs) return;
   finishCalibrationCapture(capture);
+}
+
+function calibrationVisibilityGuidance({ missingMeasurements, weakPoints }) {
+  const missing = new Set(missingMeasurements);
+  const missingKnees = [...missing].filter((key) => /knee/i.test(key));
+  if (missingKnees.length) {
+    const bothKnees = missingKnees.some((key) => /^left/i.test(key))
+      && missingKnees.some((key) => /^right/i.test(key));
+    return bothKnees
+      ? (
+        "I cannot measure either knee angle. Step farther back and adjust the "
+        + "device until both hips, knees, ankles, and feet are visible."
+      )
+      : (
+        `I cannot measure your ${friendlyMeasurement(missingKnees[0]).toLowerCase()} angle. `
+        + "Reposition so that hip, knee, ankle, and foot are all visible."
+      );
+  }
+
+  const missingHips = [...missing].filter((key) => /hip/i.test(key));
+  if (missingHips.length) {
+    return (
+      "I cannot measure the required hip angle. Step farther back and keep "
+      + "your shoulders, hips, and knees visible."
+    );
+  }
+
+  if ([...missing].some((key) => /(ankle|heel|foot)/i.test(key))) {
+    return (
+      "I cannot measure the required ankle or foot movement. Reposition the "
+      + "device so your knee, ankle, heel, and toes are visible."
+    );
+  }
+
+  if ([...missing].some((key) => /(shoulder|elbow|wrist|hand)/i.test(key))) {
+    return (
+      "I cannot measure the required arm or hand position. Reposition so the "
+      + "working shoulder, elbow, wrist, and complete hand are visible."
+    );
+  }
+
+  const labels = missingMeasurements
+    .slice(0, 2)
+    .map((key) => friendlyMeasurement(key).toLowerCase());
+  const hiddenLandmarks = weakPoints
+    .slice(0, 3)
+    .map((key) => friendlyMeasurement(key.replaceAll("_", " ")).toLowerCase());
+  const requirement = labels.length
+    ? labels.join(" and ")
+    : "required movement";
+  const detail = hiddenLandmarks.length
+    ? ` Keep ${hiddenLandmarks.join(", ")} visible.`
+    : " Keep your full body and every required joint visible.";
+  return `I cannot measure the ${requirement}.${detail}`;
+}
+
+function calibrationPhaseGuidance(type) {
+  const config = engine.exercise.calibration;
+  const phase = type === "start" ? config.startPhase : config.targetPhase;
+  const capturesLegAngles = config.captureKeys.some((key) =>
+    /(knee|hip|ankle)/i.test(key)
+  );
+  if (type === "target" && capturesLegAngles) {
+    return (
+      `I can see the required joints, but I have not detected the ${phase.replaceAll("_", " ")} position. `
+      + "Move only as far as is comfortable, then hold still so I can record your knee and hip angles."
+    );
+  }
+  return (
+    `I can see the required joints. Move into your comfortable ${phase.replaceAll("_", " ")} `
+    + "position, then hold still so I can record it."
+  );
+}
+
+function presentCalibrationIssue(
+  capture,
+  key,
+  message,
+  timestampMs,
+  bannerState = "position"
+) {
+  if (calibrationStatus.textContent !== message) {
+    calibrationStatus.textContent = message;
+  }
+  setFeedbackBanner(bannerState, message);
+
+  if (capture.guidanceKey !== key) {
+    capture.guidanceKey = key;
+    capture.guidanceFirstSeenAt = timestampMs;
+    capture.lastGuidanceAt = -Infinity;
+    return;
+  }
+  if (
+    timestampMs - capture.guidanceFirstSeenAt < CALIBRATION_STALL_REMINDER_MS
+    || timestampMs - capture.lastGuidanceAt < CALIBRATION_STALL_REPEAT_MS
+  ) {
+    return;
+  }
+
+  const spoken = voiceGuidance.speak(message, {
+    key: `calibration:${engine.exercise.id}:stalled:${capture.type}:${key}`,
+    cooldownMs: CALIBRATION_STALL_REPEAT_MS,
+    preferImmediate: true,
+  });
+  if (spoken) capture.lastGuidanceAt = timestampMs;
+}
+
+function clearCalibrationIssue(capture) {
+  capture.guidanceKey = "";
+  capture.guidanceFirstSeenAt = null;
+  capture.lastGuidanceAt = -Infinity;
 }
 
 function finishCalibrationCapture(capture) {

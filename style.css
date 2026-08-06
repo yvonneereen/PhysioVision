@@ -1729,6 +1729,14 @@ html[lang="en-SG"] body {
   letter-spacing: 0.05em;
 }
 
+/* The setup screen already presents its positioning instructions in normal
+   flow. Keep the live camera tip out of that state so it cannot cover the
+   chair/device helper at short Safari viewports or enlarged text sizes. */
+.stage:not(.camera-active) > .setup-tip {
+  visibility: hidden;
+  opacity: 0;
+}
+
 .hand-frame-guide {
   position: absolute;
   inset: 0;

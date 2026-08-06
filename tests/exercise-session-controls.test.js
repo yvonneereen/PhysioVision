@@ -60,6 +60,11 @@ assert.match(
   "the response-mode dialog should safely center without clipping oversized content"
 );
 assert.match(
+  styles,
+  /\.stage:not\(\.camera-active\) > \.setup-tip\s*\{[\s\S]*?visibility: hidden;[\s\S]*?opacity: 0;/,
+  "the live camera tip must not cover setup instructions before the camera starts"
+);
+assert.match(
   source,
   /voiceSetupOverlay\.classList\.remove\("hidden"\);\s*voiceSetupOverlay\.scrollTop = 0;/,
   "each response-mode choice should open at the start of its scrollable content"

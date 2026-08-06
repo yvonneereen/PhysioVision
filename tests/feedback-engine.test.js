@@ -31,6 +31,17 @@ const hidden = {
   weakPoints: ["rightKnee"],
 };
 
+// Every selectable exercise must provide at least one specific correction in
+// addition to the shared tracking and phase-order guidance in main.js. This
+// prevents future catalogue additions from silently falling back to generic
+// feedback only.
+for (const exercise of Object.values(EXERCISE_MAP)) {
+  assert.ok(
+    Object.keys(exercise.cues ?? {}).length > 0,
+    `${exercise.id} has no movement-specific correction cue`
+  );
+}
+
 function valueForCondition(condition) {
   if (Array.isArray(condition)) return (condition[0] + condition[1]) / 2;
   if (condition && Object.hasOwn(condition, "equals")) return condition.equals;
@@ -266,6 +277,15 @@ const halfSquatBottom = (overrides = {}) =>
 }
 
 {
+  const engine = new FeedbackEngine("heel_slides", "left");
+  const result = engine.update({ leftKnee: visible(45) });
+
+  assert.deepEqual(result.cues, [
+    "Use a smaller knee bend and keep the movement within your comfortable range",
+  ]);
+}
+
+{
   const engine = new FeedbackEngine("hip_bridge", "right");
   const down = { rightHip: visible(130), rightKnee: visible(90) };
   const raised = { rightHip: visible(168), rightKnee: visible(90) };
@@ -318,6 +338,26 @@ const halfSquatBottom = (overrides = {}) =>
   assert.equal(outOfOrder.phase, "open_hand");
   assert.equal(outOfOrder.sequenceOnTrack, false);
   assert.equal(outOfOrder.expectedNextPhase, "hook_fist");
+}
+
+{
+  const engine = new FeedbackEngine("tendon_glides", "right");
+  const unclearShape = engine.update(handShapeFrame("open_hand", 0.5));
+
+  assert.deepEqual(unclearShape.cues, [
+    "Slow down and make each finger shape clearly before moving to the next one",
+  ]);
+}
+
+{
+  const engine = new FeedbackEngine("stress_ball_squeeze", "right");
+  const handOutsideFrame = handShapeFrame("open_hand");
+  handOutsideFrame.handFrameReady = visible(0);
+  const result = engine.update(handOutsideFrame);
+
+  assert.deepEqual(result.cues, [
+    "Move your complete working hand and the ball into the centre of the camera view",
+  ]);
 }
 
 {

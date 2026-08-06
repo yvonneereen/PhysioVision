@@ -485,7 +485,11 @@ export const EXERCISES = [
     ],
     repRule: "open_hand → hook_fist → open_hand → full_fist → open_hand → tabletop → open_hand → straight_fist → open_hand",
     stageImages: [],
-    cues: {},
+    maxCues: 1,
+    cues: {
+      "handFrameReady<1": "Move your complete working hand into the centre of the camera view",
+      "handShapeScore<0.7": "Slow down and make each finger shape clearly before moving to the next one",
+    },
   },
 
   {
@@ -550,7 +554,10 @@ export const EXERCISES = [
     ],
     repRule: "knee_bent → leg_extended → knee_bent",
     stageImages: ["heel-slide-bent", "heel-slide-extended", "heel-slide-bent"],
-    cues: {},
+    maxCues: 1,
+    cues: {
+      "knee<60": "Use a smaller knee bend and keep the movement within your comfortable range",
+    },
     trackingNotes:
       "Primary knee motion only. Pelvic displacement and surface contact require additional features before full-form feedback can be enabled.",
   },
@@ -656,7 +663,10 @@ export const EXERCISES = [
     ],
     repRule: "open_hand → closed_hand → open_hand",
     stageImages: [],
-    cues: {},
+    cues: {
+      "handFrameReady<1": "Move your complete working hand and the ball into the centre of the camera view",
+      "handShapeScore<0.7": "Squeeze slowly so the camera can see your fingers close, then open your hand fully",
+    },
   },
 
   {
@@ -871,7 +881,10 @@ export const EXERCISES = [
     ],
     repRule: "leg_relaxed → knee_to_chest → hold",
     stageImages: [],
-    cues: {},
+    cues: {
+      "hip>95": "Bring your knee gently toward your chest without forcing the movement",
+      "hip<10": "Ease your knee slightly away and stay within your comfortable range",
+    },
   },
 
   {
@@ -894,7 +907,9 @@ export const EXERCISES = [
     ],
     repRule: "setup → stretch → hold",
     stageImages: [],
-    cues: {},
+    cues: {
+      "hip<140": "Let the stretching leg lower gently without forcing it",
+    },
   },
 
   {

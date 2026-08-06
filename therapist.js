@@ -1,7 +1,7 @@
 import {
   getMe, getPatients, isLoggedIn,
   getExercises, getPrescriptions, createPrescription,
-  getConsultations, confirmConsultation, cancelConsultation, completeConsultation,
+  getConsultations, updateConsultation, confirmConsultation, cancelConsultation, completeConsultation,
   getPatientSessions, getPatientPainCheckins,
   getCareMessages, sendCareMessage, getCareMessageThreads,
   sendAgentMessage,
@@ -324,6 +324,41 @@ function wireDetailMessaging(panel, patientId) {
   });
 }
 
+function consultationHasFutureSchedule(consultation, now = Date.now()) {
+  if (!consultation?.scheduled_at) return false;
+  const scheduledAt = new Date(consultation.scheduled_at).getTime();
+  return Number.isFinite(scheduledAt) && scheduledAt >= now;
+}
+
+function isActiveConsultation(consultation, now = Date.now()) {
+  if (!["requested", "confirmed"].includes(consultation?.status)) return false;
+  if (consultation.status === "requested" && !consultation.scheduled_at) return true;
+  return consultationHasFutureSchedule(consultation, now);
+}
+
+function consultationSort(a, b) {
+  const aIsUnscheduled = !a.scheduled_at;
+  const bIsUnscheduled = !b.scheduled_at;
+  if (aIsUnscheduled !== bIsUnscheduled) return aIsUnscheduled ? -1 : 1;
+  if (aIsUnscheduled) {
+    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+  }
+  return new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
+}
+
+function consultationWhen(consultation) {
+  if (!consultation.scheduled_at) return "Not scheduled yet";
+  return new Date(consultation.scheduled_at).toLocaleString([], {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+function localDateInputValue(date = new Date()) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
 // ── Overview ────────────────────────────────────────────────
 
 function renderOverview(patients, consultations) {
@@ -352,14 +387,14 @@ function renderOverview(patients, consultations) {
   if (upcoming) {
     const now = Date.now();
     const next = consultations
-      .filter(c => new Date(c.scheduled_at).getTime() >= now && ["requested", "confirmed"].includes(c.status))
-      .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at))
+      .filter(c => isActiveConsultation(c, now))
+      .sort(consultationSort)
       .slice(0, 3);
     upcoming.innerHTML = next.length
       ? next.map(c => `
           <div class="detail-row">
             <span><strong>${escapeHtml(c.patient_name || "Patient")}</strong></span>
-            <span>${new Date(c.scheduled_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</span>
+            <span>${consultationWhen(c)}</span>
             <span class="consult-status consult-${c.status}">${c.status}</span>
           </div>`).join("")
       : `<p class="empty-state">No upcoming consultations.</p>`;
@@ -460,33 +495,67 @@ async function submitPrescription(e) {
 // ── Consultations ───────────────────────────────────────────
 
 function consultRow(c, withActions) {
-  // Whose turn it is to respond, for requested consultations.
   let waiting = "";
   if (c.status === "requested") {
-    waiting = c.initiated_by === "patient"
-      ? `<span class="consult-waiting">Patient proposed a time</span>`
-      : `<span class="consult-waiting">Awaiting patient</span>`;
+    if (!c.scheduled_at) {
+      waiting = `<span class="consult-waiting">Patient requested a consultation</span>`;
+    } else {
+      waiting = c.initiated_by === "patient"
+        ? `<span class="consult-waiting">Patient proposed a time</span>`
+        : `<span class="consult-waiting">Awaiting patient</span>`;
+    }
   }
+  const canSchedule = withActions && c.status === "requested" && !c.scheduled_at;
+  const canConfirmLegacy = c.status === "requested"
+    && c.initiated_by === "patient"
+    && Boolean(c.scheduled_at);
+  const canResolve = c.status === "confirmed";
   const actions = withActions ? `
     <span class="consult-actions">
-      ${c.status === "requested" ? `<button class="button button-coral button-small" data-confirm="${c.id}">Confirm</button>` : ""}
-      ${["requested", "confirmed"].includes(c.status) ? `<button class="button button-small button-resolve" data-complete="${c.id}">Resolve</button>` : ""}
+      ${canConfirmLegacy ? `<button class="button button-coral button-small" data-confirm="${c.id}">Confirm</button>` : ""}
+      ${canResolve ? `<button class="button button-small button-resolve" data-complete="${c.id}">Resolve</button>` : ""}
       ${["requested", "confirmed"].includes(c.status) ? `<button class="button button-light button-small" data-cancel="${c.id}">Cancel</button>` : ""}
     </span>` : `<span class="consult-status consult-${c.status}">${c.status}</span>`;
+  const scheduler = canSchedule ? `
+    <form class="consultation-schedule-form" data-schedule-form="${c.id}">
+      <label>
+        <span>Date</span>
+        <input name="date" type="date" min="${localDateInputValue()}" required />
+      </label>
+      <label>
+        <span>Time</span>
+        <input name="time" type="time" required />
+      </label>
+      <label>
+        <span>Duration</span>
+        <select name="duration">
+          <option value="30">30 minutes</option>
+          <option value="45">45 minutes</option>
+          <option value="60">60 minutes</option>
+        </select>
+      </label>
+      <button class="button button-coral button-small" type="button" data-schedule="${c.id}">
+        Send proposed time
+      </button>
+      <p class="consultation-schedule-status" data-schedule-status="${c.id}" role="status"></p>
+    </form>` : "";
   return `
-    <div class="detail-row">
-      <span><strong>${escapeHtml(c.patient_name || "Patient")}</strong>${waiting}</span>
-      <span>${new Date(c.scheduled_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</span>
-      <span>${c.duration_minutes} min</span>
-      ${actions}
+    <div class="consultation-entry">
+      <div class="detail-row">
+        <span><strong>${escapeHtml(c.patient_name || "Patient")}</strong>${waiting}</span>
+        <span>${consultationWhen(c)}</span>
+        <span>${c.scheduled_at ? `${c.duration_minutes} min` : "Set when scheduling"}</span>
+        ${actions}
+      </div>
+      ${scheduler}
     </div>`;
 }
 
 function renderConsultations() {
   const now = Date.now();
   const upcoming = state.consultations
-    .filter(c => new Date(c.scheduled_at).getTime() >= now && ["requested", "confirmed"].includes(c.status))
-    .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
+    .filter(c => isActiveConsultation(c, now))
+    .sort(consultationSort);
   const past = state.consultations.filter(c => !upcoming.includes(c));
 
   const up = document.getElementById("consult-upcoming");
@@ -496,12 +565,39 @@ function renderConsultations() {
 }
 
 async function handleConsultAction(e) {
-  const confirmId  = e.target.getAttribute("data-confirm");
-  const cancelId   = e.target.getAttribute("data-cancel");
-  const completeId = e.target.getAttribute("data-complete");
-  if (!confirmId && !cancelId && !completeId) return;
-  e.target.disabled = true;
+  const scheduleButton = e.target.closest("[data-schedule]");
+  const confirmButton = e.target.closest("[data-confirm]");
+  const cancelButton = e.target.closest("[data-cancel]");
+  const completeButton = e.target.closest("[data-complete]");
+  const actionButton = scheduleButton || confirmButton || cancelButton || completeButton;
+  if (!actionButton) return;
+
+  const scheduleId = scheduleButton?.getAttribute("data-schedule");
+  const confirmId = confirmButton?.getAttribute("data-confirm");
+  const cancelId = cancelButton?.getAttribute("data-cancel");
+  const completeId = completeButton?.getAttribute("data-complete");
+  actionButton.disabled = true;
   try {
+    if (scheduleId) {
+      const form = document.querySelector(`[data-schedule-form="${CSS.escape(scheduleId)}"]`);
+      const status = form?.querySelector(`[data-schedule-status="${CSS.escape(scheduleId)}"]`);
+      if (!form?.reportValidity()) {
+        actionButton.disabled = false;
+        return;
+      }
+      const data = new FormData(form);
+      const scheduledAt = new Date(`${data.get("date")}T${data.get("time")}`);
+      if (!Number.isFinite(scheduledAt.getTime()) || scheduledAt.getTime() <= Date.now()) {
+        if (status) status.textContent = "Choose a future date and time.";
+        actionButton.disabled = false;
+        return;
+      }
+      if (status) status.textContent = "Sending proposed time…";
+      await updateConsultation(scheduleId, {
+        scheduled_at: scheduledAt.toISOString(),
+        duration_minutes: Number(data.get("duration")),
+      });
+    }
     if (confirmId)  await confirmConsultation(confirmId);
     if (cancelId)   await cancelConsultation(cancelId);
     if (completeId) await completeConsultation(completeId);
@@ -510,7 +606,11 @@ async function handleConsultAction(e) {
     renderOverview(state.patients, state.consultations);
   } catch (err) {
     console.error("Consultation action failed:", err);
-    e.target.disabled = false;
+    if (scheduleId) {
+      const status = document.querySelector(`[data-schedule-status="${CSS.escape(scheduleId)}"]`);
+      if (status) status.textContent = err.message || "Could not send the proposed time.";
+    }
+    actionButton.disabled = false;
   }
 }
 

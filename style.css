@@ -6104,8 +6104,14 @@ details.metrics summary {
 
 .booking-columns {
   display: grid;
-  grid-template-columns: 1.3fr 1fr;
+  grid-template-columns: 1fr;
   gap: 22px;
+}
+
+.booking-instructions {
+  margin: -10px 0 22px;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 .date-options,
@@ -6739,6 +6745,37 @@ details.metrics summary {
 .overview-card .detail-row { padding-left: 18px; padding-right: 18px; }
 
 .consult-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.consultation-entry { border-bottom: 1px solid var(--line); }
+.consultation-entry > .detail-row { border-bottom: 0; }
+.consultation-schedule-form {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(120px, .75fr) minmax(130px, .75fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 4px 18px 16px;
+}
+.consultation-schedule-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+}
+.consultation-schedule-form input,
+.consultation-schedule-form select {
+  width: 100%;
+  min-height: 42px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+}
+.consultation-schedule-status {
+  grid-column: 1 / -1;
+  min-height: 20px;
+  margin: 0;
+  color: var(--coral-dark);
+}
 .consult-waiting {
   display: inline-block;
   margin-left: 8px;
@@ -6777,6 +6814,8 @@ details.metrics summary {
 
 @media (max-width: 720px) {
   .overview-columns, .programme-grid, .detail-metrics { grid-template-columns: 1fr; }
+  .consultation-schedule-form { grid-template-columns: 1fr; }
+  .consultation-schedule-status { grid-column: 1; }
   .programme-filters { width: 100%; margin-left: 0; }
   .programme-filters label { flex: 1; }
   .programme-filters select { width: 100%; min-width: 0; }

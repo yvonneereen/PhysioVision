@@ -13,7 +13,6 @@ import {
   isLoggedIn,
   selectPatientPathway,
   sendCareMessage,
-  updateConsultation,
 } from "./api.js?v=26";
 import {
   analysePatientTrend,
@@ -22,9 +21,9 @@ import {
   isCurrentPrescription,
   isPhysiotherapistRequestPending,
   shouldShowPhysiotherapistRequest,
-} from "./patient-dashboard-state.js?v=4";
+} from "./patient-dashboard-state.js?v=5";
 import { saveProfile } from "./personalization.js?v=9";
-import { getLocale, translateText } from "./i18n.js?v=9";
+import { getLocale, translateText } from "./i18n.js?v=10";
 import { EXERCISE_MAP } from "./exercises/registry.js";
 
 const dashboard = document.getElementById("patientDashboard");
@@ -93,7 +92,6 @@ const consultationCard = document.getElementById("patientConsultationCard");
 const upcomingConsultation = document.getElementById("patientUpcomingConsultation");
 const pendingConsultsEl = document.getElementById("patientPendingConsults");
 const bookingForm = document.getElementById("bookingForm");
-const bookingDate = document.getElementById("bookingDate");
 const bookingStatus = document.getElementById("bookingStatus");
 const bookingClinicianName = document.getElementById("bookingClinicianName");
 const bookingClinicianAvatar = document.getElementById("bookingClinicianAvatar");
@@ -593,6 +591,11 @@ function renderTrend(data) {
 }
 
 function describeConsultation(consultation) {
+  if (!consultation.scheduled_at) {
+    const clinicianName = consultation.clinician_name
+      || translateText("Your physiotherapist");
+    return `${translateText("Request pending")}: ${clinicianName} ${translateText("will propose an appointment time.")}`;
+  }
   const status = consultation.status === "confirmed"
     ? "Confirmed"
     : "Requested";
@@ -623,8 +626,8 @@ function renderTrendConsultationAction(
     ? 'Ask my physiotherapist to review <span aria-hidden="true">→</span>'
     : 'Request a physiotherapist <span aria-hidden="true">→</span>';
   trendRequestStatus.textContent = isPhysiotherapistPath
-    ? "Choose a preferred time for your existing physiotherapist to review this pattern."
-    : "Choose a preferred time. The request must be accepted before it is confirmed.";
+    ? "Tell your physiotherapist what you would like reviewed. They will propose the appointment time."
+    : "Tell a physiotherapist what you would like reviewed. They will propose the appointment time.";
 }
 
 function renderUpcomingConsultation(consultations) {
@@ -644,6 +647,7 @@ function renderPendingConsults(consultations) {
   const pending = consultations.filter((c) =>
     c.status === "requested" &&
     c.initiated_by === "clinician" &&
+    Boolean(c.scheduled_at) &&
     new Date(c.scheduled_at) >= now
   );
 
@@ -660,7 +664,6 @@ function renderPendingConsults(consultations) {
         <p class="pending-consult-time">${when} with ${c.clinician_name || "your care team"}</p>
         <div class="pending-consult-actions">
           <button class="button button-coral button-small" data-consult-accept="${c.id}">Accept</button>
-          <button class="button button-light button-small" data-consult-propose="${c.id}">Propose new time</button>
           <button class="button button-light button-small" data-consult-decline="${c.id}">Decline</button>
         </div>
         <p class="pending-consult-status" id="pendingStatus-${c.id}"></p>
@@ -670,9 +673,8 @@ function renderPendingConsults(consultations) {
 
 async function handlePendingConsultClick(event) {
   const acceptId  = event.target.getAttribute("data-consult-accept");
-  const proposeId = event.target.getAttribute("data-consult-propose");
   const declineId = event.target.getAttribute("data-consult-decline");
-  const id = acceptId || proposeId || declineId;
+  const id = acceptId || declineId;
   if (!id) return;
 
   const statusEl = document.getElementById(`pendingStatus-${id}`);
@@ -681,19 +683,6 @@ async function handlePendingConsultClick(event) {
       await acceptConsultation(acceptId);
     } else if (declineId) {
       await cancelConsultation(declineId);
-    } else if (proposeId) {
-      const current = event.target.closest(".pending-consult")?.dataset.consultWhen;
-      const input = window.prompt(
-        translateText("Propose a new date & time (e.g. 2026-08-05 15:30):"),
-        current ? current.slice(0, 16).replace("T", " ") : ""
-      );
-      if (!input) return;
-      const parsed = new Date(input.replace(" ", "T"));
-      if (isNaN(parsed.getTime())) {
-        if (statusEl) statusEl.textContent = "Could not read that date/time.";
-        return;
-      }
-      await updateConsultation(proposeId, { scheduled_at: parsed.toISOString() });
     }
     await loadDashboardData();
   } catch (err) {
@@ -1059,15 +1048,6 @@ function browserProfileFromApi(profile) {
   };
 }
 
-function prepareBookingDate() {
-  if (!bookingDate) return;
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const date = tomorrow.toISOString().slice(0, 10);
-  bookingDate.min = date;
-  if (!bookingDate.value) bookingDate.value = date;
-}
-
 function showToast(message) {
   toastMessage.innerHTML = "";
   const heading = document.createElement("strong");
@@ -1086,26 +1066,18 @@ bookingForm?.addEventListener("submit", async (event) => {
   submit.disabled = true;
 
   const formData = new FormData(bookingForm);
-  const scheduledAt = new Date(
-    `${formData.get("date")}T${formData.get("time")}:00`,
-  );
   try {
     const consultation = await createConsultation({
-      scheduled_at: scheduledAt.toISOString(),
-      duration_minutes: Number(formData.get("duration")),
       patient_notes: String(formData.get("notes") ?? "").trim(),
     });
     bookingStatus.textContent =
-      "Request sent. The physiotherapist will confirm the appointment.";
+      "Request sent. Your physiotherapist will propose an appointment time.";
     document
       .querySelector("#booking-modal [data-close-modal]")
       ?.click();
-    showToast(
-      `${formatDate(consultation.scheduled_at, {
-        hour: "numeric",
-        minute: "2-digit",
-      })} with ${consultation.clinician_name || "the PhysioVision care team"}.`,
-    );
+    const clinicianName = consultation.clinician_name
+      || translateText("Your physiotherapist");
+    showToast(`${clinicianName} ${translateText("will propose an appointment time.")}`);
     await loadDashboardData();
   } catch (error) {
     bookingStatus.textContent =
@@ -1122,9 +1094,8 @@ trendRequestButton?.addEventListener("click", () => {
   }
   if (bookingStatus) {
     bookingStatus.textContent =
-      "Choose a preferred time, then send the request for review.";
+      "Add what you would like reviewed, then send the request.";
   }
-  prepareBookingDate();
 });
 
 document
@@ -1311,8 +1282,6 @@ document.addEventListener("visibilitychange", () => {
 
 window.pvShowPatientDashboard = showDashboard;
 window.pvStartPatientExercise = startExercise;
-
-prepareBookingDate();
 
 if (isLoggedIn()) {
   getMe()

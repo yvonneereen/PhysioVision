@@ -29,11 +29,11 @@ class ConsultationViewSet(ModelViewSet):
         if user.role == UserRole.PATIENT:
             return Consultation.objects.filter(
                 patient=user.patient_profile
-            ).select_related('clinician__user', 'patient__user').order_by('-scheduled_at')
+            ).select_related('clinician__user', 'patient__user').order_by('-created_at')
         elif user.role == UserRole.CLINICIAN:
             return Consultation.objects.filter(
                 clinician=user.clinician_profile
-            ).select_related('patient__user', 'clinician__user').order_by('-scheduled_at')
+            ).select_related('patient__user', 'clinician__user').order_by('-created_at')
         return Consultation.objects.none()
 
     def _set_status(self, new_status):
@@ -44,9 +44,18 @@ class ConsultationViewSet(ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
-        # Clinician confirms a time the patient proposed/requested.
+        # Retained for older patient-proposed consultation records.
         if request.user.role != UserRole.CLINICIAN:
             raise PermissionDenied('Only the clinician can confirm a consultation.')
+        consultation = self.get_object()
+        if (
+            consultation.status != ConsultationStatus.REQUESTED
+            or consultation.initiated_by != ConsultationInitiator.PATIENT
+            or not consultation.scheduled_at
+        ):
+            raise ValidationError({
+                'detail': 'This consultation does not have a patient-proposed time.'
+            })
         return self._set_status(ConsultationStatus.CONFIRMED)
 
     @action(detail=True, methods=['post'])
@@ -54,6 +63,15 @@ class ConsultationViewSet(ModelViewSet):
         # Patient accepts a time the clinician suggested.
         if request.user.role != UserRole.PATIENT:
             raise PermissionDenied('Only the patient can accept a suggested time.')
+        consultation = self.get_object()
+        if (
+            consultation.status != ConsultationStatus.REQUESTED
+            or consultation.initiated_by != ConsultationInitiator.CLINICIAN
+            or not consultation.scheduled_at
+        ):
+            raise ValidationError({
+                'detail': 'The physiotherapist has not proposed a time yet.'
+            })
         return self._set_status(ConsultationStatus.CONFIRMED)
 
     @action(detail=True, methods=['post'])
@@ -67,12 +85,9 @@ class ConsultationViewSet(ModelViewSet):
         if request.user.role != UserRole.CLINICIAN:
             raise PermissionDenied('Only the clinician can resolve a consultation.')
         consultation = self.get_object()
-        if consultation.status not in (
-            ConsultationStatus.REQUESTED,
-            ConsultationStatus.CONFIRMED,
-        ):
+        if consultation.status != ConsultationStatus.CONFIRMED:
             raise ValidationError({
-                'detail': 'Only an active consultation can be resolved.'
+                'detail': 'Only a confirmed consultation can be resolved.'
             })
         return self._set_status(ConsultationStatus.COMPLETED)
 
@@ -100,16 +115,37 @@ class ConsultationViewSet(ModelViewSet):
         serializer.save(
             patient=patient,
             clinician=clinician,
+            scheduled_at=None,
+            duration_minutes=30,
+            status=ConsultationStatus.REQUESTED,
             initiated_by=ConsultationInitiator.PATIENT,
         )
 
     def perform_update(self, serializer):
-        # A patient editing the time is proposing a new one — send it back to the
-        # clinician to re-confirm (ping-pong), rather than booking it unilaterally.
-        if self.request.user.role != UserRole.PATIENT:
-            raise PermissionDenied('Use confirm/cancel to act on a consultation.')
+        if self.request.user.role != UserRole.CLINICIAN:
+            raise PermissionDenied(
+                'Only the physiotherapist can propose a consultation time.'
+            )
+        consultation = serializer.instance
+        if consultation.status != ConsultationStatus.REQUESTED:
+            raise ValidationError({
+                'detail': 'Only a pending request can be scheduled.'
+            })
+        allowed_fields = {'scheduled_at', 'duration_minutes'}
+        unexpected_fields = set(serializer.validated_data) - allowed_fields
+        if unexpected_fields:
+            raise ValidationError({
+                'detail': 'Only the date, time and duration can be changed here.'
+            })
+        scheduled_at = serializer.validated_data.get(
+            'scheduled_at', consultation.scheduled_at
+        )
+        if not scheduled_at or scheduled_at <= timezone.now():
+            raise ValidationError({
+                'scheduled_at': 'Choose a future consultation time.'
+            })
         serializer.save(
-            initiated_by=ConsultationInitiator.PATIENT,
+            initiated_by=ConsultationInitiator.CLINICIAN,
             status=ConsultationStatus.REQUESTED,
         )
 

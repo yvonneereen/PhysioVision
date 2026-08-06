@@ -161,14 +161,22 @@ export function findUpcomingConsultation(
 ) {
   return [...(Array.isArray(consultations) ? consultations : [])]
     .filter((consultation) => {
-      const scheduledAt = new Date(consultation?.scheduled_at);
-      return (
-        ["requested", "confirmed"].includes(consultation?.status)
-        && !Number.isNaN(scheduledAt.getTime())
-        && scheduledAt >= now
-      );
+      if (!["requested", "confirmed"].includes(consultation?.status)) {
+        return false;
+      }
+      if (!consultation?.scheduled_at) {
+        return consultation.status === "requested";
+      }
+      const scheduledAt = new Date(consultation.scheduled_at);
+      return !Number.isNaN(scheduledAt.getTime()) && scheduledAt >= now;
     })
-    .sort(
-      (a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at),
-    )[0] ?? null;
+    .sort((a, b) => {
+      const aUnscheduled = !a.scheduled_at;
+      const bUnscheduled = !b.scheduled_at;
+      if (aUnscheduled !== bUnscheduled) return aUnscheduled ? -1 : 1;
+      if (aUnscheduled) {
+        return new Date(b.created_at ?? 0) - new Date(a.created_at ?? 0);
+      }
+      return new Date(a.scheduled_at) - new Date(b.scheduled_at);
+    })[0] ?? null;
 }

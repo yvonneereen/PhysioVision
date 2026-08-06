@@ -22,7 +22,7 @@ class ConsultationInitiator(models.TextChoices):
 
 class Consultation(TimestampedModel):
     """
-    Video consultation booking between a patient and their physiotherapist.
+    Consultation request between a patient and their physiotherapist.
     Maps to the booking-modal flow in index.html.
 
     video_link is populated by an external scheduling service when the booking is confirmed.
@@ -32,7 +32,7 @@ class Consultation(TimestampedModel):
     patient   = models.ForeignKey(PatientProfile, on_delete=models.CASCADE, related_name="consultations")
     clinician = models.ForeignKey(ClinicianProfile, on_delete=models.CASCADE, related_name="consultations")
 
-    scheduled_at     = models.DateTimeField()
+    scheduled_at     = models.DateTimeField(null=True, blank=True)
     duration_minutes = models.PositiveSmallIntegerField(default=30)
     status           = models.CharField(
         max_length=15,
@@ -40,8 +40,8 @@ class Consultation(TimestampedModel):
         default=ConsultationStatus.REQUESTED,
         db_index=True,
     )
-    # Whose turn it is to respond: the side that did NOT last act.
-    # A clinician-initiated request awaits the patient; a patient edit sends it back.
+    # Records who made the current proposal. A clinician proposal awaits the
+    # patient's acceptance; an unscheduled patient request awaits the clinician.
     initiated_by     = models.CharField(
         max_length=10,
         choices=ConsultationInitiator.choices,
@@ -54,7 +54,7 @@ class Consultation(TimestampedModel):
 
     class Meta:
         db_table  = "consultations_consultation"
-        ordering  = ["-scheduled_at"]
+        ordering  = ["-created_at"]
         indexes   = [
             models.Index(fields=["patient", "scheduled_at"]),
             models.Index(fields=["clinician", "scheduled_at"]),
@@ -64,9 +64,14 @@ class Consultation(TimestampedModel):
         verbose_name_plural = _("consultations")
 
     def __str__(self) -> str:
+        scheduled = (
+            self.scheduled_at.strftime("%Y-%m-%d %H:%M")
+            if self.scheduled_at
+            else "unscheduled"
+        )
         return (
             f"{self.patient.user} ↔ {self.clinician.user} "
-            f"@ {self.scheduled_at:%Y-%m-%d %H:%M} [{self.status}]"
+            f"@ {scheduled} [{self.status}]"
         )
 
 

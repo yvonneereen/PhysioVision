@@ -9,6 +9,7 @@ from api.core.models import (
     User,
     UserRole,
 )
+from api.consultations.models import ConsultationInitiator, ConsultationStatus
 
 
 class PatientConsultationBookingTests(APITestCase):
@@ -36,8 +37,6 @@ class PatientConsultationBookingTests(APITestCase):
 
     def request_payload(self):
         return {
-            'scheduled_at': (timezone.now() + timedelta(days=2)).isoformat(),
-            'duration_minutes': 30,
             'patient_notes': 'I would like to review my recent knee pain.',
         }
 
@@ -55,6 +54,10 @@ class PatientConsultationBookingTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(str(response.data['clinician']), str(self.clinician.id))
         self.assertEqual(response.data['clinician_name'], 'Mei Lin')
+        self.assertIsNone(response.data['scheduled_at'])
+        self.assertEqual(response.data['duration_minutes'], 30)
+        self.assertEqual(response.data['status'], ConsultationStatus.REQUESTED)
+        self.assertEqual(response.data['initiated_by'], ConsultationInitiator.PATIENT)
 
     def test_unlinked_patient_is_matched_to_accepting_clinician(self):
         self.client.force_authenticate(self.patient_user)
@@ -78,6 +81,79 @@ class PatientConsultationBookingTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, 403)
+
+    def test_patient_cannot_choose_the_appointment_time(self):
+        self.client.force_authenticate(self.patient_user)
+        payload = self.request_payload() | {
+            'scheduled_at': (timezone.now() + timedelta(days=2)).isoformat(),
+            'duration_minutes': 60,
+        }
+
+        response = self.client.post('/api/consultations/', payload, format='json')
+
+        self.assertEqual(response.status_code, 201)
+        self.assertIsNone(response.data['scheduled_at'])
+        self.assertEqual(response.data['duration_minutes'], 30)
+
+    def test_clinician_proposes_time_and_patient_accepts_it(self):
+        self.patient.primary_clinician = self.clinician
+        self.patient.save(update_fields=['primary_clinician', 'updated_at'])
+        self.client.force_authenticate(self.patient_user)
+        created = self.client.post(
+            '/api/consultations/', self.request_payload(), format='json',
+        )
+        consultation_id = created.data['id']
+        proposed_time = timezone.now() + timedelta(days=2)
+
+        self.client.force_authenticate(self.clinician_user)
+        scheduled = self.client.patch(
+            f'/api/consultations/{consultation_id}/',
+            {
+                'scheduled_at': proposed_time.isoformat(),
+                'duration_minutes': 45,
+            },
+            format='json',
+        )
+        self.assertEqual(scheduled.status_code, 200)
+        self.assertEqual(scheduled.data['duration_minutes'], 45)
+        self.assertEqual(
+            scheduled.data['initiated_by'], ConsultationInitiator.CLINICIAN,
+        )
+        self.assertEqual(scheduled.data['status'], ConsultationStatus.REQUESTED)
+
+        self.client.force_authenticate(self.patient_user)
+        accepted = self.client.post(
+            f'/api/consultations/{consultation_id}/accept/', {}, format='json',
+        )
+        self.assertEqual(accepted.status_code, 200)
+        self.assertEqual(accepted.data['status'], ConsultationStatus.CONFIRMED)
+
+    def test_patient_cannot_schedule_pending_request(self):
+        self.client.force_authenticate(self.patient_user)
+        created = self.client.post(
+            '/api/consultations/', self.request_payload(), format='json',
+        )
+        consultation_id = created.data['id']
+
+        response = self.client.patch(
+            f'/api/consultations/{consultation_id}/',
+            {'scheduled_at': (timezone.now() + timedelta(days=2)).isoformat()},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_patient_cannot_accept_unscheduled_request(self):
+        self.client.force_authenticate(self.patient_user)
+        created = self.client.post(
+            '/api/consultations/', self.request_payload(), format='json',
+        )
+
+        response = self.client.post(
+            f"/api/consultations/{created.data['id']}/accept/", {}, format='json',
+        )
+
+        self.assertEqual(response.status_code, 400)
 
 
 class CareMessageTests(APITestCase):

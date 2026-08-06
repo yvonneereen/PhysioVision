@@ -107,6 +107,36 @@ assert.equal(
 );
 
 assert.equal(
+  findUpcomingConsultation(
+    [
+      {
+        id: 4,
+        status: "confirmed",
+        scheduled_at: "2026-08-04T09:00:00Z",
+      },
+      {
+        id: 5,
+        status: "requested",
+        scheduled_at: null,
+        created_at: "2026-08-01T10:00:00Z",
+      },
+    ],
+    new Date("2026-08-01T09:00:00Z"),
+  )?.id,
+  5,
+  "an unscheduled patient request remains visible while awaiting the physiotherapist",
+);
+
+assert.equal(
+  findUpcomingConsultation(
+    [{ id: 6, status: "confirmed", scheduled_at: null }],
+    new Date("2026-08-01T09:00:00Z"),
+  ),
+  null,
+  "a confirmed consultation must have a scheduled time",
+);
+
+assert.equal(
   isClinicianGuidedProfile({ pathway_choice: "physiotherapist" }),
   true,
 );

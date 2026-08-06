@@ -97,6 +97,16 @@ urlpatterns = [
         views.ClinicianPatientsView.as_view(),
         name='clinician-patients',
     ),
+    path(
+        'clinician/triage/',
+        views.ClinicianTriageQueueView.as_view(),
+        name='clinician-triage',
+    ),
+    path(
+        'clinician/triage/<uuid:patient_id>/claim/',
+        views.ClinicianTriageClaimView.as_view(),
+        name='clinician-triage-claim',
+    ),
     path('agent/chat/', views.AgentChatView.as_view(), name='agent-chat'),
     path(
         'agent/safety-language/',

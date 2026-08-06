@@ -5,7 +5,9 @@ import {
   getPatientSessions, getPatientPainCheckins,
   requestSlackLinkCode, disconnectSlack,
   getCareMessages, sendCareMessage, getCareMessageThreads,
-} from "./api.js?v=26";
+  sendAgentMessage,
+  getTriageQueue, claimTriagePatient,
+} from "./api.js?v=27";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = ["January", "February", "March", "April", "May", "June",
@@ -17,10 +19,11 @@ const TAB_TITLES = {
   programmes: "Programmes",
   consultations: "Consultations",
   messaging: "Messaging",
+  triage: "Triage queue",
 };
 
 // In-memory caches populated on load; tabs render from these.
-const state = { patients: [], consultations: [], exercises: [], prescriptions: [] };
+const state = { patients: [], consultations: [], exercises: [], prescriptions: [], triage: [] };
 
 function formatDate(d) {
   return `${DAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
@@ -528,14 +531,91 @@ function switchTab(tab) {
   if (tab === "programmes") loadProgrammes();
   if (tab === "consultations") renderConsultations();
   if (tab === "messaging") loadMessaging();
+  if (tab === "triage") loadTriage();
+}
+
+function renderTriage() {
+  const list = document.getElementById("triage-list");
+  const badge = document.getElementById("triage-badge");
+  if (badge) {
+    badge.textContent = state.triage.length;
+    badge.hidden = state.triage.length === 0;
+  }
+  if (!list) return;
+  if (!state.triage.length) {
+    list.innerHTML = `<div class="triage-empty"><span aria-hidden="true">✓</span><strong>Queue clear</strong><p>No patients are waiting to be linked.</p></div>`;
+    return;
+  }
+  list.innerHTML = state.triage.map(patient => {
+    const goal = patient.custom_goal || goalLabel(patient.goal) || "Not provided";
+    const requested = patient.requested_at
+      ? new Date(patient.requested_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+      : "Recently";
+    return `
+      <article class="triage-card">
+        <div class="triage-card-main">
+          <div class="triage-avatar" aria-hidden="true">${escapeHtml(initials(patient.name))}</div>
+          <div>
+            <div class="triage-card-title"><strong>${escapeHtml(patient.name)}</strong><span>Awaiting clinician</span></div>
+            <p>Goal: ${escapeHtml(goal)}</p>
+            <div class="triage-meta">
+              ${patient.mobility_status ? `<span>Mobility: ${escapeHtml(patient.mobility_status)}</span>` : ""}
+              ${patient.activity_level ? `<span>Activity: ${escapeHtml(patient.activity_level)}</span>` : ""}
+              ${patient.focus_side ? `<span>Focus: ${escapeHtml(patient.focus_side)}</span>` : ""}
+            </div>
+            <small>Requested ${requested}</small>
+          </div>
+        </div>
+        <button class="button button-coral button-small" type="button" data-triage-claim="${patient.id}">Claim patient</button>
+      </article>`;
+  }).join("");
+}
+
+async function loadTriage() {
+  const list = document.getElementById("triage-list");
+  if (list) list.innerHTML = `<p class="empty-state">Loading triage queue…</p>`;
+  try {
+    state.triage = await getTriageQueue().then(unwrap);
+    renderTriage();
+  } catch (error) {
+    console.error("Triage load failed:", error);
+    if (list) list.innerHTML = `<p class="empty-state">Could not load the triage queue.</p>`;
+  }
+}
+
+async function claimTriageRequest(button) {
+  const patientId = button.getAttribute("data-triage-claim");
+  button.disabled = true;
+  button.textContent = "Claiming…";
+  try {
+    await claimTriagePatient(patientId);
+    state.triage = state.triage.filter(patient => String(patient.id) !== String(patientId));
+    state.patients = await getPatients().then(unwrap);
+    renderTriage();
+    renderPatientTable(state.patients);
+    renderStats(state.patients);
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = "Claim patient";
+    button.closest(".triage-card")?.insertAdjacentHTML(
+      "beforeend",
+      `<p class="triage-card-error">${escapeHtml(error.message || "Could not claim this patient.")}</p>`,
+    );
+  }
 }
 
 // ── Messaging inbox ─────────────────────────────────────────
 
 let activeConversation = null;
+const AI_CONVERSATION_ID = "physiovision-ai";
+const aiConversationMessages = [{
+  sender: "assistant",
+  body: "Hello. I’m your PhysioVision AI workspace. I can review your roster, look up patient progress, prepare drafts and run clinician-approved actions. Type “help” for every command; clinical decisions remain yours.",
+}];
 
 async function loadMessaging() {
   const list = document.getElementById("messaging-list");
+  renderMessagingList([]);
   try {
     const threads = await getCareMessageThreads();
     const rows = Array.isArray(threads) ? threads : threads.results ?? [];
@@ -543,7 +623,10 @@ async function loadMessaging() {
     updateMessagingBadge(rows);
   } catch (err) {
     console.error("Messaging load failed:", err);
-    if (list) list.innerHTML = `<p class="empty-state">Could not load conversations.</p>`;
+    if (list) list.insertAdjacentHTML(
+      "beforeend",
+      `<p class="messaging-list-empty">Could not load patient conversations.</p>`,
+    );
   }
 }
 
@@ -558,11 +641,16 @@ function updateMessagingBadge(threads) {
 function renderMessagingList(threads) {
   const list = document.getElementById("messaging-list");
   if (!list) return;
-  if (!threads.length) {
-    list.innerHTML = `<p class="empty-state">No patient messages yet.</p>`;
-    return;
-  }
-  list.innerHTML = threads.map(t => {
+  const aiActive = activeConversation === AI_CONVERSATION_ID ? " is-active" : "";
+  const assistant = `
+    <button type="button" class="conversation-item conversation-item-ai${aiActive}" data-ai-conversation>
+      <span class="conversation-top">
+        <span class="conversation-ai-title"><span class="conversation-ai-mark" aria-hidden="true">✦</span><strong>PhysioVision AI</strong></span>
+        <span class="conversation-pinned">Pinned</span>
+      </span>
+      <span class="conversation-preview">Clinical thinking and drafting workspace</span>
+    </button>`;
+  const patientThreads = threads.map(t => {
     const preview = t.last_sender === "clinician" ? `You: ${t.last_body}` : t.last_body;
     const when = new Date(t.last_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" });
     const unread = t.unread ? `<span class="conversation-unread">${t.unread}</span>` : "";
@@ -576,6 +664,145 @@ function renderMessagingList(threads) {
         <span class="conversation-when">${when}</span>
       </button>`;
   }).join("");
+  const empty = threads.length
+    ? ""
+    : `<p class="messaging-list-empty">No patient messages yet.</p>`;
+  list.innerHTML = assistant + empty + patientThreads;
+}
+
+function aiMessageRows() {
+  const helpContent = `
+    <div class="clinical-ai-help">
+      <section><h4>Your roster</h4>
+        <button type="button" data-ai-prompt="my patients"><code>my patients</code><span>Roster overview</span></button>
+        <button type="button" data-ai-prompt="who needs review"><code>who needs review</code><span>Open escalations</span></button>
+        <button type="button" data-ai-prompt="resolve Sarah"><code>resolve [name]</code><span>Clear a patient’s escalations</span></button>
+        <button type="button" data-ai-prompt="today"><code>today</code><span>Consultations and new flags</span></button>
+      </section>
+      <section><h4>Patient lookups</h4>
+        <button type="button" data-ai-prompt="show Sarah progress"><code>show [name] progress</code><span>Progress summary</span></button>
+        <button type="button" data-ai-prompt="pain Sarah"><code>pain [name]</code><span>Recent pain history</span></button>
+        <button type="button" data-ai-prompt="adherence Sarah"><code>adherence [name]</code><span>Programme adherence</span></button>
+        <button type="button" data-ai-prompt="sessions Sarah"><code>sessions [name]</code><span>Recent exercise sessions</span></button>
+      </section>
+      <section><h4>Drafting and scheduling</h4>
+        <button type="button" data-ai-prompt="draft note for Sarah"><code>draft note for [name]</code><span>Clinical note from latest session</span></button>
+        <button type="button" data-ai-prompt="draft message for Sarah"><code>draft message for [name]</code><span>Encouraging patient message</span></button>
+        <button type="button" data-ai-prompt="book Sarah Thursday 3pm"><code>book [name] [when]</code><span>Request a consultation</span></button>
+      </section>
+      <section><h4>Actions</h4>
+        <button type="button" data-ai-prompt="send message to Sarah"><code>send message to [name]</code><span>Email an encouragement</span></button>
+        <button type="button" data-ai-prompt="confirm Sarah"><code>confirm [name]</code><span>Confirm a consultation</span></button>
+        <button type="button" data-ai-prompt="assign Half Squats to Sarah"><code>assign [exercise] to [name]</code><span>Prescribe one exercise</span></button>
+      </section>
+      <section><h4>AI programme builder</h4>
+        <button type="button" data-ai-prompt="build a plan for Sarah"><code>build a plan for [name]</code><span>Draft a programme</span></button>
+        <button type="button" data-ai-prompt="revise Sarah reduce the intensity"><code>revise [name] [change]</code><span>Refine the draft</span></button>
+        <button type="button" data-ai-prompt="accept plan for Sarah"><code>accept plan for [name]</code><span>Create prescriptions</span></button>
+        <button type="button" data-ai-prompt="summary"><code>summary</code><span>Whole-roster overview</span></button>
+      </section>
+    </div>`;
+  const planContent = (plan) => {
+    const exercises = Array.isArray(plan?.exercises) ? plan.exercises : [];
+    return `
+      <article class="clinical-plan-card">
+        <header>
+          <div><span>AI programme draft</span><h4>${escapeHtml(plan.patient_name || "Patient")}</h4></div>
+          <span class="clinical-plan-draft-badge">Draft</span>
+        </header>
+        ${plan.clinical_context ? `
+          <div class="clinical-plan-context">
+            <strong>Clinical context considered</strong>
+            <p>${escapeHtml(plan.clinical_context)}</p>
+          </div>` : ""}
+        ${plan.summary ? `<p class="clinical-plan-summary">${escapeHtml(plan.summary)}</p>` : ""}
+        <div class="clinical-plan-exercises">
+          <div class="clinical-plan-row clinical-plan-row-head"><span>Exercise</span><span>Dose</span><span>Frequency</span></div>
+          ${exercises.map(exercise => `
+            <div class="clinical-plan-row${exercise.available ? "" : " is-unavailable"}">
+              <strong>${escapeHtml(exercise.name)}</strong>
+              <span>${escapeHtml(exercise.sets ?? "—")} × ${escapeHtml(exercise.reps ?? "—")}</span>
+              <span>${escapeHtml(exercise.days_per_week ?? "—")}×/week</span>
+            </div>`).join("")}
+        </div>
+        <footer>
+          <button type="button" class="button button-light button-small" data-ai-fill="revise ${escapeHtml(plan.patient_first_name || "patient")} ">Revise draft</button>
+          <button type="button" class="button button-coral button-small" data-ai-fill="accept plan for ${escapeHtml(plan.patient_first_name || "patient")}">Review and accept</button>
+        </footer>
+      </article>`;
+  };
+  return aiConversationMessages.map(message => `
+    <div class="clinical-ai-message clinical-ai-message-${message.sender}">
+      <span>${message.sender === "assistant" ? "PhysioVision AI" : "You"}</span>
+      ${message.command === "help"
+        ? helpContent
+        : ["build_plan", "revise_plan"].includes(message.command) && message.data
+          ? planContent(message.data)
+          : `<p>${escapeHtml(message.body)}</p>`}
+    </div>`).join("");
+}
+
+function showClinicalAssistant() {
+  activeConversation = AI_CONVERSATION_ID;
+  document.querySelectorAll(".conversation-item").forEach(el =>
+    el.classList.toggle("is-active", el.hasAttribute("data-ai-conversation")));
+  const panel = document.getElementById("messaging-conversation");
+  if (!panel) return;
+  panel.innerHTML = `
+    <div class="conversation-head clinical-ai-head">
+      <div><strong>PhysioVision AI</strong><span>Private assistant workspace · not visible to patients</span></div>
+      <span class="clinical-ai-label">AI assistant</span>
+    </div>
+    <div class="clinical-ai-notice">
+      AI can make mistakes. Verify its output against patient records and use your clinical judgement.
+    </div>
+    <div class="clinical-ai-prompts" aria-label="Suggested assistant commands">
+      <button type="button" data-ai-prompt="my patients">My patients</button>
+      <button type="button" data-ai-prompt="who needs review">Needs review</button>
+      <button type="button" data-ai-prompt="today">Today</button>
+      <button type="button" data-ai-prompt="help">All commands</button>
+    </div>
+    <div class="clinical-ai-thread" id="clinical-ai-thread" role="log" aria-live="polite">${aiMessageRows()}</div>
+    <p class="clinical-ai-status" id="clinical-ai-status" role="status"></p>
+    <form class="detail-messages-form clinical-ai-form" id="clinical-ai-form">
+      <textarea id="clinical-ai-input" rows="2" maxlength="2000" placeholder="Ask the assistant…" required></textarea>
+      <button class="button button-coral button-small" type="submit">Send</button>
+    </form>`;
+  const thread = panel.querySelector("#clinical-ai-thread");
+  if (thread) thread.scrollTop = thread.scrollHeight;
+  panel.querySelector("#clinical-ai-form")?.addEventListener("submit", handleClinicalAssistantMessage);
+}
+
+async function handleClinicalAssistantMessage(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const input = form.querySelector("#clinical-ai-input");
+  const button = form.querySelector("button");
+  const status = document.getElementById("clinical-ai-status");
+  const message = input.value.trim();
+  if (!message) return;
+  aiConversationMessages.push({ sender: "user", body: message });
+  input.value = "";
+  button.disabled = true;
+  if (status) status.textContent = "PhysioVision AI is thinking…";
+  const thread = document.getElementById("clinical-ai-thread");
+  if (thread) {
+    thread.innerHTML = aiMessageRows();
+    thread.scrollTop = thread.scrollHeight;
+  }
+  try {
+    const result = await sendAgentMessage(message);
+    aiConversationMessages.push({
+      sender: "assistant",
+      body: result.reply,
+      command: result.command || null,
+      data: result.data || null,
+    });
+  } catch (error) {
+    aiConversationMessages.push({ sender: "error", body: error.message || "The assistant is unavailable." });
+  } finally {
+    if (activeConversation === AI_CONVERSATION_ID) showClinicalAssistant();
+  }
 }
 
 async function openConversation(patientId) {
@@ -662,6 +889,10 @@ function renderClinicianInfo(me) {
   const avatarEl = document.getElementById("clinician-avatar");
   if (nameEl)   nameEl.textContent   = name;
   if (avatarEl) avatarEl.textContent = initials(name);
+  const floatingAiLauncher = document.getElementById("agentChatLauncher");
+  const floatingAiPanel = document.getElementById("agentChatPanel");
+  if (floatingAiLauncher) floatingAiLauncher.hidden = true;
+  if (floatingAiPanel) floatingAiPanel.hidden = true;
 
   renderSlackState(Boolean(me.profile?.slack_linked));
 }
@@ -726,8 +957,8 @@ async function loadDashboard() {
 
   setLoading(true);
   try {
-    const [me, patientsData, consultData] = await Promise.all([
-      getMe(), getPatients(), getConsultations().catch(() => []),
+    const [me, patientsData, consultData, triageData] = await Promise.all([
+      getMe(), getPatients(), getConsultations().catch(() => []), getTriageQueue().catch(() => []),
     ]);
 
     if (me.role !== "clinician") {
@@ -739,10 +970,12 @@ async function loadDashboard() {
     renderClinicianInfo(me);
     state.patients      = unwrap(patientsData);
     state.consultations = unwrap(consultData);
+    state.triage        = unwrap(triageData);
 
     renderStats(state.patients);
     renderOverview(state.patients, state.consultations);
     renderPatientTable(state.patients);
+    renderTriage();
     // Surface the unread-messages badge without opening the tab.
     getCareMessageThreads()
       .then(t => updateMessagingBadge(Array.isArray(t) ? t : t.results ?? []))
@@ -771,6 +1004,47 @@ document.addEventListener("click", (e) => {
 
   if (e.target.closest("#messaging-new")) {
     showNewConversationPicker();
+    return;
+  }
+
+  if (e.target.closest("#triage-refresh")) {
+    loadTriage();
+    return;
+  }
+
+  const triageClaim = e.target.closest("[data-triage-claim]");
+  if (triageClaim) {
+    claimTriageRequest(triageClaim);
+    return;
+  }
+
+  if (e.target.closest("[data-ai-conversation]")) {
+    showClinicalAssistant();
+    return;
+  }
+
+  const aiPrompt = e.target.closest("[data-ai-prompt]");
+  if (aiPrompt) {
+    const input = document.getElementById("clinical-ai-input");
+    if (input) {
+      input.value = aiPrompt.getAttribute("data-ai-prompt");
+      if (aiPrompt.closest(".clinical-ai-help")) {
+        input.focus();
+      } else {
+        input.form?.requestSubmit();
+      }
+    }
+    return;
+  }
+
+  const aiFill = e.target.closest("[data-ai-fill]");
+  if (aiFill) {
+    const input = document.getElementById("clinical-ai-input");
+    if (input) {
+      input.value = aiFill.getAttribute("data-ai-fill");
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    }
     return;
   }
 

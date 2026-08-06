@@ -1,0 +1,105 @@
+from rest_framework.test import APITestCase
+
+from api.core.models import (
+    CarePath,
+    ClinicianProfile,
+    PatientPathwayChoice,
+    PatientProfile,
+    User,
+    UserRole,
+)
+
+
+class ClinicianTriageTests(APITestCase):
+    queue_url = "/api/auth/clinician/triage/"
+
+    def setUp(self):
+        self.clinician_user = User.objects.create_user(
+            username="triage-clinician@example.com",
+            email="triage-clinician@example.com",
+            password="test-password",
+            role=UserRole.CLINICIAN,
+        )
+        self.clinician = ClinicianProfile.objects.create(
+            user=self.clinician_user,
+            license_number="TRIAGE-TEST",
+        )
+        waiting_user = User.objects.create_user(
+            username="waiting@example.com",
+            email="waiting@example.com",
+            password="test-password",
+            role=UserRole.PATIENT,
+            first_name="Waiting",
+            last_name="Patient",
+        )
+        self.waiting = PatientProfile.objects.create(
+            user=waiting_user,
+            pathway_choice=PatientPathwayChoice.PHYSIOTHERAPIST,
+            care_path=CarePath.CLINICIAN,
+            goal="mobility",
+        )
+        wellness_user = User.objects.create_user(
+            username="wellness@example.com",
+            email="wellness@example.com",
+            password="test-password",
+            role=UserRole.PATIENT,
+            first_name="Wellness",
+        )
+        self.wellness = PatientProfile.objects.create(
+            user=wellness_user,
+            pathway_choice=PatientPathwayChoice.WELLNESS,
+            care_path=CarePath.WELLNESS,
+        )
+
+    def claim_url(self, patient):
+        return f"/api/auth/clinician/triage/{patient.id}/claim/"
+
+    def test_queue_contains_only_unassigned_physio_requests(self):
+        self.client.force_authenticate(self.clinician_user)
+
+        response = self.client.get(self.queue_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["id"], str(self.waiting.id))
+        self.assertEqual(response.data[0]["name"], "Waiting Patient")
+
+    def test_patient_cannot_view_or_claim_triage(self):
+        self.client.force_authenticate(self.waiting.user)
+
+        queue = self.client.get(self.queue_url)
+        claim = self.client.post(self.claim_url(self.waiting), {}, format="json")
+
+        self.assertEqual(queue.status_code, 403)
+        self.assertEqual(claim.status_code, 403)
+
+    def test_claim_adds_patient_to_authenticated_clinicians_roster(self):
+        self.client.force_authenticate(self.clinician_user)
+
+        response = self.client.post(self.claim_url(self.waiting), {}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.waiting.refresh_from_db()
+        self.assertEqual(self.waiting.primary_clinician, self.clinician)
+        self.assertEqual(self.waiting.care_path, CarePath.NEEDS_REVIEW)
+        self.assertEqual(self.client.get(self.queue_url).data, [])
+
+    def test_claim_rejects_patient_already_claimed_by_another_clinician(self):
+        other_user = User.objects.create_user(
+            username="other-triage@example.com",
+            email="other-triage@example.com",
+            password="test-password",
+            role=UserRole.CLINICIAN,
+        )
+        other = ClinicianProfile.objects.create(
+            user=other_user,
+            license_number="OTHER-TRIAGE",
+        )
+        self.waiting.primary_clinician = other
+        self.waiting.save(update_fields=["primary_clinician"])
+        self.client.force_authenticate(self.clinician_user)
+
+        response = self.client.post(self.claim_url(self.waiting), {}, format="json")
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("already been claimed", response.data["detail"])

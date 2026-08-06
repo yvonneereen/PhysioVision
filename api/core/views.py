@@ -17,6 +17,7 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from .ai import generate_agent_reply
+from .clinician_assistant import dispatch_clinician_command
 from .email_delivery import EmailDeliveryError
 from .emergency_alerts import (
     EmergencyVerificationCooldown,
@@ -996,7 +997,16 @@ class AgentChatView(APIView):
             )
 
         try:
-            reply = generate_agent_reply(request.user, message)
+            command_result = (
+                dispatch_clinician_command(request.user, message)
+                if request.user.role == UserRole.CLINICIAN
+                else None
+            )
+            reply = (
+                command_result['reply']
+                if command_result
+                else generate_agent_reply(request.user, message)
+            )
         except Exception:
             logger.exception('Gemini request failed')
             return Response(
@@ -1004,10 +1014,18 @@ class AgentChatView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
-        return Response({
+        response_data = {
             'reply': reply,
             'role': request.user.role,
-        })
+        }
+        if command_result:
+            response_data.update({
+                'command': command_result['command'],
+                'changed': command_result.get('changed', False),
+            })
+            if 'data' in command_result:
+                response_data['data'] = command_result['data']
+        return Response(response_data)
 
 
 class SafetyLanguageInterpretationView(APIView):
@@ -1552,3 +1570,86 @@ class ClinicianPatientsView(APIView):
                 "active_prescriptions": active_count,
             })
         return Response(data)
+
+
+class ClinicianTriageQueueView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if (
+            request.user.role != UserRole.CLINICIAN
+            or not hasattr(request.user, "clinician_profile")
+        ):
+            return Response(
+                {"detail": "A clinician account is required."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        patients = (
+            PatientProfile.objects.filter(
+                primary_clinician__isnull=True,
+                pathway_choice=PatientPathwayChoice.PHYSIOTHERAPIST,
+            )
+            .select_related("user")
+            .order_by("pathway_selected_at", "created_at")
+        )
+        return Response([{
+            "id": str(patient.id),
+            "name": patient.user.get_full_name().strip() or "Patient",
+            "goal": patient.goal,
+            "custom_goal": patient.custom_goal,
+            "activity_level": patient.activity_level,
+            "mobility_status": patient.mobility_status,
+            "focus_side": patient.focus_side,
+            "requested_at": patient.pathway_selected_at,
+        } for patient in patients])
+
+
+class ClinicianTriageClaimView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, patient_id):
+        if (
+            request.user.role != UserRole.CLINICIAN
+            or not hasattr(request.user, "clinician_profile")
+        ):
+            return Response(
+                {"detail": "A clinician account is required."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        with transaction.atomic():
+            patient = (
+                PatientProfile.objects.select_for_update()
+                .select_related("user", "primary_clinician__user")
+                .filter(pk=patient_id)
+                .first()
+            )
+            if not patient:
+                return Response(
+                    {"detail": "This triage request no longer exists."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            if patient.primary_clinician_id:
+                return Response(
+                    {"detail": "This patient has already been claimed."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            if patient.pathway_choice != PatientPathwayChoice.PHYSIOTHERAPIST:
+                return Response(
+                    {"detail": "This patient is not in the physiotherapist triage queue."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            patient.primary_clinician = request.user.clinician_profile
+            patient.care_path = CarePath.NEEDS_REVIEW
+            patient.slack_thread_ts = ""
+            patient.save(update_fields=[
+                "primary_clinician", "care_path", "slack_thread_ts", "updated_at",
+            ])
+
+        return Response({
+            "id": str(patient.id),
+            "name": patient.user.get_full_name().strip() or "Patient",
+            "detail": "Patient added to your roster for review.",
+        })

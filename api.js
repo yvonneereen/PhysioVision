@@ -316,6 +316,14 @@ export async function getPatients() {
   return request("GET", "/patients/");
 }
 
+export async function getTriageQueue() {
+  return request("GET", "/auth/clinician/triage/");
+}
+
+export async function claimTriagePatient(patientId) {
+  return request("POST", `/auth/clinician/triage/${patientId}/claim/`, {});
+}
+
 export async function getPatientSessions(patientId) {
   return request("GET", `/sessions/?patient=${patientId}`);
 }

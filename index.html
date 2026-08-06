@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=86" />
+  <link rel="stylesheet" href="style.css?v=89" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -2288,6 +2288,7 @@
           <button type="button" data-tab="programmes"><span>□</span> Programmes</button>
           <button type="button" data-tab="consultations"><span>◷</span> Consultations</button>
           <button type="button" data-tab="messaging"><span>🗨</span> Messaging<span class="tab-badge" id="messaging-badge" hidden></span></button>
+          <button type="button" data-tab="triage"><span>△</span> Triage<span class="tab-badge" id="triage-badge" hidden></span></button>
         </nav>
         <div class="clinician-profile">
           <div class="avatar avatar-mei" id="clinician-avatar">ML</div>
@@ -2443,6 +2444,20 @@
               <p class="empty-state">Select a conversation to read and reply.</p>
             </div>
           </div>
+        </section>
+
+        <section class="tab-panel hidden" data-panel="triage">
+          <div class="triage-intro">
+            <div>
+              <strong>Physiotherapist triage queue</strong>
+              <p>Patients here explicitly requested physiotherapist support and are not yet linked to a clinician.</p>
+            </div>
+            <button class="button button-light button-small" id="triage-refresh" type="button">Refresh queue</button>
+          </div>
+          <div class="triage-list" id="triage-list">
+            <p class="empty-state">Open the tab to load triage requests.</p>
+          </div>
+          <p class="triage-safety-note">Claiming adds the patient to your roster for professional review. It does not diagnose them or prescribe a programme.</p>
         </section>
       </div>
     </section>
@@ -2702,7 +2717,7 @@
   <script type="module" src="auth.js?v=31"></script>
   <script type="module" src="ui.js?v=23"></script>
   <script type="module" src="patient-dashboard.js?v=34"></script>
-  <script type="module" src="therapist.js?v=26"></script>
+  <script type="module" src="therapist.js?v=31"></script>
   <script type="module" src="exercise-library.js?v=15"></script>
   <script type="module" src="main.js?v=97"></script>
   <script type="module" src="agent-chat.js?v=26"></script>

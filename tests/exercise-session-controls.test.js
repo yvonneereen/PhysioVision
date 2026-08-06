@@ -170,14 +170,22 @@ assert.doesNotMatch(
   "a refresh must perform a real microphone check instead of trusting a stored hint"
 );
 assert.ok(
-  voiceChoiceSource.indexOf("await navigator.mediaDevices.getUserMedia")
+  voiceChoiceSource.indexOf("navigator.mediaDevices.getUserMedia")
+    < voiceChoiceSource.indexOf("voiceGuidance.unlockNeuralAudio"),
+  "the microphone permission request should be issued before unlocking audio output"
+);
+assert.ok(
+  voiceChoiceSource.indexOf("await microphoneRequest")
     < voiceChoiceSource.indexOf("await readMicrophonePermissionState(navigator)"),
   "the browser permission request should start before any awaited permission query"
 );
-assert.match(
-  voiceChoiceSource,
-  /shouldDeferMicrophonePreflightToSpeechRecognition\(error,[\s\S]*?canUseSafariSpeechPermission && voiceGuidance\.canListen[\s\S]*?finishVoiceModeChoice\(true\);\s*return/,
-  "an inconclusive Safari preflight should continue to Safari's actual speech permission request"
+const microphoneFailureBranch = voiceChoiceSource.slice(
+  voiceChoiceSource.lastIndexOf("  } catch (error) {")
+);
+assert.doesNotMatch(
+  microphoneFailureBranch,
+  /finishVoiceModeChoice\(true\)/,
+  "a failed microphone request must never enable hands-free mode"
 );
 assert.doesNotMatch(
   voiceChoiceSource,

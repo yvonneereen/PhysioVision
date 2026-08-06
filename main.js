@@ -40,9 +40,8 @@ import {
   parseRecoveryStatus,
   describeMicrophoneAccessFailure,
   readMicrophonePermissionState,
-  shouldDeferMicrophonePreflightToSpeechRecognition,
   voiceGuidance,
-} from "./voice-guidance.js?v=18";
+} from "./voice-guidance.js?v=19";
 import { isWellnessEligible } from "./wellness-screening.js";
 import {
   PRACTICE_VIEWS,
@@ -400,10 +399,6 @@ function ensureVoiceModeChosen() {
 async function requestHandsFreeMicrophone() {
   if (!voiceGuidance.canSpeak || !voiceGuidance.canListen) return;
 
-  // Unlock the generated-audio output during the user's click. Safari may
-  // block audio that is first created only after the backend request returns.
-  void voiceGuidance.unlockNeuralAudio();
-
   voiceSetupHandsFree.disabled = true;
   voiceSetupButtons.disabled = true;
   voiceSetupRetry.disabled = true;
@@ -415,15 +410,22 @@ async function requestHandsFreeMicrophone() {
       throw new Error("Microphone preflight is unavailable in this browser.");
     }
 
-    // Start the real browser permission request immediately inside the user's
-    // click. In Safari, awaiting another API first can lose the transient user
-    // activation and prevent the native microphone prompt from appearing.
+    // This must be the first browser media request made by the selection click.
+    // In Safari, creating or resuming an audio-output context first can consume
+    // or disturb the user activation that getUserMedia needs for its native
+    // permission prompt.
+    const microphoneRequest = navigator.mediaDevices.getUserMedia({
+      audio: true,
+    });
+
+    // Start the output unlock only after the microphone request has already
+    // been issued, while the same user activation is still available.
+    void voiceGuidance.unlockNeuralAudio();
+
     // Never replace this check with a stored permission hint: a stored hint can
     // survive a refresh even when the browser or operating system can no longer
     // provide microphone access.
-    const permissionStream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-    });
+    const permissionStream = await microphoneRequest;
     permissionStream.getTracks().forEach((track) => track.stop());
     voiceSetupStatus.textContent = "Preparing consistent voice guidance…";
     // Safari can keep speaker output in its quiet microphone-capture mode for
@@ -437,28 +439,10 @@ async function requestHandsFreeMicrophone() {
     finishVoiceModeChoice(true);
   } catch (error) {
     const permissionState = await readMicrophonePermissionState(navigator);
-    const canUseSafariSpeechPermission = Boolean(
-      navigator.mediaDevices?.getUserMedia
-    ) && shouldDeferMicrophonePreflightToSpeechRecognition(error, {
-      userAgent: navigator.userAgent,
-      permissionState,
-    });
-
-    // Some Safari releases reject the getUserMedia preflight with an
-    // unclassified error even while the website permission is still "Ask".
-    // In that one case, let Safari's actual speech-recognition request ask for
-    // access after the first spoken question. Known denial, missing-device and
-    // busy-device errors remain visible here and never bypass this check.
-    if (canUseSafariSpeechPermission && voiceGuidance.canListen) {
-      console.warn(
-        "Safari microphone preflight was inconclusive; deferring permission "
-          + "to speech recognition.",
-        error
-      );
-      finishVoiceModeChoice(true);
-      return;
-    }
-
+    // Never close the setup dialog or claim hands-free mode is active unless
+    // getUserMedia actually returned a live microphone stream. Safari can
+    // otherwise fail without showing a prompt and leave the user at a question
+    // that is not listening.
     voiceSetupHandsFree.disabled = false;
     voiceSetupButtons.disabled = false;
     voiceSetupRetry.disabled = false;

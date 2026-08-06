@@ -10,7 +10,6 @@ import {
   prepareGentleSpeech,
   readMicrophonePermissionState,
   selectGentleVoice,
-  shouldDeferMicrophonePreflightToSpeechRecognition,
   VoiceGuidance,
 } from "../voice-guidance.js";
 
@@ -47,43 +46,6 @@ assert.match(
   describeMicrophoneAccessFailure({ name: "NotFoundError" }),
   /No microphone was found/,
   "a missing input device should not be misreported as permission denial"
-);
-
-const safariUserAgent = "Mozilla/5.0 Version/18.0 Safari/605.1.15";
-assert.equal(
-  shouldDeferMicrophonePreflightToSpeechRecognition(
-    { name: "UnknownError" },
-    { userAgent: safariUserAgent, permissionState: "unknown" }
-  ),
-  true,
-  "Safari should let its real speech-recognition request handle an inconclusive preflight"
-);
-assert.equal(
-  shouldDeferMicrophonePreflightToSpeechRecognition(
-    { name: "NotAllowedError" },
-    { userAgent: safariUserAgent, permissionState: "prompt" }
-  ),
-  false,
-  "an explicit Safari permission denial must remain blocked"
-);
-assert.equal(
-  shouldDeferMicrophonePreflightToSpeechRecognition(
-    { name: "NotFoundError" },
-    { userAgent: safariUserAgent, permissionState: "unknown" }
-  ),
-  false,
-  "a missing microphone must not be treated as an inconclusive Safari error"
-);
-assert.equal(
-  shouldDeferMicrophonePreflightToSpeechRecognition(
-    { name: "UnknownError" },
-    {
-      userAgent: "Mozilla/5.0 Chrome/128.0 Safari/537.36",
-      permissionState: "unknown",
-    }
-  ),
-  false,
-  "the Safari workaround must not affect other browsers"
 );
 
 assert.equal(parsePainLevel("My pain is 7 out of 10"), 7);

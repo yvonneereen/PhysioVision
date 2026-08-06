@@ -1621,7 +1621,6 @@ class ClinicianTriageClaimView(APIView):
         with transaction.atomic():
             patient = (
                 PatientProfile.objects.select_for_update()
-                .select_related("user", "primary_clinician__user")
                 .filter(pk=patient_id)
                 .first()
             )

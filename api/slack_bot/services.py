@@ -536,7 +536,8 @@ def find_patient_by_name(name_query, clinician=None):
     own patients are searched — so a linked clinician can't reach another's."""
     from api.core.models import PatientProfile
 
-    parts = name_query.strip().split()
+    normalized_query = " ".join(name_query.casefold().strip().split())
+    parts = normalized_query.split()
     if not parts:
         return None
     name_filter = Q()
@@ -549,6 +550,13 @@ def find_patient_by_name(name_query, clinician=None):
     )
     if clinician is not None:
         qs = qs.filter(primary_clinician=clinician)
+    # Prefer an exact full-name match. This matters for short or numbered demo
+    # names such as "test 2" when the same roster also contains "test test".
+    candidates = list(qs)
+    for patient in candidates:
+        full_name = " ".join(patient.user.get_full_name().casefold().split())
+        if full_name == normalized_query:
+            return patient
     return qs.filter(name_filter).first()
 
 

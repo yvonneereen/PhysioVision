@@ -58,7 +58,7 @@ def _plain_blocks(blocks):
 
 def _name_after(text, phrase):
     match = re.search(
-        rf"\b{phrase}\b\s+(?:for\s+|to\s+)?([a-z][a-z .'-]*)",
+        rf"\b{phrase}\b\s+(?:for\s+|to\s+)?([a-z0-9][a-z0-9 .'-]*)",
         text,
         re.IGNORECASE,
     )
@@ -78,7 +78,7 @@ def _patient_or_reply(services, clinician, name):
 
 def _general_name(text):
     match = re.search(
-        r"(?:for|show|book|about)\s+([a-z .'-]+?)"
+        r"(?:for|show|book|about)\s+([a-z0-9 .'-]+?)"
         r"(?:\s+(?:progress|note|summary|message|on|at|tomorrow|today|next|mon|tue|wed|thu|fri|sat|sun)|\s*$)",
         text,
         re.IGNORECASE,
@@ -203,7 +203,7 @@ def dispatch_clinician_command(user, message):
         )
 
     if re.search(r"\bassign\b", text):
-        match = re.search(r"assign\s+(.+?)\s+to\s+([a-z][a-z .'-]*)$", text)
+        match = re.search(r"assign\s+(.+?)\s+to\s+([a-z0-9][a-z0-9 .'-]*)$", text)
         if not match:
             return response("Use: assign [exercise] to [patient]", "assign")
         patient, result, error = services.assign_exercise(
@@ -230,8 +230,13 @@ def dispatch_clinician_command(user, message):
             changed=bool(created),
         )
 
-    if "build" in text and "plan" in text:
-        name = _name_after(text, r"build(?:\s+a)?\s+plan")
+    if re.search(r"\b(build|create|draft|generate)\b.*\bplan\b", text):
+        name_match = re.search(
+            r"(?:build|create|draft|generate)(?:\s+a)?\s+plan\s+(?:for\s+)?(.+?)"
+            r"(?=\s+[234]\s*days?\b|\s+(?:with\s+(?:a\s+)?band|no\s+equipment|no\s+kit)\b|$)",
+            text,
+        )
+        name = name_match.group(1).strip() if name_match else None
         days_match = re.search(r"([234])\s*days?", text)
         equipment = (
             "chair_band" if "band" in text

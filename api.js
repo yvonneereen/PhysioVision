@@ -268,14 +268,6 @@ export async function getClinicianPatients() {
   return request("GET", "/auth/clinician/patients/");
 }
 
-export async function requestSlackLinkCode() {
-  return request("POST", "/auth/slack/link-code/", {});
-}
-
-export async function disconnectSlack() {
-  return request("DELETE", "/auth/slack/link-code/");
-}
-
 // ── Sessions ──────────────────────────────────────────────────
 
 export async function postSession(session) {

@@ -152,3 +152,40 @@ class ClinicianAssistantWebsiteTests(APITestCase):
             days_per_week=4,
             equipment="chair_band",
         )
+
+    @patch("api.slack_bot.services.build_plan_draft_blocks")
+    @patch("api.slack_bot.services.build_plan_draft")
+    def test_create_plan_alias_preserves_numbered_patient_name(self, build_plan, build_blocks):
+        numbered_user = User.objects.create_user(
+            username="test2@example.com",
+            email="test2@example.com",
+            password="test-password",
+            role=UserRole.PATIENT,
+            first_name="test",
+            last_name="2",
+        )
+        numbered = PatientProfile.objects.create(
+            user=numbered_user,
+            primary_clinician=self.clinician,
+        )
+        draft = SimpleNamespace(
+            patient=numbered,
+            plan={"days": [], "constraints": {"days_per_week": 3}},
+            preferences={"days_per_week": 3, "dose": {}},
+        )
+        build_plan.return_value = (numbered, draft, None)
+        build_blocks.return_value = [{
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "*Draft programme — test 2*"},
+        }]
+
+        response = self.ask("create a plan for test 2")
+
+        self.assertEqual(response.data["command"], "build_plan")
+        self.assertEqual(response.data["data"]["patient_name"], "test 2")
+        build_plan.assert_called_once_with(
+            self.clinician,
+            "test 2",
+            days_per_week=3,
+            equipment="chair",
+        )

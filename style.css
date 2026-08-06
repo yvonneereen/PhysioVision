@@ -6606,7 +6606,9 @@ details.metrics summary {
 .triage-meta { display: flex; flex-wrap: wrap; gap: 6px; margin: 7px 0; }
 .triage-meta span { padding: 4px 7px; border-radius: 7px; color: var(--muted); background: var(--paper); font-size: .78rem; }
 .triage-safety-note { margin: 14px 2px 0; color: var(--muted); font-size: .82rem; }
-.triage-card-error { flex-basis: 100%; color: var(--coral-dark) !important; font-size: .82rem; }
+.triage-card-actions { display: flex; flex: 0 0 auto; align-items: flex-end; flex-direction: column; gap: 7px; }
+.triage-card-error { max-width: 230px; margin: 0 !important; color: var(--coral-dark) !important; font-size: .82rem; text-align: right; }
+.triage-card-error[hidden] { display: none; }
 .triage-empty { padding: 42px 20px; border: 1px dashed var(--line); border-radius: 14px; text-align: center; color: var(--muted); }
 .triage-empty span { display: block; margin-bottom: 7px; color: var(--green); font-size: 1.6rem; }
 .triage-empty strong { display: block; color: var(--ink); }
@@ -6615,7 +6617,9 @@ details.metrics summary {
 @media (max-width: 780px) {
   .clinical-ai-help { grid-template-columns: 1fr; }
   .triage-intro, .triage-card { align-items: stretch; flex-direction: column; }
+  .triage-card-actions { align-items: flex-start; }
   .triage-card .button { align-self: flex-start; }
+  .triage-card-error { max-width: none; text-align: left; }
   .clinical-plan-row { grid-template-columns: 1fr 1fr; }
   .clinical-plan-row > :last-child { grid-column: 1 / -1; }
   .clinical-plan-row-head { display: none; }
@@ -6833,27 +6837,6 @@ details.metrics summary {
 
 .clinician-profile strong { font-size: 1rem; }
 .clinician-profile span { color: rgba(255,255,255,.5); font-size: 1rem; }
-
-.slack-connect {
-  margin-top: 12px;
-}
-
-.slack-connect-status {
-  margin: 8px 0 0;
-  color: rgba(255,255,255,.6);
-  font-size: 1rem;
-  line-height: 1.5;
-}
-
-.slack-connect-status code {
-  display: inline-block;
-  margin-top: 2px;
-  padding: 2px 6px;
-  background: rgba(255,255,255,.1);
-  border-radius: 4px;
-  color: #fff;
-  font-size: 1rem;
-}
 
 .therapist-content {
   min-width: 0;

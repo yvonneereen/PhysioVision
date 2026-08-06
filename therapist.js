@@ -3,7 +3,6 @@ import {
   getExercises, getPrescriptions, createPrescription,
   getConsultations, confirmConsultation, cancelConsultation, completeConsultation,
   getPatientSessions, getPatientPainCheckins,
-  requestSlackLinkCode, disconnectSlack,
   getCareMessages, sendCareMessage, getCareMessageThreads,
   sendAgentMessage,
   getTriageQueue, claimTriagePatient,
@@ -547,6 +546,9 @@ function renderTriage() {
     return;
   }
   list.innerHTML = state.triage.map(patient => {
+    const profileLabel = value => String(value || "")
+      .replaceAll("_", " ")
+      .replace(/\b\w/g, letter => letter.toUpperCase());
     const goal = patient.custom_goal || goalLabel(patient.goal) || "Not provided";
     const requested = patient.requested_at
       ? new Date(patient.requested_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
@@ -559,14 +561,17 @@ function renderTriage() {
             <div class="triage-card-title"><strong>${escapeHtml(patient.name)}</strong><span>Awaiting clinician</span></div>
             <p>Goal: ${escapeHtml(goal)}</p>
             <div class="triage-meta">
-              ${patient.mobility_status ? `<span>Mobility: ${escapeHtml(patient.mobility_status)}</span>` : ""}
-              ${patient.activity_level ? `<span>Activity: ${escapeHtml(patient.activity_level)}</span>` : ""}
-              ${patient.focus_side ? `<span>Focus: ${escapeHtml(patient.focus_side)}</span>` : ""}
+              ${patient.mobility_status ? `<span>Mobility: ${escapeHtml(profileLabel(patient.mobility_status))}</span>` : ""}
+              ${patient.activity_level ? `<span>Activity: ${escapeHtml(profileLabel(patient.activity_level))}</span>` : ""}
+              ${patient.focus_side ? `<span>Focus: ${escapeHtml(profileLabel(patient.focus_side))}</span>` : ""}
             </div>
             <small>Requested ${requested}</small>
           </div>
         </div>
-        <button class="button button-coral button-small" type="button" data-triage-claim="${patient.id}">Claim patient</button>
+        <div class="triage-card-actions">
+          <button class="button button-coral button-small" type="button" data-triage-claim="${patient.id}">Claim patient</button>
+          <p class="triage-card-error" data-triage-error hidden></p>
+        </div>
       </article>`;
   }).join("");
 }
@@ -585,6 +590,11 @@ async function loadTriage() {
 
 async function claimTriageRequest(button) {
   const patientId = button.getAttribute("data-triage-claim");
+  const errorMessage = button.closest(".triage-card")?.querySelector("[data-triage-error]");
+  if (errorMessage) {
+    errorMessage.hidden = true;
+    errorMessage.textContent = "";
+  }
   button.disabled = true;
   button.textContent = "Claiming…";
   try {
@@ -597,10 +607,10 @@ async function claimTriageRequest(button) {
   } catch (error) {
     button.disabled = false;
     button.textContent = "Claim patient";
-    button.closest(".triage-card")?.insertAdjacentHTML(
-      "beforeend",
-      `<p class="triage-card-error">${escapeHtml(error.message || "Could not claim this patient.")}</p>`,
-    );
+    if (errorMessage) {
+      errorMessage.textContent = error.message || "Could not claim this patient.";
+      errorMessage.hidden = false;
+    }
   }
 }
 
@@ -894,55 +904,6 @@ function renderClinicianInfo(me) {
   if (floatingAiLauncher) floatingAiLauncher.hidden = true;
   if (floatingAiPanel) floatingAiPanel.hidden = true;
 
-  renderSlackState(Boolean(me.profile?.slack_linked));
-}
-
-function renderSlackState(linked) {
-  const btn    = document.getElementById("slack-connect-btn");
-  const status = document.getElementById("slack-connect-status");
-  if (!btn) return;
-  btn.disabled = false;
-  btn.dataset.linked = linked ? "true" : "false";
-  btn.textContent = linked ? "Disconnect Slack" : "Connect Slack";
-  if (status) status.textContent = linked ? "✓ Your Slack account is linked." : "";
-}
-
-async function connectSlack() {
-  const btn    = document.getElementById("slack-connect-btn");
-  const status = document.getElementById("slack-connect-status");
-  if (!status) return;
-
-  status.textContent = "Generating code…";
-  if (btn) btn.disabled = true;
-  try {
-    const { code, workspace_invite_url } = await requestSlackLinkCode();
-    const joinStep = workspace_invite_url
-      ? `<strong>1.</strong> Not in the Slack workspace yet? `
-        + `<a href="${workspace_invite_url}" target="_blank" rel="noreferrer">Join here ↗</a><br>`
-        + `<strong>2.</strong> `
-      : "";
-    status.innerHTML =
-      `${joinStep}In Slack, send:<br><code>@Physio Assistant link ${code}</code><br>` +
-      `<small>Code expires in 10 minutes.</small>`;
-  } catch (err) {
-    status.textContent = err.message || "Could not generate a code.";
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-async function disconnectSlackAccount() {
-  const btn    = document.getElementById("slack-connect-btn");
-  const status = document.getElementById("slack-connect-status");
-  if (btn) btn.disabled = true;
-  if (status) status.textContent = "Disconnecting…";
-  try {
-    await disconnectSlack();
-    renderSlackState(false);
-  } catch (err) {
-    if (btn) btn.disabled = false;
-    if (status) status.textContent = err.message || "Could not disconnect Slack.";
-  }
 }
 
 function setLoading(on) {
@@ -994,13 +955,6 @@ async function loadDashboard() {
 document.addEventListener("click", (e) => {
   const tabBtn = e.target.closest("[data-tab]");
   if (tabBtn) { switchTab(tabBtn.getAttribute("data-tab")); return; }
-
-  const slackBtn = e.target.closest("#slack-connect-btn");
-  if (slackBtn) {
-    if (slackBtn.dataset.linked === "true") disconnectSlackAccount();
-    else connectSlack();
-    return;
-  }
 
   if (e.target.closest("#messaging-new")) {
     showNewConversationPicker();

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   describeMicrophoneAccessFailure,
+  isSafariBrowser,
   parseConfirmationResponse,
   parsePainLevel,
   parsePainSafetyResponse,
@@ -18,6 +19,14 @@ assert.equal(
     permissions: { query: async () => ({ state: "denied" }) },
   }),
   "denied"
+);
+assert.equal(
+  isSafariBrowser("Mozilla/5.0 Version/18.0 Safari/605.1.15"),
+  true
+);
+assert.equal(
+  isSafariBrowser("Mozilla/5.0 Chrome/128.0 Safari/537.36"),
+  false
 );
 assert.equal(
   await readMicrophonePermissionState({
@@ -55,8 +64,8 @@ assert.match(
       permissionState: "unknown",
     }
   ),
-  /Safari is set to ask, but it could not open the microphone permission prompt/,
-  "Safari failures without a denial signal should explain the no-prompt recovery path"
+  /can remain set to Ask/,
+  "Safari failures without a denial signal should preserve the normal Ask flow"
 );
 
 assert.equal(parsePainLevel("My pain is 7 out of 10"), 7);
@@ -455,6 +464,10 @@ class MockRecognition {
     });
   }
 
+  emitAudioStart() {
+    this.listeners.audiostart?.();
+  }
+
   emitInterimResult(transcript) {
     const result = [{ transcript }];
     result.isFinal = false;
@@ -472,6 +485,28 @@ const listeningWindow = {
   SpeechRecognition: MockRecognition,
 };
 const listeningGuidance = new VoiceGuidance(listeningWindow);
+const microphoneCheck = listeningGuidance.verifyListeningAccess({
+  timeoutMs: 50,
+});
+const microphoneCheckRecognition = activeRecognitionInstance;
+microphoneCheckRecognition.emitAudioStart();
+assert.equal(await microphoneCheck, true);
+assert.equal(
+  microphoneCheckRecognition.abortCalled,
+  true,
+  "the Safari readiness check should release the microphone immediately"
+);
+
+const deniedMicrophoneCheck = listeningGuidance.verifyListeningAccess({
+  timeoutMs: 50,
+});
+activeRecognitionInstance.emitError("not-allowed");
+await assert.rejects(
+  deniedMicrophoneCheck,
+  { name: "NotAllowedError" },
+  "a rejected Safari prompt should remain a real permission failure"
+);
+
 let deliveredTranscript = "";
 let recognitionAtDelivery = undefined;
 assert.equal(

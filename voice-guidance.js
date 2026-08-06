@@ -118,7 +118,7 @@ function normalizeSpeech(transcript) {
     .replace(/\s+/g, " ");
 }
 
-function isSafariBrowser(userAgent) {
+export function isSafariBrowser(userAgent) {
   const value = String(userAgent ?? "");
   return /safari/i.test(value)
     && !/(chrome|chromium|crios|android|edg|opr|firefox|fxios)/i.test(value);
@@ -134,7 +134,7 @@ export async function readMicrophonePermissionState(browserNavigator) {
       : "unknown";
   } catch (_) {
     // Safari versions that do not expose microphone through Permissions API
-    // should still continue to the real getUserMedia request.
+    // should still continue to the browser's real audio-capture request.
     return "unknown";
   }
 }
@@ -150,9 +150,9 @@ export function describeMicrophoneAccessFailure(error, {
 
   if (permissionBlocked && isSafariBrowser(userAgent)) {
     return (
-      "Safari did not show a permission prompt because microphone access is "
-      + "blocked. Open Safari > Settings > Websites > Microphone, set this "
-      + "website to Allow, then select Try microphone again. If needed, also "
+      "Safari blocked microphone access for this website. Open Safari > "
+      + "Settings > Websites > Microphone, change this website from Deny to "
+      + "Ask or Allow, then select Try microphone again. If needed, also "
       + "turn on Safari in System Settings > Privacy & Security > Microphone."
     );
   }
@@ -176,11 +176,10 @@ export function describeMicrophoneAccessFailure(error, {
   }
   if (isSafariBrowser(userAgent)) {
     return (
-      "Safari is set to ask, but it could not open the microphone permission "
-      + "prompt. Keep this tab active and close any other tab or application "
-      + "using the microphone. Reload this tab, then select Use hands-free "
-      + "voice again. If Safari still does not prompt, change this website "
-      + "from Ask to Allow in Safari > Settings > Websites > Microphone."
+      "Safari could not start voice input. Keep this tab active and select "
+      + "Try microphone again; the website can remain set to Ask, and Safari "
+      + "should open its permission prompt. If it still fails, close any other "
+      + "tab or application using the microphone and reload this tab."
     );
   }
   return (
@@ -689,6 +688,108 @@ export class VoiceGuidance {
     } catch (_) {
       return false;
     }
+  }
+
+  async verifyListeningAccess({ timeoutMs = 20000 } = {}) {
+    if (!this.canListen) {
+      const error = new Error(
+        "Speech recognition is unavailable in this browser."
+      );
+      error.name = "NotSupportedError";
+      throw error;
+    }
+
+    // Safari has a dedicated SpeechRecognition permission flow. Checking the
+    // API that hands-free mode actually uses avoids rejecting a valid `Ask`
+    // setting because a separate getUserMedia preflight failed first.
+    this.listeningGeneration += 1;
+    this.activeRecognition?.abort();
+    this.cancelSpokenOutput();
+
+    const recognition = new this.Recognition();
+    recognition.lang = getSpeechLocale();
+    recognition.interimResults = false;
+    recognition.continuous = false;
+    const schedule = this.window?.setTimeout?.bind(this.window)
+      ?? globalThis.setTimeout;
+    const unschedule = this.window?.clearTimeout?.bind(this.window)
+      ?? globalThis.clearTimeout;
+    this.activeRecognition = recognition;
+
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let timeout = null;
+
+      const cleanup = () => {
+        if (timeout !== null) unschedule(timeout);
+        if (this.activeRecognition === recognition) {
+          this.activeRecognition = null;
+        }
+      };
+      const succeed = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        try {
+          recognition.abort();
+        } catch (_) {
+          // The readiness check may already have stopped by itself.
+        }
+        resolve(true);
+      };
+      const fail = (name, message) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        try {
+          recognition.abort();
+        } catch (_) {
+          // The failed recognizer may already be inactive.
+        }
+        const error = new Error(message);
+        error.name = name;
+        reject(error);
+      };
+
+      // `audiostart` is the Web Speech signal that the browser has actually
+      // begun capturing microphone audio, not merely created a recognizer.
+      recognition.addEventListener("audiostart", succeed);
+      recognition.addEventListener("error", (event) => {
+        const errorName = event?.error === "not-allowed"
+          ? "NotAllowedError"
+          : event?.error === "audio-capture"
+            ? "NotReadableError"
+            : event?.error === "service-not-allowed"
+              ? "NotSupportedError"
+              : "UnknownError";
+        fail(
+          errorName,
+          `Speech recognition could not capture audio (${event?.error ?? "unknown"}).`
+        );
+      });
+      recognition.addEventListener("end", () => {
+        fail(
+          "UnknownError",
+          "Speech recognition ended before microphone audio started."
+        );
+      });
+
+      timeout = schedule(() => {
+        fail(
+          "UnknownError",
+          "Safari did not start microphone audio before the permission check timed out."
+        );
+      }, Math.max(1000, Number(timeoutMs) || 20000));
+
+      try {
+        recognition.start();
+      } catch (error) {
+        fail(
+          String(error?.name || "UnknownError"),
+          String(error?.message || "Speech recognition could not start.")
+        );
+      }
+    });
   }
 
   preparePreferredVoice({ timeoutMs = 1200, pollMs = 50 } = {}) {

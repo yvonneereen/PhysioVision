@@ -162,7 +162,12 @@ const voiceChoiceSource = source.slice(voiceChoiceStart, voiceChoiceEnd);
 assert.match(
   voiceChoiceSource,
   /getUserMedia\(\{\s*audio:\s*true,\s*\}\)/,
-  "hands-free mode should request microphone permission while the user is near the device"
+  "non-Safari hands-free mode should request microphone permission while the user is near the device"
+);
+assert.match(
+  voiceChoiceSource,
+  /isSafariBrowser\(navigator\.userAgent\)[\s\S]*?await voiceGuidance\.verifyListeningAccess\(\)/,
+  "Safari should verify the SpeechRecognition microphone directly so Ask can open its native prompt"
 );
 assert.doesNotMatch(
   voiceChoiceSource,

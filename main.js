@@ -39,9 +39,10 @@ import {
   parsePainSafetyResponse,
   parseRecoveryStatus,
   describeMicrophoneAccessFailure,
+  isSafariBrowser,
   readMicrophonePermissionState,
   voiceGuidance,
-} from "./voice-guidance.js?v=22";
+} from "./voice-guidance.js?v=23";
 import { isWellnessEligible } from "./wellness-screening.js";
 import {
   PRACTICE_VIEWS,
@@ -406,28 +407,36 @@ async function requestHandsFreeMicrophone() {
   voiceSetupStatus.textContent = "Checking microphone permission…";
 
   try {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      throw new Error("Microphone preflight is unavailable in this browser.");
+    if (isSafariBrowser(navigator.userAgent)) {
+      voiceSetupStatus.textContent =
+        "Waiting for Safari to confirm microphone access…";
+      // WebKit manages SpeechRecognition permission separately. Starting a
+      // short readiness check from this click opens Safari's native prompt
+      // while the site remains set to Ask and verifies the exact input API
+      // that hands-free questions will use.
+      await voiceGuidance.verifyListeningAccess();
+    } else {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Microphone preflight is unavailable in this browser.");
+      }
+
+      // Other browsers share this permission with their speech recognizer.
+      // Keep the request directly inside the selection click so their native
+      // prompt retains the required user activation.
+      const microphoneRequest = navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
+
+      // Never replace this check with a stored permission hint: a stored hint
+      // can survive a refresh even when the browser or operating system can no
+      // longer provide microphone access.
+      const permissionStream = await microphoneRequest;
+      permissionStream.getTracks().forEach((track) => track.stop());
     }
 
-    // This must be the first browser media request made by the selection click.
-    // In Safari, creating or resuming an audio-output context first can consume
-    // or disturb the user activation that getUserMedia needs for its native
-    // permission prompt.
-    const microphoneRequest = navigator.mediaDevices.getUserMedia({
-      audio: true,
-    });
-
-    // Never replace this check with a stored permission hint: a stored hint can
-    // survive a refresh even when the browser or operating system can no longer
-    // provide microphone access.
-    const permissionStream = await microphoneRequest;
-
-    // Wait for Safari's native permission decision before touching its audio
-    // output session. Starting an AudioContext while getUserMedia is pending
-    // can prevent Safari from displaying the microphone prompt at all.
+    // Do not touch the audio-output session until the browser has completed
+    // its microphone decision; WebKit can otherwise lose the native prompt.
     await voiceGuidance.unlockNeuralAudio();
-    permissionStream.getTracks().forEach((track) => track.stop());
     voiceSetupStatus.textContent = "Preparing consistent voice guidance…";
     // Safari can keep speaker output in its quiet microphone-capture mode for
     // a moment after the permission stream stops. Let that audio session settle
@@ -444,10 +453,10 @@ async function requestHandsFreeMicrophone() {
       message: error?.message,
     });
     const permissionState = await readMicrophonePermissionState(navigator);
-    // Never close the setup dialog or claim hands-free mode is active unless
-    // getUserMedia actually returned a live microphone stream. Safari can
-    // otherwise fail without showing a prompt and leave the user at a question
-    // that is not listening.
+    // Never claim hands-free mode is active unless the browser confirmed real
+    // microphone capture. Safari's readiness check waits for `audiostart` so a
+    // failed or dismissed prompt cannot leave the user at a question that is
+    // not listening.
     voiceSetupHandsFree.disabled = false;
     voiceSetupButtons.disabled = false;
     voiceSetupRetry.disabled = false;

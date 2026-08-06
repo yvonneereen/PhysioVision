@@ -1443,6 +1443,47 @@ class PatientPathwayChoiceViewTests(APITestCase):
         )
         self.assertEqual(user.patient_profile.care_path, CarePath.WELLNESS)
 
+    @patch("api.slack_bot.services.post_self_referral_to_triage")
+    def test_wellness_self_referral_stays_active_until_claimed(self, post_triage):
+        user = self.make_patient("pending-physio@example.com")
+        profile = user.patient_profile
+        profile.pathway_choice = PatientPathwayChoice.WELLNESS
+        profile.pathway_selected_at = timezone.now()
+        profile.care_path = CarePath.WELLNESS
+        profile.low_risk_acknowledged = True
+        profile.wellness_screening_status = WellnessScreeningStatus.ELIGIBLE
+        profile.wellness_plan = {"summary": "Keep this plan active"}
+        profile.wellness_plan_accepted_at = timezone.now()
+        profile.save()
+        self.client.force_authenticate(user)
+
+        response = self.client.post(
+            self.endpoint,
+            {"pathway": PatientPathwayChoice.PHYSIOTHERAPIST},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        profile.refresh_from_db()
+        self.assertEqual(profile.pathway_choice, PatientPathwayChoice.WELLNESS)
+        self.assertEqual(profile.care_path, CarePath.WELLNESS)
+        self.assertTrue(profile.low_risk_acknowledged)
+        self.assertEqual(profile.wellness_plan["summary"], "Keep this plan active")
+        self.assertIsNotNone(profile.wellness_plan_accepted_at)
+        self.assertIsNotNone(profile.physiotherapist_requested_at)
+        self.assertIsNotNone(response.data["physiotherapist_requested_at"])
+        post_triage.assert_called_once_with(profile)
+
+        # Retrying an already-recorded request is idempotent and must not post
+        # a duplicate triage alert.
+        second = self.client.post(
+            self.endpoint,
+            {"pathway": PatientPathwayChoice.PHYSIOTHERAPIST},
+            format="json",
+        )
+        self.assertEqual(second.status_code, 200)
+        post_triage.assert_called_once()
+
     def test_selected_pathway_cannot_be_switched_by_patient(self):
         user = self.make_patient()
         user.patient_profile.pathway_choice = PatientPathwayChoice.PHYSIOTHERAPIST

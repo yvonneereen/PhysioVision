@@ -5,6 +5,7 @@ import {
   findUpcomingConsultation,
   isClinicianGuidedProfile,
   isCurrentPrescription,
+  isPhysiotherapistRequestPending,
   shouldShowPhysiotherapistRequest,
 } from "../patient-dashboard-state.js";
 
@@ -126,6 +127,32 @@ assert.equal(
     wellnessScreeningStatus: "eligible",
   }),
   true,
+);
+
+assert.equal(
+  isPhysiotherapistRequestPending({
+    pathwayChoice: "wellness",
+    physiotherapistRequestedAt: "2026-08-06T09:30:00Z",
+  }),
+  true,
+  "a pending request must not make a wellness patient clinician-guided",
+);
+
+assert.equal(
+  isClinicianGuidedProfile({
+    pathwayChoice: "wellness",
+    physiotherapistRequestedAt: "2026-08-06T09:30:00Z",
+  }),
+  false,
+);
+
+assert.equal(
+  isPhysiotherapistRequestPending({
+    pathwayChoice: "physiotherapist",
+    primaryClinician: { id: 12 },
+    physiotherapistRequestedAt: "2026-08-06T09:30:00Z",
+  }),
+  false,
 );
 
 assert.equal(

@@ -5,8 +5,8 @@ import {
   getPatientSessions, getPatientPainCheckins,
   getCareMessages, sendCareMessage, getCareMessageThreads,
   sendAgentMessage,
-  getTriageQueue, claimTriagePatient,
-} from "./api.js?v=27";
+  getTriageQueue, claimTriagePatient, declineTriagePatient,
+} from "./api.js?v=28";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = ["January", "February", "March", "April", "May", "June",
@@ -570,7 +570,10 @@ function renderTriage() {
           </div>
         </div>
         <div class="triage-card-actions">
-          <button class="button button-coral button-small" type="button" data-triage-claim="${patient.id}">Claim patient</button>
+          <div class="triage-action-buttons">
+            <button class="button button-light button-small" type="button" data-triage-decline="${patient.id}">Decline request</button>
+            <button class="button button-coral button-small" type="button" data-triage-claim="${patient.id}">Claim patient</button>
+          </div>
           <p class="triage-card-error" data-triage-error hidden></p>
         </div>
       </article>`;
@@ -610,6 +613,43 @@ async function claimTriageRequest(button) {
     button.textContent = "Claim patient";
     if (errorMessage) {
       errorMessage.textContent = error.message || "Could not claim this patient.";
+      errorMessage.hidden = false;
+    }
+  }
+}
+
+async function declineTriageRequest(button) {
+  const patientId = button.getAttribute("data-triage-decline");
+  const card = button.closest(".triage-card");
+  const patient = state.triage.find(item => String(item.id) === String(patientId));
+  const patientName = patient?.name || "this patient";
+  const nextStep = patient?.request_kind === "wellness_self_referral"
+    ? "Their existing wellness plan will remain available, and they may request support again later."
+    : "They will return to pathway selection and may request support again later.";
+  const confirmed = window.confirm(
+    `Decline the physiotherapist request from ${patientName}?\n\n` +
+    `They will not be added to your roster. ${nextStep}`
+  );
+  if (!confirmed) return;
+
+  const errorMessage = card?.querySelector("[data-triage-error]");
+  const actionButtons = [...(card?.querySelectorAll("[data-triage-claim], [data-triage-decline]") || [])];
+  if (errorMessage) {
+    errorMessage.hidden = true;
+    errorMessage.textContent = "";
+  }
+  actionButtons.forEach(action => { action.disabled = true; });
+  button.textContent = "Declining…";
+
+  try {
+    await declineTriagePatient(patientId);
+    state.triage = state.triage.filter(item => String(item.id) !== String(patientId));
+    renderTriage();
+  } catch (error) {
+    actionButtons.forEach(action => { action.disabled = false; });
+    button.textContent = "Decline request";
+    if (errorMessage) {
+      errorMessage.textContent = error.message || "Could not decline this request.";
       errorMessage.hidden = false;
     }
   }
@@ -977,6 +1017,12 @@ document.addEventListener("click", (e) => {
   const triageClaim = e.target.closest("[data-triage-claim]");
   if (triageClaim) {
     claimTriageRequest(triageClaim);
+    return;
+  }
+
+  const triageDecline = e.target.closest("[data-triage-decline]");
+  if (triageDecline) {
+    declineTriageRequest(triageDecline);
     return;
   }
 

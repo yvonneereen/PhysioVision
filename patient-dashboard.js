@@ -20,10 +20,11 @@ import {
   findUpcomingConsultation,
   isClinicianGuidedProfile,
   isCurrentPrescription,
+  isPhysiotherapistRequestPending,
   shouldShowPhysiotherapistRequest,
-} from "./patient-dashboard-state.js?v=3";
+} from "./patient-dashboard-state.js?v=4";
 import { saveProfile } from "./personalization.js?v=9";
-import { getLocale, translateText } from "./i18n.js?v=8";
+import { getLocale, translateText } from "./i18n.js?v=9";
 import { EXERCISE_MAP } from "./exercises/registry.js";
 
 const dashboard = document.getElementById("patientDashboard");
@@ -63,6 +64,8 @@ const pathwaySelfRefer = document.getElementById(
 const referPhysio = document.getElementById("patientReferPhysio");
 const referPhysioButton = document.getElementById("patientReferPhysioButton");
 const referPhysioStatus = document.getElementById("patientReferPhysioStatus");
+const referPhysioTitle = document.getElementById("patientReferPhysioTitle");
+const referPhysioCopy = document.getElementById("patientReferPhysioCopy");
 const messagesLauncher = document.getElementById("patientMessagesLauncher");
 const messagesPanel = document.getElementById("patientMessagesPanel");
 const messagesClose = document.getElementById("patientMessagesClose");
@@ -125,6 +128,7 @@ const ACTIVITY_BROWSER_LABELS = Object.freeze({
 let currentUser = null;
 let currentData = null;
 let firstExerciseId = null;
+let pendingPhysiotherapistRefresh = null;
 let primaryAction = "plan";
 let toastTimer = null;
 
@@ -280,6 +284,49 @@ function setPhysiotherapistRequestVisibility(visible) {
   referPhysio.style.display = visible ? "" : "none";
 }
 
+function setPhysiotherapistRequestButtonLabel(label, showArrow = false) {
+  if (!referPhysioButton) return;
+  referPhysioButton.replaceChildren(document.createTextNode(translateText(label)));
+  if (showArrow) {
+    const arrow = document.createElement("span");
+    arrow.setAttribute("aria-hidden", "true");
+    arrow.textContent = "→";
+    referPhysioButton.append(" ", arrow);
+  }
+}
+
+function renderPhysiotherapistRequest(profile) {
+  const pending = isPhysiotherapistRequestPending(profile);
+  const visible = pending || shouldShowPhysiotherapistRequest(profile);
+  setPhysiotherapistRequestVisibility(visible);
+  if (!visible) return;
+
+  if (pending) {
+    referPhysioTitle.textContent = translateText(
+      "Physiotherapist request pending",
+    );
+    referPhysioCopy.textContent = translateText(
+      "Your wellness plan stays active while a physiotherapist reviews your request.",
+    );
+    setPhysiotherapistRequestButtonLabel("Request pending");
+    referPhysioButton.disabled = true;
+    referPhysioStatus.textContent = translateText(
+      "Waiting for a physiotherapist to accept your request.",
+    );
+    return;
+  }
+
+  referPhysioTitle.textContent = translateText(
+    "Want a physiotherapist to guide you?",
+  );
+  referPhysioCopy.textContent = translateText(
+    "Send your recent movement and pain history to the care team. A physiotherapist will pick up your case and take over your plan.",
+  );
+  setPhysiotherapistRequestButtonLabel("Request a physiotherapist", true);
+  referPhysioButton.disabled = false;
+  referPhysioStatus.textContent = "";
+}
+
 function renderClinicianPlan(prescriptions) {
   const active = prescriptions.filter((item) => isCurrentPrescription(item));
   firstExerciseId = active[0]?.exercise ?? null;
@@ -356,9 +403,7 @@ function renderWellnessPlan(profile) {
   dashboardSide.hidden = true;
   consultationCard.hidden = true;
   demoNotice.hidden = true;
-  setPhysiotherapistRequestVisibility(
-    shouldShowPhysiotherapistRequest(profile),
-  );
+  renderPhysiotherapistRequest(profile);
   if (messagesLauncher) messagesLauncher.hidden = true;
   closeMessagesPanel();
 
@@ -849,6 +894,34 @@ async function finishPathwaySetup(profile, user = currentUser) {
   await loadDashboardData();
 }
 
+async function refreshPendingPhysiotherapistRequest() {
+  if (
+    !isPhysiotherapistRequestPending(currentUser?.profile)
+    || pendingPhysiotherapistRefresh
+  ) {
+    return;
+  }
+
+  pendingPhysiotherapistRefresh = getMe()
+    .then(async (user) => {
+      if (user?.role !== "patient") return;
+
+      if (isClinicianGuidedProfile(user.profile)) {
+        await activatePatientDashboard(user);
+        return;
+      }
+
+      currentUser = user;
+      renderPhysiotherapistRequest(user.profile);
+    })
+    .catch(() => {})
+    .finally(() => {
+      pendingPhysiotherapistRefresh = null;
+    });
+
+  await pendingPhysiotherapistRefresh;
+}
+
 // ── Messaging with the assigned physiotherapist ──────────────
 
 function setupPatientMessaging(profile) {
@@ -947,6 +1020,8 @@ function browserProfileFromApi(profile) {
     ...(currentUser?.profile ?? {}),
     carePath: profile.care_path,
     pathwayChoice: profile.pathway_choice,
+    physiotherapistRequestedAt:
+      profile.physiotherapist_requested_at ?? null,
     goal: GOAL_BROWSER_LABELS[profile.goal] ?? profile.goal,
     customGoal: profile.custom_goal ?? "",
     activity:
@@ -1154,17 +1229,20 @@ pathwaySelfRefer?.addEventListener("click", async () => {
   }
 });
 
-// Wellness patient asks to be seen by a physiotherapist. Switch to the
-// physiotherapist pathway (no clinician yet) — the backend posts their log to
-// the triage queue for the care team to claim.
+// A wellness patient can ask for physiotherapist support without losing their
+// current plan. The pathway changes only after a clinician accepts the request.
 referPhysioButton?.addEventListener("click", async () => {
+  if (isPhysiotherapistRequestPending(currentUser?.profile)) {
+    renderPhysiotherapistRequest(currentUser.profile);
+    return;
+  }
   if (!shouldShowPhysiotherapistRequest(currentUser?.profile)) {
     setPhysiotherapistRequestVisibility(false);
     return;
   }
   const confirmed = window.confirm(translateText(
-    "Request a physiotherapist? This pauses your self-guided wellness plan "
-    + "and shares your recent history with the care team.",
+    "Request a physiotherapist? Your wellness plan will stay active while "
+    + "the care team reviews your request.",
   ));
   if (!confirmed) return;
   referPhysioButton.disabled = true;
@@ -1172,7 +1250,7 @@ referPhysioButton?.addEventListener("click", async () => {
   try {
     const profile = await selectPatientPathway("physiotherapist");
     referPhysioStatus.textContent =
-      "Request sent. A physiotherapist will pick up your case soon.";
+      translateText("Waiting for a physiotherapist to accept your request.");
     await finishPathwaySetup(profile);
   } catch (error) {
     referPhysioStatus.textContent =
@@ -1224,6 +1302,11 @@ window.addEventListener("physiovision:profile-updated", (event) => {
     },
   };
   renderPlan(currentUser, currentData?.prescriptions ?? []);
+});
+
+window.addEventListener("focus", refreshPendingPhysiotherapistRequest);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refreshPendingPhysiotherapistRequest();
 });
 
 window.pvShowPatientDashboard = showDashboard;

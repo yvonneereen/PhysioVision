@@ -239,7 +239,10 @@ def _open_dashboard_button(*, primary=False):
 def _wants_therapist(patient):
     """True if the patient has opted in to seeking physiotherapist help."""
     from api.core.models import PatientPathwayChoice
-    return patient.pathway_choice == PatientPathwayChoice.PHYSIOTHERAPIST
+    return bool(
+        patient.pathway_choice == PatientPathwayChoice.PHYSIOTHERAPIST
+        or patient.physiotherapist_requested_at
+    )
 
 
 def _post_escalation_alert(escalation):

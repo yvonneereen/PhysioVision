@@ -7,6 +7,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.core import signing
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.authtoken.models import Token
@@ -943,6 +944,27 @@ class PatientPathwayChoiceView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
+        # Requesting physiotherapist support from the wellness dashboard only
+        # enters the patient into triage. Their current wellness pathway and
+        # plan remain active until a clinician accepts the request.
+        if is_self_referral:
+            is_new_request = profile.physiotherapist_requested_at is None
+            if is_new_request:
+                profile.physiotherapist_requested_at = timezone.now()
+                profile.save(update_fields=[
+                    "physiotherapist_requested_at",
+                    "updated_at",
+                ])
+
+            if is_new_request and not profile.primary_clinician_id:
+                try:
+                    from api.slack_bot.services import post_self_referral_to_triage
+                    post_self_referral_to_triage(profile)
+                except Exception:  # Slack must never block the pathway response
+                    logger.exception("Failed to post self-referral to Slack triage")
+
+            return Response(PatientProfileSerializer(profile).data)
+
         profile.pathway_choice = choice
         profile.pathway_selected_at = profile.pathway_selected_at or timezone.now()
         profile.care_path = (
@@ -1619,7 +1641,10 @@ class ClinicianTriageQueueView(APIView):
         patients = (
             PatientProfile.objects.filter(
                 primary_clinician__isnull=True,
-                pathway_choice=PatientPathwayChoice.PHYSIOTHERAPIST,
+            )
+            .filter(
+                Q(pathway_choice=PatientPathwayChoice.PHYSIOTHERAPIST)
+                | Q(physiotherapist_requested_at__isnull=False)
             )
             .select_related("user")
             .order_by("pathway_selected_at", "created_at")
@@ -1632,7 +1657,15 @@ class ClinicianTriageQueueView(APIView):
             "activity_level": patient.activity_level,
             "mobility_status": patient.mobility_status,
             "focus_side": patient.focus_side,
-            "requested_at": patient.pathway_selected_at,
+            "request_kind": (
+                "wellness_self_referral"
+                if patient.physiotherapist_requested_at
+                else "initial_pathway"
+            ),
+            "requested_at": (
+                patient.physiotherapist_requested_at
+                or patient.pathway_selected_at
+            ),
         } for patient in patients])
 
 
@@ -1665,17 +1698,35 @@ class ClinicianTriageClaimView(APIView):
                     {"detail": "This patient has already been claimed."},
                     status=status.HTTP_409_CONFLICT,
                 )
-            if patient.pathway_choice != PatientPathwayChoice.PHYSIOTHERAPIST:
+            if (
+                patient.pathway_choice != PatientPathwayChoice.PHYSIOTHERAPIST
+                and patient.physiotherapist_requested_at is None
+            ):
                 return Response(
                     {"detail": "This patient is not in the physiotherapist triage queue."},
                     status=status.HTTP_409_CONFLICT,
                 )
 
             patient.primary_clinician = request.user.clinician_profile
+            patient.pathway_choice = PatientPathwayChoice.PHYSIOTHERAPIST
+            patient.pathway_selected_at = timezone.now()
+            patient.physiotherapist_requested_at = None
             patient.care_path = CarePath.NEEDS_REVIEW
+            patient.low_risk_acknowledged = False
+            patient.wellness_plan = {}
+            patient.wellness_plan_accepted_at = None
             patient.slack_thread_ts = ""
             patient.save(update_fields=[
-                "primary_clinician", "care_path", "slack_thread_ts", "updated_at",
+                "primary_clinician",
+                "pathway_choice",
+                "pathway_selected_at",
+                "physiotherapist_requested_at",
+                "care_path",
+                "low_risk_acknowledged",
+                "wellness_plan",
+                "wellness_plan_accepted_at",
+                "slack_thread_ts",
+                "updated_at",
             ])
 
             from api.consultations.models import CareMessage, MessageSender
@@ -1722,4 +1773,67 @@ class ClinicianTriageClaimView(APIView):
                 "in_app": True,
                 "email_sent": email_sent,
             },
+        })
+
+
+class ClinicianTriageDeclineView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, patient_id):
+        if (
+            request.user.role != UserRole.CLINICIAN
+            or not hasattr(request.user, "clinician_profile")
+        ):
+            return Response(
+                {"detail": "A clinician account is required."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        with transaction.atomic():
+            patient = (
+                PatientProfile.objects.select_for_update()
+                .filter(pk=patient_id)
+                .first()
+            )
+            if not patient:
+                return Response(
+                    {"detail": "This triage request no longer exists."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            if patient.primary_clinician_id:
+                return Response(
+                    {"detail": "This patient has already been claimed."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            if (
+                patient.pathway_choice != PatientPathwayChoice.PHYSIOTHERAPIST
+                and patient.physiotherapist_requested_at is None
+            ):
+                return Response(
+                    {"detail": "This patient is not in the physiotherapist triage queue."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            was_wellness_request = patient.physiotherapist_requested_at is not None
+            patient.physiotherapist_requested_at = None
+            update_fields = ["physiotherapist_requested_at", "updated_at"]
+
+            # A wellness self-referral remains on its existing plan. An initial
+            # physiotherapy-pathway request returns to pathway selection so the
+            # patient is not trapped in a queue that no longer contains them.
+            if not was_wellness_request:
+                patient.pathway_choice = PatientPathwayChoice.UNSELECTED
+                patient.pathway_selected_at = None
+                patient.care_path = CarePath.WELLNESS
+                update_fields.extend([
+                    "pathway_choice",
+                    "pathway_selected_at",
+                    "care_path",
+                ])
+
+            patient.save(update_fields=update_fields)
+
+        return Response({
+            "id": str(patient.id),
+            "detail": "Physiotherapist request declined.",
         })

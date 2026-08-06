@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from api.consultations.models import CareMessage, MessageSender
@@ -59,6 +60,9 @@ class ClinicianTriageTests(APITestCase):
     def claim_url(self, patient):
         return f"/api/auth/clinician/triage/{patient.id}/claim/"
 
+    def decline_url(self, patient):
+        return f"/api/auth/clinician/triage/{patient.id}/decline/"
+
     def test_queue_contains_only_unassigned_physio_requests(self):
         self.client.force_authenticate(self.clinician_user)
 
@@ -68,15 +72,119 @@ class ClinicianTriageTests(APITestCase):
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]["id"], str(self.waiting.id))
         self.assertEqual(response.data[0]["name"], "Waiting Patient")
+        self.assertEqual(response.data[0]["request_kind"], "initial_pathway")
 
-    def test_patient_cannot_view_or_claim_triage(self):
+    def test_queue_contains_pending_wellness_request_without_switching_path(self):
+        self.wellness.physiotherapist_requested_at = timezone.now()
+        self.wellness.save(update_fields=["physiotherapist_requested_at"])
+        self.client.force_authenticate(self.clinician_user)
+
+        response = self.client.get(self.queue_url)
+
+        self.assertEqual(response.status_code, 200)
+        ids = {item["id"] for item in response.data}
+        self.assertEqual(ids, {str(self.waiting.id), str(self.wellness.id)})
+        queue_by_id = {item["id"]: item for item in response.data}
+        self.assertEqual(
+            queue_by_id[str(self.wellness.id)]["request_kind"],
+            "wellness_self_referral",
+        )
+        self.wellness.refresh_from_db()
+        self.assertEqual(
+            self.wellness.pathway_choice,
+            PatientPathwayChoice.WELLNESS,
+        )
+        self.assertEqual(self.wellness.care_path, CarePath.WELLNESS)
+
+    @patch("api.core.views.deliver_email")
+    def test_claim_is_the_event_that_switches_pending_wellness_patient(
+        self,
+        deliver_email,
+    ):
+        self.wellness.physiotherapist_requested_at = timezone.now()
+        self.wellness.low_risk_acknowledged = True
+        self.wellness.wellness_plan = {"summary": "Temporary wellness plan"}
+        self.wellness.wellness_plan_accepted_at = timezone.now()
+        self.wellness.save()
+        self.client.force_authenticate(self.clinician_user)
+
+        response = self.client.post(
+            self.claim_url(self.wellness),
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.wellness.refresh_from_db()
+        self.assertEqual(self.wellness.primary_clinician, self.clinician)
+        self.assertEqual(
+            self.wellness.pathway_choice,
+            PatientPathwayChoice.PHYSIOTHERAPIST,
+        )
+        self.assertEqual(self.wellness.care_path, CarePath.NEEDS_REVIEW)
+        self.assertIsNone(self.wellness.physiotherapist_requested_at)
+        self.assertFalse(self.wellness.low_risk_acknowledged)
+        self.assertEqual(self.wellness.wellness_plan, {})
+        self.assertIsNone(self.wellness.wellness_plan_accepted_at)
+
+    def test_patient_cannot_view_claim_or_decline_triage(self):
         self.client.force_authenticate(self.waiting.user)
 
         queue = self.client.get(self.queue_url)
         claim = self.client.post(self.claim_url(self.waiting), {}, format="json")
+        decline = self.client.post(self.decline_url(self.waiting), {}, format="json")
 
         self.assertEqual(queue.status_code, 403)
         self.assertEqual(claim.status_code, 403)
+        self.assertEqual(decline.status_code, 403)
+
+    def test_decline_keeps_pending_wellness_patient_on_existing_plan(self):
+        requested_at = timezone.now()
+        accepted_at = timezone.now()
+        existing_plan = {"summary": "Keep this wellness plan"}
+        self.wellness.physiotherapist_requested_at = requested_at
+        self.wellness.low_risk_acknowledged = True
+        self.wellness.wellness_plan = existing_plan
+        self.wellness.wellness_plan_accepted_at = accepted_at
+        self.wellness.save()
+        self.client.force_authenticate(self.clinician_user)
+
+        response = self.client.post(
+            self.decline_url(self.wellness),
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.wellness.refresh_from_db()
+        self.assertIsNone(self.wellness.physiotherapist_requested_at)
+        self.assertEqual(self.wellness.pathway_choice, PatientPathwayChoice.WELLNESS)
+        self.assertEqual(self.wellness.care_path, CarePath.WELLNESS)
+        self.assertTrue(self.wellness.low_risk_acknowledged)
+        self.assertEqual(self.wellness.wellness_plan, existing_plan)
+        self.assertEqual(self.wellness.wellness_plan_accepted_at, accepted_at)
+        ids = {item["id"] for item in self.client.get(self.queue_url).data}
+        self.assertNotIn(str(self.wellness.id), ids)
+
+    def test_decline_initial_physio_request_returns_to_pathway_selection(self):
+        self.client.force_authenticate(self.clinician_user)
+
+        response = self.client.post(
+            self.decline_url(self.waiting),
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.waiting.refresh_from_db()
+        self.assertIsNone(self.waiting.primary_clinician)
+        self.assertEqual(
+            self.waiting.pathway_choice,
+            PatientPathwayChoice.UNSELECTED,
+        )
+        self.assertIsNone(self.waiting.pathway_selected_at)
+        self.assertEqual(self.waiting.care_path, CarePath.WELLNESS)
+        self.assertEqual(self.client.get(self.queue_url).data, [])
 
     @patch("api.core.views.deliver_email")
     def test_claim_adds_patient_to_roster_and_notifies_them(self, deliver_email):

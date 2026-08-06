@@ -211,6 +211,7 @@ class PatientProfile(TimestampedModel):
         default=PatientPathwayChoice.UNSELECTED,
     )
     pathway_selected_at = models.DateTimeField(null=True, blank=True)
+    physiotherapist_requested_at = models.DateTimeField(null=True, blank=True)
 
     height_cm             = models.PositiveSmallIntegerField(null=True, blank=True)
     weight_kg             = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)

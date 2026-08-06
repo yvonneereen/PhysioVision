@@ -182,6 +182,7 @@ class PatientProfileSerializer(serializers.ModelSerializer):
             'emergency_contact_phone', 'emergency_contact_consent',
             'emergency_contact_verified_at', 'emergency_contact_alerts_ready',
             'pathway_choice', 'pathway_selected_at',
+            'physiotherapist_requested_at',
             'height_cm', 'weight_kg', 'medical_history', 'low_risk_acknowledged',
             'wellness_screening_status', 'wellness_screening_answers',
             'wellness_screened_at',
@@ -190,7 +191,8 @@ class PatientProfileSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'id', 'user', 'care_path', 'pathway_choice',
-            'pathway_selected_at', 'wellness_screening_status',
+            'pathway_selected_at', 'physiotherapist_requested_at',
+            'wellness_screening_status',
             'wellness_screening_answers', 'wellness_screened_at',
             'wellness_plan', 'wellness_plan_accepted_at',
             'emergency_contact_verified_at', 'emergency_contact_alerts_ready',

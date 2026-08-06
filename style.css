@@ -6607,6 +6607,7 @@ details.metrics summary {
 .triage-meta span { padding: 4px 7px; border-radius: 7px; color: var(--muted); background: var(--paper); font-size: .78rem; }
 .triage-safety-note { margin: 14px 2px 0; color: var(--muted); font-size: .82rem; }
 .triage-card-actions { display: flex; flex: 0 0 auto; align-items: flex-end; flex-direction: column; gap: 7px; }
+.triage-action-buttons { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .triage-card-error { max-width: 230px; margin: 0 !important; color: var(--coral-dark) !important; font-size: .82rem; text-align: right; }
 .triage-card-error[hidden] { display: none; }
 .triage-empty { padding: 42px 20px; border: 1px dashed var(--line); border-radius: 14px; text-align: center; color: var(--muted); }
@@ -6618,6 +6619,7 @@ details.metrics summary {
   .clinical-ai-help { grid-template-columns: 1fr; }
   .triage-intro, .triage-card { align-items: stretch; flex-direction: column; }
   .triage-card-actions { align-items: flex-start; }
+  .triage-action-buttons { justify-content: flex-start; }
   .triage-card .button { align-self: flex-start; }
   .triage-card-error { max-width: none; text-align: left; }
   .clinical-plan-row { grid-template-columns: 1fr 1fr; }

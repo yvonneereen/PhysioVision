@@ -323,6 +323,10 @@ export async function claimTriagePatient(patientId) {
   return request("POST", `/auth/clinician/triage/${patientId}/claim/`, {});
 }
 
+export async function declineTriagePatient(patientId) {
+  return request("POST", `/auth/clinician/triage/${patientId}/decline/`, {});
+}
+
 export async function getPatientSessions(patientId) {
   return request("GET", `/sessions/?patient=${patientId}`);
 }

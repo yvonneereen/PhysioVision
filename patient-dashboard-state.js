@@ -16,6 +16,13 @@ export function isClinicianGuidedProfile(profile = {}) {
   );
 }
 
+export function isPhysiotherapistRequestPending(profile = {}) {
+  const requestedAt =
+    profile.physiotherapist_requested_at
+    ?? profile.physiotherapistRequestedAt;
+  return Boolean(requestedAt) && !isClinicianGuidedProfile(profile);
+}
+
 export function shouldShowPhysiotherapistRequest(profile = {}) {
   const medicalHistory =
     profile.medical_history

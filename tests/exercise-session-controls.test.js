@@ -176,6 +176,11 @@ assert.ok(
 );
 assert.ok(
   voiceChoiceSource.indexOf("await microphoneRequest")
+    < voiceChoiceSource.indexOf("await voiceGuidance.unlockNeuralAudio"),
+  "Safari must finish its native microphone decision before audio output is initialized"
+);
+assert.ok(
+  voiceChoiceSource.indexOf("await microphoneRequest")
     < voiceChoiceSource.indexOf("await readMicrophonePermissionState(navigator)"),
   "the browser permission request should start before any awaited permission query"
 );

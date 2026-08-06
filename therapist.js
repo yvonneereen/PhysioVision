@@ -7,6 +7,7 @@ import {
   sendAgentMessage,
   getTriageQueue, claimTriagePatient, declineTriagePatient,
 } from "./api.js?v=28";
+import { excludeRosterPatientsFromTriage } from "./therapist-triage-state.js?v=1";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = ["January", "February", "March", "April", "May", "June",
@@ -684,7 +685,15 @@ async function loadTriage() {
   const list = document.getElementById("triage-list");
   if (list) list.innerHTML = `<p class="empty-state">Loading triage queue…</p>`;
   try {
-    state.triage = await getTriageQueue().then(unwrap);
+    const [triageData, patientsData] = await Promise.all([
+      getTriageQueue(),
+      getPatients().catch(() => state.patients),
+    ]);
+    state.patients = unwrap(patientsData);
+    state.triage = excludeRosterPatientsFromTriage(
+      unwrap(triageData),
+      state.patients,
+    );
     renderTriage();
   } catch (error) {
     console.error("Triage load failed:", error);
@@ -1079,7 +1088,10 @@ async function loadDashboard() {
     renderClinicianInfo(me);
     state.patients      = unwrap(patientsData);
     state.consultations = unwrap(consultData);
-    state.triage        = unwrap(triageData);
+    state.triage        = excludeRosterPatientsFromTriage(
+      unwrap(triageData),
+      state.patients,
+    );
 
     renderStats(state.patients);
     renderOverview(state.patients, state.consultations);

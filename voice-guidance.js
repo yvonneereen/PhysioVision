@@ -174,6 +174,15 @@ export function describeMicrophoneAccessFailure(error, {
       + "Close the other application, then select Try microphone again."
     );
   }
+  if (isSafariBrowser(userAgent)) {
+    return (
+      "Safari is set to ask, but it could not open the microphone permission "
+      + "prompt. Keep this tab active and close any other tab or application "
+      + "using the microphone. Reload this tab, then select Use hands-free "
+      + "voice again. If Safari still does not prompt, change this website "
+      + "from Ask to Allow in Safari > Settings > Websites > Microphone."
+    );
+  }
   return (
     "The microphone could not start. Check your browser and system microphone "
     + "settings, then select Try microphone again."

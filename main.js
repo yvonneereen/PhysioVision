@@ -41,7 +41,7 @@ import {
   describeMicrophoneAccessFailure,
   readMicrophonePermissionState,
   voiceGuidance,
-} from "./voice-guidance.js?v=21";
+} from "./voice-guidance.js?v=22";
 import { isWellnessEligible } from "./wellness-screening.js";
 import {
   PRACTICE_VIEWS,
@@ -418,14 +418,15 @@ async function requestHandsFreeMicrophone() {
       audio: true,
     });
 
-    // Start the output unlock only after the microphone request has already
-    // been issued, while the same user activation is still available.
-    void voiceGuidance.unlockNeuralAudio();
-
     // Never replace this check with a stored permission hint: a stored hint can
     // survive a refresh even when the browser or operating system can no longer
     // provide microphone access.
     const permissionStream = await microphoneRequest;
+
+    // Wait for Safari's native permission decision before touching its audio
+    // output session. Starting an AudioContext while getUserMedia is pending
+    // can prevent Safari from displaying the microphone prompt at all.
+    await voiceGuidance.unlockNeuralAudio();
     permissionStream.getTracks().forEach((track) => track.stop());
     voiceSetupStatus.textContent = "Preparing consistent voice guidance…";
     // Safari can keep speaker output in its quiet microphone-capture mode for
@@ -438,6 +439,10 @@ async function requestHandsFreeMicrophone() {
     }
     finishVoiceModeChoice(true);
   } catch (error) {
+    console.error("Hands-free microphone setup failed.", {
+      name: error?.name,
+      message: error?.message,
+    });
     const permissionState = await readMicrophonePermissionState(navigator);
     // Never close the setup dialog or claim hands-free mode is active unless
     // getUserMedia actually returned a live microphone stream. Safari can

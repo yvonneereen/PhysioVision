@@ -47,6 +47,17 @@ assert.match(
   /No microphone was found/,
   "a missing input device should not be misreported as permission denial"
 );
+assert.match(
+  describeMicrophoneAccessFailure(
+    { name: "InvalidStateError" },
+    {
+      userAgent: "Mozilla/5.0 Version/18.0 Safari/605.1.15",
+      permissionState: "unknown",
+    }
+  ),
+  /Safari is set to ask, but it could not open the microphone permission prompt/,
+  "Safari failures without a denial signal should explain the no-prompt recovery path"
+);
 
 assert.equal(parsePainLevel("My pain is 7 out of 10"), 7);
 assert.equal(parsePainLevel("I would say ten"), 10);

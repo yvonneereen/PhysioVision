@@ -40,8 +40,9 @@ import {
   parseRecoveryStatus,
   describeMicrophoneAccessFailure,
   readMicrophonePermissionState,
+  shouldDeferMicrophonePreflightToSpeechRecognition,
   voiceGuidance,
-} from "./voice-guidance.js?v=15";
+} from "./voice-guidance.js?v=16";
 import { isWellnessEligible } from "./wellness-screening.js";
 import {
   PRACTICE_VIEWS,
@@ -432,6 +433,28 @@ async function requestHandsFreeMicrophone() {
     finishVoiceModeChoice(true);
   } catch (error) {
     const permissionState = await readMicrophonePermissionState(navigator);
+    const canUseSafariSpeechPermission = Boolean(
+      navigator.mediaDevices?.getUserMedia
+    ) && shouldDeferMicrophonePreflightToSpeechRecognition(error, {
+      userAgent: navigator.userAgent,
+      permissionState,
+    });
+
+    // Some Safari releases reject the getUserMedia preflight with an
+    // unclassified error even while the website permission is still "Ask".
+    // In that one case, let Safari's actual speech-recognition request ask for
+    // access after the first spoken question. Known denial, missing-device and
+    // busy-device errors remain visible here and never bypass this check.
+    if (canUseSafariSpeechPermission && voiceGuidance.canListen) {
+      console.warn(
+        "Safari microphone preflight was inconclusive; deferring permission "
+          + "to speech recognition.",
+        error
+      );
+      finishVoiceModeChoice(true);
+      return;
+    }
+
     voiceSetupHandsFree.disabled = false;
     voiceSetupButtons.disabled = false;
     voiceSetupRetry.disabled = false;

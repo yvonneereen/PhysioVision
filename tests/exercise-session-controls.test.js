@@ -169,15 +169,20 @@ assert.doesNotMatch(
   /sessionStorage|hasConfirmedMicrophoneAccess|canReuseConfirmedAccess/,
   "a refresh must perform a real microphone check instead of trusting a stored hint"
 );
-assert.doesNotMatch(
-  voiceChoiceSource,
-  /await readMicrophonePermissionState\(navigator\)[\s\S]*?getUserMedia/,
+assert.ok(
+  voiceChoiceSource.indexOf("await navigator.mediaDevices.getUserMedia")
+    < voiceChoiceSource.indexOf("await readMicrophonePermissionState(navigator)"),
   "the browser permission request should start before any awaited permission query"
+);
+assert.match(
+  voiceChoiceSource,
+  /shouldDeferMicrophonePreflightToSpeechRecognition\(error,[\s\S]*?canUseSafariSpeechPermission && voiceGuidance\.canListen[\s\S]*?finishVoiceModeChoice\(true\);\s*return/,
+  "an inconclusive Safari preflight should continue to Safari's actual speech permission request"
 );
 assert.doesNotMatch(
   voiceChoiceSource,
-  /preflight failed; deferring permission|finishVoiceModeChoice\(true\);\s*return;\s*\}\s*voiceSetupHandsFree\.disabled = false/,
-  "a failed real microphone check must stay visible instead of silently enabling voice mode"
+  /if \(!isExplicitDenial && voiceGuidance\.canListen\)/,
+  "the Safari fallback must not bypass known denial or hardware failures"
 );
 assert.match(
   voiceChoiceSource,

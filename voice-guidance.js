@@ -90,6 +90,27 @@ function isSafariBrowser(userAgent) {
     && !/(chrome|chromium|crios|android|edg|opr|firefox|fxios)/i.test(value);
 }
 
+export function shouldDeferMicrophonePreflightToSpeechRecognition(error, {
+  userAgent = "",
+  permissionState = "unknown",
+} = {}) {
+  const errorName = String(error?.name ?? "");
+  const definitiveFailureNames = [
+    "NotAllowedError",
+    "PermissionDeniedError",
+    "SecurityError",
+    "NotFoundError",
+    "DevicesNotFoundError",
+    "NotReadableError",
+    "TrackStartError",
+    "AbortError",
+  ];
+
+  return isSafariBrowser(userAgent)
+    && permissionState !== "denied"
+    && !definitiveFailureNames.includes(errorName);
+}
+
 export async function readMicrophonePermissionState(browserNavigator) {
   try {
     const status = await browserNavigator?.permissions?.query?.({

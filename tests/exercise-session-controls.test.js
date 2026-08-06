@@ -299,6 +299,9 @@ const calibrationFlowSource = source.slice(
   calibrationFlowStart,
   calibrationFlowEnd
 );
+const pathwayAccessPosition = calibrationFlowSource.indexOf(
+  "hasPathwayAccess()"
+);
 const voiceChoicePosition = calibrationFlowSource.indexOf(
   "ensureVoiceModeChosen()"
 );
@@ -309,10 +312,26 @@ const calibrationPosition = calibrationFlowSource.indexOf(
   "startCalibrationFlow(trigger)"
 );
 assert.ok(
-  voiceChoicePosition >= 0 &&
+  pathwayAccessPosition >= 0 &&
+    voiceChoicePosition > pathwayAccessPosition &&
     preCheckPosition > voiceChoicePosition &&
     calibrationPosition > preCheckPosition,
-  "voice choice and the pre-exercise pain check should happen before calibration"
+  "pathway access, voice choice, and the pain check should be resolved before calibration"
+);
+
+const pathwayAccessSource = functionSource(
+  "hasPathwayAccess",
+  "announceExerciseInstruction"
+);
+assert.match(
+  pathwayAccessSource,
+  /practiceDecision\.reason === "active_prescription"/,
+  "camera access should use the authenticated practice decision"
+);
+assert.doesNotMatch(
+  pathwayAccessSource,
+  /isWellnessEligible|Complete the general wellness safety screen first|profile\.carePath/,
+  "camera access must not re-check a stale browser screening profile after admission"
 );
 assert.match(
   source,
@@ -577,6 +596,11 @@ assert.match(
   countdownSource,
   /Pain level confirmed\. Camera setup will begin in three seconds\. Step back so your full body is visible\./,
   "the countdown should announce what will happen before the camera permission step"
+);
+assert.match(
+  countdownSource,
+  /preferImmediate:\s*true[\s\S]*?voiceGroup:\s*PAIN_PROMPT_VOICE_GROUP/,
+  "the post-confirmation handoff should speak immediately in the same voice"
 );
 const cancelCountdownSource = functionSource(
   "cancelCameraSetupCountdown",

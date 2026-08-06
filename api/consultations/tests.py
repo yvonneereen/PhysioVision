@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.utils import timezone
 from rest_framework.test import APITestCase
@@ -10,6 +11,10 @@ from api.core.models import (
     UserRole,
 )
 from api.consultations.models import ConsultationInitiator, ConsultationStatus
+from api.consultations.drafting import (
+    ConsultationDraftUnavailable,
+    build_consultation_facts,
+)
 
 
 class PatientConsultationBookingTests(APITestCase):
@@ -154,6 +159,68 @@ class PatientConsultationBookingTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, 400)
+
+    @patch(
+        'api.consultations.views.generate_consultation_draft',
+        return_value=(
+            'My recent knee pain increased while my movement scores decreased. '
+            'I would like these recorded trends reviewed.'
+        ),
+    )
+    def test_patient_can_generate_editable_ai_draft(self, generate_draft):
+        self.client.force_authenticate(self.patient_user)
+
+        response = self.client.post(
+            '/api/consultations/draft/',
+            {'locale': 'en-SG'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['requires_review'])
+        self.assertEqual(response.data['source'], 'ai_record_summary')
+        self.assertIn('recorded trends', response.data['draft'])
+        generate_draft.assert_called_once_with(self.patient, 'en-SG')
+
+    @patch('api.consultations.views.generate_consultation_draft')
+    def test_clinician_cannot_generate_patient_draft(self, generate_draft):
+        self.client.force_authenticate(self.clinician_user)
+
+        response = self.client.post(
+            '/api/consultations/draft/',
+            {'locale': 'en-SG'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 403)
+        generate_draft.assert_not_called()
+
+    @patch(
+        'api.consultations.views.generate_consultation_draft',
+        side_effect=ConsultationDraftUnavailable('private provider detail'),
+    )
+    def test_ai_failure_keeps_manual_and_speech_options(self, _generate_draft):
+        self.client.force_authenticate(self.patient_user)
+
+        response = self.client.post(
+            '/api/consultations/draft/',
+            {'locale': 'en-SG'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIn('speak or type', response.data['detail'])
+        self.assertNotIn('private provider detail', response.data['detail'])
+
+    def test_ai_facts_are_scoped_to_the_authenticated_patient(self):
+        facts = build_consultation_facts(self.patient)
+
+        self.assertEqual(facts['patient_goal'], 'Stronger knees')
+        self.assertEqual(facts['focus_side'], 'right')
+        self.assertEqual(facts['movement_quality_trend'], 'stable')
+        self.assertEqual(facts['recent_sessions'], [])
+        self.assertEqual(facts['recent_pain_checkins'], [])
+        self.assertEqual(facts['open_review_flags'], [])
 
 
 class CareMessageTests(APITestCase):

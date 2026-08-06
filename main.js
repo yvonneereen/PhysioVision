@@ -44,7 +44,6 @@ import {
   readMicrophonePermissionState,
   voiceGuidance,
 } from "./voice-guidance.js?v=23";
-import { isWellnessEligible } from "./wellness-screening.js";
 import {
   PRACTICE_VIEWS,
   hasAuthenticatedPracticeAccount,
@@ -2440,6 +2439,12 @@ async function openCalibrationFlow(event) {
     cancelCameraSetupCountdown();
     return;
   }
+  // Resolve pathway access before asking for a pain score. The authenticated
+  // practice decision is the source of truth for screening and prescriptions,
+  // so a patient cannot finish the check-in only to be blocked afterwards by
+  // an older browser-stored profile.
+  syncPracticeAccess();
+  if (!hasPathwayAccess()) return;
   if (!(await ensureVoiceModeChosen())) return;
   if (trigger === openCalibrationPrimary && exerciseSessionActive) {
     await activateCameraGuide();
@@ -3271,35 +3276,9 @@ function hasPathwayAccess() {
     );
     return false;
   }
-  if (profile.carePath === "needs_review") {
-    statusEl.textContent = "Professional review is recommended before self-guided exercise";
-    setFeedbackBanner(
-      "tracking",
-      "A general wellness plan was not created from your screening answers"
-    );
-    voiceGuidance.speak(
-      "Please get professional guidance before starting self-guided exercise.",
-      { key: "wellness-needs-review", interrupt: true }
-    );
-    return false;
-  }
+  const usesClinicianPath = practiceDecision.reason === "active_prescription";
   if (
-    profile.carePath === "wellness" &&
-    !isWellnessEligible(profile)
-  ) {
-    statusEl.textContent = "Complete the general wellness safety screen first";
-    setFeedbackBanner(
-      "tracking",
-      "Open Create your first plan and complete the wellness questions"
-    );
-    voiceGuidance.speak(
-      "Please complete the general wellness safety questions before starting.",
-      { key: "wellness-screening-required", interrupt: true }
-    );
-    return false;
-  }
-  if (
-    profile.carePath === "clinician" &&
+    usesClinicianPath &&
     !activePrescriptions.has(engine.exercise.id)
   ) {
     statusEl.textContent = "This exercise is not in your active prescription";
@@ -3309,7 +3288,7 @@ function hasPathwayAccess() {
     );
     return false;
   }
-  if (engine.exercise.requiresClinicianPlan && profile.carePath !== "clinician") {
+  if (engine.exercise.requiresClinicianPlan && !usesClinicianPath) {
     statusEl.textContent = "This exercise requires a clinician-approved care plan";
     setFeedbackBanner(
       "tracking",
@@ -3917,6 +3896,12 @@ function continueAfterPainCheckin(completed) {
     {
       key: `camera-setup:countdown:${completed.context}`,
       interrupt: true,
+      // This acknowledgement must be immediate; waiting for generated speech
+      // makes the confirmed answer feel like a stalled conversation.
+      preferImmediate: true,
+      voiceGroup: PAIN_PROMPT_VOICE_GROUP,
+      rate: PAIN_PROMPT_RATE,
+      pitch: PAIN_PROMPT_PITCH,
     }
   );
   cameraSetupCountdown.timer = window.setInterval(() => {

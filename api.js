@@ -353,6 +353,10 @@ export async function createConsultation(consultation) {
   return request("POST", "/consultations/", consultation);
 }
 
+export async function generateConsultationDraft(locale = "en-SG") {
+  return request("POST", "/consultations/draft/", { locale });
+}
+
 export async function confirmConsultation(id) {
   return request("POST", `/consultations/${id}/confirm/`);
 }

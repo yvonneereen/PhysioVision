@@ -355,6 +355,10 @@ const WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions";
       window.pvLoadDashboard?.();
     }
 
+    if (id === "booking-modal") {
+      window.dispatchEvent(new CustomEvent("physiovision:booking-opened"));
+    }
+
     window.setTimeout(() => {
       modal.querySelector(focusableSelector)?.focus();
     }, 50);
@@ -362,10 +366,14 @@ const WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions";
 
   function closeModal(modal = activeModal) {
     if (!modal) return;
+    const wasBookingModal = modal.id === "booking-modal";
     modal.classList.remove("is-open");
     modal.setAttribute("aria-hidden", "true");
     body.classList.remove("modal-open");
     activeModal = null;
+    if (wasBookingModal) {
+      window.dispatchEvent(new CustomEvent("physiovision:booking-closed"));
+    }
     previousFocus?.focus?.();
   }
 

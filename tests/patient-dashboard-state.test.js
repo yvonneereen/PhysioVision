@@ -6,6 +6,7 @@ import {
   isClinicianGuidedProfile,
   isCurrentPrescription,
   isPhysiotherapistRequestPending,
+  mergeConsultationTranscript,
   shouldShowPhysiotherapistRequest,
 } from "../patient-dashboard-state.js";
 
@@ -174,6 +175,27 @@ assert.equal(
     physiotherapistRequestedAt: "2026-08-06T09:30:00Z",
   }),
   false,
+);
+
+assert.equal(
+  mergeConsultationTranscript(
+    "My knee has felt stiff.",
+    "  It is worse   after half squats.  ",
+  ),
+  "My knee has felt stiff. It is worse after half squats.",
+  "speech should be appended as clean, editable text",
+);
+
+assert.equal(
+  mergeConsultationTranscript("Keep this message.", "   "),
+  "Keep this message.",
+  "an empty recognition result must not erase existing notes",
+);
+
+assert.equal(
+  mergeConsultationTranscript("12345", "67890", 8),
+  "12345 67",
+  "speech input must respect the consultation message length limit",
 );
 
 assert.equal(

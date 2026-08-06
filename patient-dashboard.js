@@ -3,6 +3,7 @@ import {
   acceptConsultation,
   cancelConsultation,
   createConsultation,
+  generateConsultationDraft,
   getCareMessages,
   getConsultations,
   getEscalations,
@@ -13,17 +14,19 @@ import {
   isLoggedIn,
   selectPatientPathway,
   sendCareMessage,
-} from "./api.js?v=26";
+} from "./api.js?v=30";
 import {
   analysePatientTrend,
   findUpcomingConsultation,
   isClinicianGuidedProfile,
   isCurrentPrescription,
   isPhysiotherapistRequestPending,
+  mergeConsultationTranscript,
   shouldShowPhysiotherapistRequest,
-} from "./patient-dashboard-state.js?v=5";
+} from "./patient-dashboard-state.js?v=6";
 import { saveProfile } from "./personalization.js?v=9";
-import { getLocale, translateText } from "./i18n.js?v=12";
+import { getLocale, translateText } from "./i18n.js?v=13";
+import { voiceGuidance } from "./voice-guidance.js?v=23";
 import { EXERCISE_MAP } from "./exercises/registry.js";
 
 const WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions";
@@ -98,6 +101,10 @@ const bookingStatus = document.getElementById("bookingStatus");
 const bookingClinicianName = document.getElementById("bookingClinicianName");
 const bookingClinicianAvatar = document.getElementById("bookingClinicianAvatar");
 const bookingNotes = document.getElementById("bookingNotes");
+const generateBookingDraft = document.getElementById("generateBookingDraft");
+const bookingDraftStatus = document.getElementById("bookingDraftStatus");
+const bookingVoiceInput = document.getElementById("bookingVoiceInput");
+const bookingVoiceStatus = document.getElementById("bookingVoiceStatus");
 const toast = document.getElementById("toast");
 const toastMessage = document.getElementById("toastMessage");
 
@@ -131,6 +138,9 @@ let firstExerciseId = null;
 let pendingPhysiotherapistRefresh = null;
 let primaryAction = "plan";
 let toastTimer = null;
+let bookingEditVersion = 0;
+let bookingDraftRequestId = 0;
+let bookingVoiceActive = false;
 
 function results(data) {
   return data?.results ?? data ?? [];
@@ -1055,9 +1065,153 @@ function showToast(message) {
   toastTimer = window.setTimeout(() => toast.classList.remove("show"), 4500);
 }
 
+function setBookingVoiceActive(active) {
+  bookingVoiceActive = Boolean(active);
+  if (!bookingVoiceInput) return;
+  bookingVoiceInput.setAttribute("aria-pressed", String(bookingVoiceActive));
+  bookingVoiceInput.innerHTML = bookingVoiceActive
+    ? '<span aria-hidden="true">■</span> Stop listening'
+    : '<span aria-hidden="true">🎙</span> Speak to add text';
+}
+
+function stopBookingVoice(message = "") {
+  if (bookingVoiceActive) voiceGuidance.cancel();
+  setBookingVoiceActive(false);
+  if (message && bookingVoiceStatus) bookingVoiceStatus.textContent = message;
+}
+
+async function prepareConsultationDraft({ force = false } = {}) {
+  if (!bookingNotes || !generateBookingDraft || !bookingDraftStatus) return;
+  if (currentUser?.role !== "patient") return;
+  if (!force && bookingNotes.value.trim()) {
+    bookingDraftStatus.textContent =
+      "Your existing message is preserved. Select Generate draft to replace it.";
+    return;
+  }
+
+  const requestId = ++bookingDraftRequestId;
+  const editVersionAtStart = bookingEditVersion;
+  generateBookingDraft.disabled = true;
+  generateBookingDraft.textContent = "Preparing…";
+  bookingDraftStatus.textContent =
+    "Reviewing your recorded trends and preparing an editable draft…";
+
+  try {
+    const response = await generateConsultationDraft(getLocale());
+    if (requestId !== bookingDraftRequestId) return;
+    if (bookingEditVersion !== editVersionAtStart) {
+      bookingDraftStatus.textContent =
+        "Your typing was preserved. Select Generate draft if you want to replace it.";
+      return;
+    }
+
+    const draft = String(response?.draft ?? "").trim();
+    if (!draft) throw new Error("The AI draft was empty. You can still speak or type your message.");
+    bookingNotes.value = draft.slice(0, Number(bookingNotes.maxLength) || 1000);
+    bookingNotes.dataset.aiDraft = "true";
+    bookingEditVersion += 1;
+    bookingDraftStatus.textContent =
+      "AI draft added. Review and edit it before sending.";
+    generateBookingDraft.textContent = "Generate new draft";
+    bookingNotes.focus({ preventScroll: true });
+  } catch (error) {
+    if (requestId !== bookingDraftRequestId) return;
+    bookingDraftStatus.textContent = error.message
+      || "The AI draft is unavailable. You can still speak or type your message.";
+  } finally {
+    if (requestId === bookingDraftRequestId) {
+      generateBookingDraft.disabled = false;
+      if (generateBookingDraft.textContent === "Preparing…") {
+        generateBookingDraft.textContent = "Generate draft";
+      }
+    }
+  }
+}
+
+bookingNotes?.addEventListener("input", () => {
+  bookingEditVersion += 1;
+  if (bookingNotes.dataset.aiDraft) {
+    delete bookingNotes.dataset.aiDraft;
+    if (bookingDraftStatus) {
+      bookingDraftStatus.textContent =
+        "Your edits are kept. Nothing is sent until you request the consultation.";
+    }
+  }
+});
+
+generateBookingDraft?.addEventListener("click", () => {
+  prepareConsultationDraft({ force: true });
+});
+
+bookingVoiceInput?.addEventListener("click", () => {
+  if (bookingVoiceActive) {
+    stopBookingVoice("Listening stopped. Your message was not sent.");
+    return;
+  }
+
+  setBookingVoiceActive(true);
+  const started = voiceGuidance.listen({
+    maxNoSpeechRetries: 0,
+    onStatus: (message) => {
+      if (bookingVoiceStatus) bookingVoiceStatus.textContent = message;
+    },
+    onResult: (transcript) => {
+      if (bookingNotes) {
+        bookingNotes.value = mergeConsultationTranscript(
+          bookingNotes.value,
+          transcript,
+          Number(bookingNotes.maxLength) || 1000,
+        );
+        delete bookingNotes.dataset.aiDraft;
+        bookingEditVersion += 1;
+        bookingNotes.focus({ preventScroll: true });
+      }
+      setBookingVoiceActive(false);
+      if (bookingVoiceStatus) {
+        bookingVoiceStatus.textContent =
+          "Speech added as editable text. Review it before sending.";
+      }
+    },
+    onError: (message) => {
+      setBookingVoiceActive(false);
+      if (bookingVoiceStatus) bookingVoiceStatus.textContent = message;
+    },
+  });
+
+  if (!started) setBookingVoiceActive(false);
+});
+
+window.addEventListener("physiovision:booking-opened", () => {
+  if (bookingStatus) bookingStatus.textContent = "";
+  if (bookingVoiceStatus) {
+    bookingVoiceStatus.textContent =
+      "Speak in the language selected at the top of the page.";
+  }
+  if (bookingNotes?.value.trim()) {
+    if (bookingDraftStatus) {
+      bookingDraftStatus.textContent =
+        "Your existing message is preserved. Select Generate draft to replace it.";
+    }
+    return;
+  }
+  prepareConsultationDraft();
+});
+
+window.addEventListener("physiovision:booking-closed", () => {
+  bookingDraftRequestId += 1;
+  if (generateBookingDraft) {
+    generateBookingDraft.disabled = false;
+    if (generateBookingDraft.textContent === "Preparing…") {
+      generateBookingDraft.textContent = "Generate draft";
+    }
+  }
+  stopBookingVoice();
+});
+
 bookingForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!bookingForm.reportValidity()) return;
+  stopBookingVoice();
   bookingStatus.textContent = "Sending your request…";
   const submit = bookingForm.querySelector("[type='submit']");
   submit.disabled = true;
@@ -1067,6 +1221,11 @@ bookingForm?.addEventListener("submit", async (event) => {
     const consultation = await createConsultation({
       patient_notes: String(formData.get("notes") ?? "").trim(),
     });
+    bookingForm.reset();
+    bookingEditVersion += 1;
+    delete bookingNotes?.dataset.aiDraft;
+    if (bookingDraftStatus) bookingDraftStatus.textContent = "";
+    if (generateBookingDraft) generateBookingDraft.textContent = "Generate draft";
     bookingStatus.textContent =
       "Request sent. Your physiotherapist will propose an appointment time.";
     document
@@ -1085,13 +1244,9 @@ bookingForm?.addEventListener("submit", async (event) => {
 });
 
 trendRequestButton?.addEventListener("click", () => {
-  if (bookingNotes && !bookingNotes.value.trim()) {
-    bookingNotes.value =
-      "I would like a physiotherapist to review my recent pain or recovery trend shown by PhysioVision.";
-  }
   if (bookingStatus) {
     bookingStatus.textContent =
-      "Add what you would like reviewed, then send the request.";
+      "Review or edit your message, then send the request when you are ready.";
   }
 });
 

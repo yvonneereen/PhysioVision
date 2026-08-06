@@ -180,3 +180,15 @@ export function findUpcomingConsultation(
       return new Date(a.scheduled_at) - new Date(b.scheduled_at);
     })[0] ?? null;
 }
+
+export function mergeConsultationTranscript(
+  existingText,
+  transcript,
+  maximumLength = 1000,
+) {
+  const existing = String(existingText ?? "").trim();
+  const spoken = String(transcript ?? "").replace(/\s+/g, " ").trim();
+  if (!spoken) return existing;
+  const combined = existing ? `${existing} ${spoken}` : spoken;
+  return combined.slice(0, Math.max(0, Number(maximumLength) || 1000)).trim();
+}

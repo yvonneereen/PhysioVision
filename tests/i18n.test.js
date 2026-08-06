@@ -23,7 +23,7 @@ assert.ok(
 );
 assert.deepEqual(
   [...new Set(i18nCacheVersions)],
-  ["12"],
+  ["13"],
   "all browser entry points must use one i18n URL so only one DOM observer is created"
 );
 
@@ -42,18 +42,31 @@ const initialLiveGuideAttributes = [
   ),
 ].map((match) => match[1]);
 
-for (const source of new Set([
+const initialLiveGuideSources = new Set([
   ...initialLiveGuideText,
   ...initialLiveGuideAttributes,
-])) {
-  assert.notEqual(
-    translateText(source, "zh-SG"),
-    source,
-    `zh-SG is missing initial live-guide copy for: ${source}`
-  );
+]);
+const allowedSharedLocalizedWords = {
+  "zh-SG": new Set(),
+  "ms-SG": new Set(["Edit"]),
+  "ta-SG": new Set(),
+};
+for (const locale of ["zh-SG", "ms-SG", "ta-SG"]) {
+  for (const source of initialLiveGuideSources) {
+    if (allowedSharedLocalizedWords[locale].has(source)) continue;
+    assert.notEqual(
+      translateText(source, locale),
+      source,
+      `${locale} is missing initial live-guide copy for: ${source}`
+    );
+  }
 }
 
-const voiceConsumerSources = ["../main.js", "../agent-chat.js"]
+const voiceConsumerSources = [
+  "../main.js",
+  "../agent-chat.js",
+  "../patient-dashboard.js",
+]
   .map((path) => readFileSync(new URL(path, import.meta.url), "utf8"));
 const voiceCacheVersions = voiceConsumerSources.flatMap((source) =>
   [...source.matchAll(/voice-guidance\.js\?v=(\d+)/g)].map((match) => match[1])
@@ -136,6 +149,28 @@ const liveGuideSources = [
   "The hand-tracking model is unavailable",
   "Floor exercise: visibility check active",
   "Possible-fall check unavailable for this movement",
+  "Checking your account…",
+  "Complete the wellness safety screen first.",
+  "The camera guide is not available for this account or pathway",
+  "Tracking the hand-shape sequence",
+  "Camera paused because the exercise changed",
+  "Automatic session position check",
+  "Your personal range is ready",
+  "This movement is not in your active prescription",
+  "Professional review is recommended before self-guided exercise",
+  "The server could not register this alert. No automatic contact notification is available.",
+  "No automatic contact alert was sent",
+  "Exercise stopped for a safety check",
+  "The possible fall was marked as a false alarm. Take a moment before deciding whether to exercise again.",
+  "Registering the safety countdown with the server…",
+  "Pain check ready — please answer",
+  "Pain question ready. Answer aloud or choose a number to continue.",
+  "Rest for a few seconds before the next question.",
+  "Your safety check is complete",
+  "Saving this safety check. The camera remains paused.",
+  "Exercise paused after pain safety check",
+  "Camera stopped — finishing exercise",
+  "Exercise marked finished",
 ];
 
 for (const locale of ["zh-SG", "ms-SG", "ta-SG"]) {
@@ -224,6 +259,28 @@ for (const locale of ["zh-SG", "ms-SG", "ta-SG"]) {
 assert.equal(
   translateText("2 sets × 10 reps · 3 days/week", "zh-SG"),
   "2组 × 10次 · 每周3天"
+);
+assert.equal(
+  translateText(
+    "2 sets × 10 reps · hold 5s · 3 days/week · prescribed by Dr Tan",
+    "zh-SG"
+  ),
+  "2组 × 10次 · 保持5秒 · 每周3天 · 由Dr Tan开具"
+);
+assert.equal(
+  translateText(
+    "Camera setup will begin automatically in 2 seconds. You can cancel below.",
+    "zh-SG"
+  ),
+  "摄像头设置将在2秒后自动开始。您可以在下方取消。"
+);
+assert.equal(
+  translateText("Guidance for Mei", "zh-SG"),
+  "Mei的个性化指导"
+);
+assert.equal(
+  translateText("Camera error: permission denied", "zh-SG"),
+  "摄像头错误：permission denied"
 );
 assert.equal(
   translateText("Half squats · Calf raises · 10 min", "zh-SG"),

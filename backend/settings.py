@@ -87,6 +87,7 @@ REST_FRAMEWORK = {
         'emergency_alert_response': '30/hour',
         'safety_language_interpretation': '60/hour',
         'guidance_speech': '180/hour',
+        'consultation_draft': '20/hour',
     },
 }
 

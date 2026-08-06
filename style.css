@@ -6125,6 +6125,85 @@ details.metrics summary {
   line-height: 1.5;
 }
 
+.booking-ai-draft {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 14px;
+  border: 1px solid #b9d9c8;
+  border-radius: 12px;
+  background: #eef7f2;
+}
+
+.booking-ai-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  color: var(--ink);
+  background: var(--mint);
+  font-weight: 800;
+}
+
+.booking-ai-draft strong,
+.booking-ai-draft small {
+  display: block;
+}
+
+.booking-ai-draft strong {
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.booking-ai-draft small,
+.booking-assist-status,
+.booking-voice-tools > span {
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.booking-assist-status {
+  min-height: 0;
+  margin: 4px 0 0;
+}
+
+.booking-assist-button,
+.booking-voice-button {
+  min-height: 44px;
+  padding: 9px 14px;
+  border: 1px solid rgba(25, 56, 58, 0.24);
+  color: var(--ink);
+  background: var(--white);
+  box-shadow: none;
+  font-size: 1rem;
+  white-space: nowrap;
+}
+
+.booking-assist-button:hover,
+.booking-voice-button:hover,
+.booking-voice-button[aria-pressed="true"] {
+  color: var(--white);
+  background: var(--ink);
+}
+
+.booking-voice-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.booking-voice-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+
 .date-options,
 .time-options {
   display: grid;
@@ -7783,6 +7862,25 @@ details.metrics summary {
   .profile-modal,
   .booking-modal {
     padding: 35px 20px 26px;
+  }
+
+  .booking-ai-draft {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .booking-assist-button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .booking-voice-tools {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .booking-voice-button {
+    justify-content: center;
+    width: 100%;
   }
 
   .patient-pathway-modal {

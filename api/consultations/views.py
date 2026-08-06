@@ -1,7 +1,11 @@
+import logging
+
 from django.utils import timezone
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework import status
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.viewsets import ModelViewSet
 
 from api.core.models import ClinicianProfile, PatientProfile, UserRole
@@ -19,10 +23,23 @@ from .serializers import (
     ConsultationSerializer,
     EscalationSerializer,
 )
+from .drafting import (
+    ConsultationDraftUnavailable,
+    generate_consultation_draft,
+)
+
+
+logger = logging.getLogger(__name__)
 
 
 class ConsultationViewSet(ModelViewSet):
     serializer_class = ConsultationSerializer
+
+    def get_throttles(self):
+        if getattr(self, 'action', None) == 'draft':
+            self.throttle_scope = 'consultation_draft'
+            return [ScopedRateThrottle()]
+        return super().get_throttles()
 
     def get_queryset(self):
         user = self.request.user
@@ -41,6 +58,38 @@ class ConsultationViewSet(ModelViewSet):
         consultation.status = new_status
         consultation.save(update_fields=['status', 'updated_at'])
         return Response(self.get_serializer(consultation).data)
+
+    @action(detail=False, methods=['post'])
+    def draft(self, request):
+        if (
+            request.user.role != UserRole.PATIENT
+            or not hasattr(request.user, 'patient_profile')
+        ):
+            raise PermissionDenied(
+                'Only a patient can generate a consultation draft.'
+            )
+        locale = str(request.data.get('locale', 'en-SG')).strip()
+        try:
+            message = generate_consultation_draft(
+                request.user.patient_profile,
+                locale,
+            )
+        except ConsultationDraftUnavailable:
+            logger.exception('AI consultation draft was unavailable')
+            return Response(
+                {
+                    'detail': (
+                        'The AI draft is unavailable right now. '
+                        'You can still speak or type your message.'
+                    )
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response({
+            'draft': message,
+            'source': 'ai_record_summary',
+            'requires_review': True,
+        })
 
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):

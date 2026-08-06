@@ -383,9 +383,10 @@ function renderProgrammes() {
   }
   if (exerciseSel) {
     const active = state.exercises.filter(e => e.is_active);
+    exerciseSel.disabled = active.length === 0;
     exerciseSel.innerHTML = active.length
       ? active.map(e => `<option value="${e.id}">${escapeHtml(e.name)}</option>`).join("")
-      : `<option value="">No exercises available</option>`;
+      : `<option value="">Exercise catalogue is not ready</option>`;
   }
   if (filterPatientSel) {
     const selectedPatient = filterPatientSel.value || "all";
@@ -884,12 +885,19 @@ function showNewConversationPicker() {
 }
 
 async function loadProgrammes() {
+  const exerciseSelect = document.getElementById("rx-exercise");
   try {
     if (!state.exercises.length) state.exercises = await getExercises().then(unwrap);
     state.prescriptions = await getPrescriptions().then(unwrap);
     renderProgrammes();
   } catch (err) {
     console.error("Programmes load failed:", err);
+    if (exerciseSelect) {
+      exerciseSelect.innerHTML = `<option value="">Could not load exercises</option>`;
+      exerciseSelect.disabled = true;
+    }
+    const status = document.getElementById("rx-status");
+    if (status) status.textContent = "The exercise catalogue could not be loaded. Refresh and try again.";
   }
 }
 

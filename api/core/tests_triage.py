@@ -1,4 +1,9 @@
+from unittest.mock import patch
+
 from rest_framework.test import APITestCase
+
+from api.consultations.models import CareMessage, MessageSender
+from api.core.email_delivery import EmailDeliveryError
 
 from api.core.models import (
     CarePath,
@@ -73,7 +78,8 @@ class ClinicianTriageTests(APITestCase):
         self.assertEqual(queue.status_code, 403)
         self.assertEqual(claim.status_code, 403)
 
-    def test_claim_adds_patient_to_authenticated_clinicians_roster(self):
+    @patch("api.core.views.deliver_email")
+    def test_claim_adds_patient_to_roster_and_notifies_them(self, deliver_email):
         self.client.force_authenticate(self.clinician_user)
 
         response = self.client.post(self.claim_url(self.waiting), {}, format="json")
@@ -83,6 +89,38 @@ class ClinicianTriageTests(APITestCase):
         self.assertEqual(self.waiting.primary_clinician, self.clinician)
         self.assertEqual(self.waiting.care_path, CarePath.NEEDS_REVIEW)
         self.assertEqual(self.client.get(self.queue_url).data, [])
+        message = CareMessage.objects.get(patient=self.waiting)
+        self.assertEqual(message.clinician, self.clinician)
+        self.assertEqual(message.sender, MessageSender.CLINICIAN)
+        self.assertIn("accepted your request", message.body)
+        deliver_email.assert_called_once_with(
+            subject="A physiotherapist has accepted your PhysioVision request",
+            message=(
+                "Hello Waiting,\n\n"
+                "triage-clinician@example.com has accepted your request for "
+                "physiotherapist support and is now linked to your PhysioVision "
+                "account. They will review your information before recommending or "
+                "changing any programme.\n\n"
+                "Sign in to PhysioVision to view your care-team messages."
+            ),
+            recipient="waiting@example.com",
+        )
+        self.assertEqual(response.data["notification"], {
+            "in_app": True,
+            "email_sent": True,
+        })
+
+    @patch("api.core.views.deliver_email", side_effect=EmailDeliveryError)
+    def test_email_failure_does_not_undo_claim_or_in_app_message(self, deliver_email):
+        self.client.force_authenticate(self.clinician_user)
+
+        response = self.client.post(self.claim_url(self.waiting), {}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.waiting.refresh_from_db()
+        self.assertEqual(self.waiting.primary_clinician, self.clinician)
+        self.assertTrue(CareMessage.objects.filter(patient=self.waiting).exists())
+        self.assertFalse(response.data["notification"]["email_sent"])
 
     def test_claim_rejects_patient_already_claimed_by_another_clinician(self):
         other_user = User.objects.create_user(

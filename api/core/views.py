@@ -18,7 +18,7 @@ from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from .ai import generate_agent_reply
 from .clinician_assistant import dispatch_clinician_command
-from .email_delivery import EmailDeliveryError
+from .email_delivery import EmailDeliveryError, deliver_email
 from .emergency_alerts import (
     EmergencyVerificationCooldown,
     EmergencyVerificationDeliveryError,
@@ -1678,8 +1678,48 @@ class ClinicianTriageClaimView(APIView):
                 "primary_clinician", "care_path", "slack_thread_ts", "updated_at",
             ])
 
+            from api.consultations.models import CareMessage, MessageSender
+
+            clinician_name = (
+                request.user.get_full_name().strip()
+                or request.user.email
+            )
+            notification_body = (
+                f"{clinician_name} has accepted your request for physiotherapist "
+                "support and is now linked to your PhysioVision account. They will "
+                "review your information before recommending or changing any programme."
+            )
+            CareMessage.objects.create(
+                patient=patient,
+                clinician=request.user.clinician_profile,
+                sender=MessageSender.CLINICIAN,
+                body=notification_body,
+            )
+
+        email_sent = False
+        try:
+            deliver_email(
+                subject="A physiotherapist has accepted your PhysioVision request",
+                message=(
+                    f"Hello {patient.user.first_name or 'there'},\n\n"
+                    f"{notification_body}\n\n"
+                    "Sign in to PhysioVision to view your care-team messages."
+                ),
+                recipient=patient.user.email,
+            )
+            email_sent = True
+        except EmailDeliveryError:
+            logger.exception(
+                "Triage claim email could not be delivered for patient %s",
+                patient.id,
+            )
+
         return Response({
             "id": str(patient.id),
             "name": patient.user.get_full_name().strip() or "Patient",
             "detail": "Patient added to your roster for review.",
+            "notification": {
+                "in_app": True,
+                "email_sent": email_sent,
+            },
         })

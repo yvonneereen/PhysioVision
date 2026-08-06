@@ -56,37 +56,28 @@ export function resolvePracticeAccess({
   }
 
   const carePath = profileValue(patientProfile, "care_path", "carePath");
-  const screeningStatus =
-    profileValue(
-      patientProfile,
-      "wellness_screening_status",
-      "wellnessScreening"
-    )?.status ??
-    profileValue(
-      patientProfile,
-      "wellness_screening_status",
-      "wellnessScreeningStatus"
-    );
   const primaryClinician = profileValue(
     patientProfile,
     "primary_clinician",
     "primaryClinician"
   );
+  const wellnessPlan = profileValue(
+    patientProfile,
+    "wellness_plan",
+    "wellnessPlan"
+  );
 
   if (carePath === "wellness") {
-    if (screeningStatus === "eligible") {
+    if (!Array.isArray(wellnessPlan?.days) || wellnessPlan.days.length === 0) {
       return {
-        view: PRACTICE_VIEWS.PATIENT_WORKSPACE,
-        reason: "wellness_eligible",
+        view: PRACTICE_VIEWS.PATIENT_GATE,
+        reason: "plan_required",
+        action: "plan-modal",
       };
     }
     return {
-      view: PRACTICE_VIEWS.PATIENT_GATE,
-      reason:
-        screeningStatus === "needs_review"
-          ? "professional_review"
-          : "screening_required",
-      action: "plan-modal",
+      view: PRACTICE_VIEWS.PATIENT_WORKSPACE,
+      reason: "wellness_plan",
     };
   }
 
@@ -114,7 +105,7 @@ export function resolvePracticeAccess({
     view: PRACTICE_VIEWS.PATIENT_GATE,
     reason: primaryClinician
       ? "awaiting_prescription"
-      : "professional_review",
+      : "plan_required",
     action: primaryClinician ? "profile-modal" : "plan-modal",
   };
 }

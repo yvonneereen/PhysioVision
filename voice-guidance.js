@@ -719,6 +719,8 @@ export class VoiceGuidance {
     return new Promise((resolve, reject) => {
       let settled = false;
       let timeout = null;
+      let microphoneStarted = false;
+      let releaseRequested = false;
 
       const cleanup = () => {
         if (timeout !== null) unschedule(timeout);
@@ -730,11 +732,6 @@ export class VoiceGuidance {
         if (settled) return;
         settled = true;
         cleanup();
-        try {
-          recognition.abort();
-        } catch (_) {
-          // The readiness check may already have stopped by itself.
-        }
         resolve(true);
       };
       const fail = (name, message) => {
@@ -751,10 +748,28 @@ export class VoiceGuidance {
         reject(error);
       };
 
-      // `audiostart` is the Web Speech signal that the browser has actually
-      // begun capturing microphone audio, not merely created a recognizer.
-      recognition.addEventListener("audiostart", succeed);
+      // `audiostart` confirms permission, but Safari may keep its output in a
+      // quiet play-and-record session until the recognizer emits `audioend` or
+      // `end`. Resolving here made the first question start while the red
+      // microphone indicator was still active, so its volume rose mid-sentence.
+      recognition.addEventListener("audiostart", () => {
+        if (settled || microphoneStarted) return;
+        microphoneStarted = true;
+        releaseRequested = true;
+        try {
+          recognition.abort();
+        } catch (_) {
+          fail(
+            "UnknownError",
+            "Safari could not release microphone audio after the permission check."
+          );
+        }
+      });
+      recognition.addEventListener("audioend", () => {
+        if (microphoneStarted) succeed();
+      });
       recognition.addEventListener("error", (event) => {
+        if (releaseRequested && event?.error === "aborted") return;
         const errorName = event?.error === "not-allowed"
           ? "NotAllowedError"
           : event?.error === "audio-capture"
@@ -768,6 +783,10 @@ export class VoiceGuidance {
         );
       });
       recognition.addEventListener("end", () => {
+        if (microphoneStarted) {
+          succeed();
+          return;
+        }
         fail(
           "UnknownError",
           "Speech recognition ended before microphone audio started."
@@ -777,7 +796,9 @@ export class VoiceGuidance {
       timeout = schedule(() => {
         fail(
           "UnknownError",
-          "Safari did not start microphone audio before the permission check timed out."
+          microphoneStarted
+            ? "Safari did not release microphone audio after the permission check."
+            : "Safari did not start microphone audio before the permission check timed out."
         );
       }, Math.max(1000, Number(timeoutMs) || 20000));
 

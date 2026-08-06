@@ -333,6 +333,11 @@ assert.doesNotMatch(
   /isWellnessEligible|Complete the general wellness safety screen first|profile\.carePath/,
   "camera access must not re-check a stale browser screening profile after admission"
 );
+assert.doesNotMatch(
+  source,
+  /wellness safety screen|Complete safety screening|Review screening|screening_required/,
+  "the live guide must not contain or display the AI plan's screening gate"
+);
 assert.match(
   source,
   /const CALIBRATION_TARGET_MOVEMENTS = 1/,
@@ -342,6 +347,29 @@ assert.match(
   source,
   /const CALIBRATION_STALL_REMINDER_MS = 5000;[\s\S]*?const CALIBRATION_STALL_REPEAT_MS = 12000;/,
   "a stalled calibration should prompt after a short delay without repeating continuously"
+);
+const calibrationSpeechSource = functionSource(
+  "speakCalibrationGuidance",
+  "startHoldTimer"
+);
+assert.match(
+  calibrationSpeechSource,
+  /preferImmediate:\s*true[\s\S]*?voiceGroup:\s*CALIBRATION_VOICE_GROUP/,
+  "calibration speech should start immediately and keep one consistent voice"
+);
+const finishCalibrationSource = functionSource(
+  "finishCalibrationCapture",
+  "resetCalibrationPositionTimer"
+);
+assert.match(
+  finishCalibrationSource,
+  /renderCalibrationStep\(\);[\s\S]*?speakCalibrationGuidance\([\s\S]*?Personal movement setup complete\. Review and save your range\./,
+  "the visible personal-range result should be followed immediately by its spoken announcement"
+);
+assert.doesNotMatch(
+  finishCalibrationSource,
+  /voiceGuidance\.speak/,
+  "calibration completion must not use delayed generated speech"
 );
 assert.match(
   source,

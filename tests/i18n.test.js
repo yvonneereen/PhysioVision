@@ -73,7 +73,7 @@ const voiceCacheVersions = voiceConsumerSources.flatMap((source) =>
 );
 assert.deepEqual(
   [...new Set(voiceCacheVersions)],
-  ["23"],
+  ["24"],
   "all voice consumers must share one voice-guidance module instance"
 );
 
@@ -150,14 +150,13 @@ const liveGuideSources = [
   "Floor exercise: visibility check active",
   "Possible-fall check unavailable for this movement",
   "Checking your account…",
-  "Complete the wellness safety screen first.",
+  "Create your exercise plan first.",
   "The camera guide is not available for this account or pathway",
   "Tracking the hand-shape sequence",
   "Camera paused because the exercise changed",
   "Automatic session position check",
   "Your personal range is ready",
   "This movement is not in your active prescription",
-  "Professional review is recommended before self-guided exercise",
   "The server could not register this alert. No automatic contact notification is available.",
   "No automatic contact alert was sent",
   "Exercise stopped for a safety check",

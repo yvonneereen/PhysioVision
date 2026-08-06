@@ -43,7 +43,7 @@ import {
   isSafariBrowser,
   readMicrophonePermissionState,
   voiceGuidance,
-} from "./voice-guidance.js?v=23";
+} from "./voice-guidance.js?v=24";
 import {
   PRACTICE_VIEWS,
   hasAuthenticatedPracticeAccount,
@@ -1027,17 +1027,11 @@ const PRACTICE_GATE_COPY = Object.freeze({
     title: "Loading your prescribed movements…",
     message: "Only exercises in your current clinician plan will be available.",
   },
-  screening_required: {
-    title: "Complete the wellness safety screen first.",
+  plan_required: {
+    title: "Create your exercise plan first.",
     message:
-      "Confirm that you are seeking general wellness exercise and do not have clinician restrictions or concerning symptoms.",
-    actionLabel: "Complete safety screening",
-  },
-  professional_review: {
-    title: "Professional review is recommended.",
-    message:
-      "Your screening did not unlock self-guided wellness exercise. Review your answers or connect with a qualified professional.",
-    actionLabel: "Review screening",
+      "Return to My home and create your plan before opening the live guide.",
+    actionLabel: "Create exercise plan",
   },
   awaiting_prescription: {
     title: "Your clinician-guided programme is not ready yet.",
@@ -1258,6 +1252,7 @@ const CALIBRATION_TARGET_MOVEMENTS = 1;
 const CALIBRATION_RETURN_STABLE_MS = 350;
 const CALIBRATION_STALL_REMINDER_MS = 5000;
 const CALIBRATION_STALL_REPEAT_MS = 12000;
+const CALIBRATION_VOICE_GROUP = "calibration";
 // Calibration is a deliberate hold, so accept lower-confidence landmarks than
 // live tracking (0.5). This lets occluded side-lying/floor poses (e.g. clamshell,
 // where one knee/hip overlaps the other) still measure and cache a personal range.
@@ -1266,6 +1261,16 @@ const SESSION_POSITION_CAPTURE_MS = 1700;
 const SET_POSITION_STABLE_MS = 750;
 let calibrationSession = null;
 let calibrationDraft = null;
+
+function speakCalibrationGuidance(message, options = {}) {
+  return voiceGuidance.speak(message, {
+    ...options,
+    // Calibration prompts describe what is on screen right now. Generated
+    // speech can arrive after the UI has already advanced to the next step.
+    preferImmediate: true,
+    voiceGroup: CALIBRATION_VOICE_GROUP,
+  });
+}
 
 function startHoldTimer(seconds) {
   if (holdInterval) return; // already running
@@ -2439,10 +2444,8 @@ async function openCalibrationFlow(event) {
     cancelCameraSetupCountdown();
     return;
   }
-  // Resolve pathway access before asking for a pain score. The authenticated
-  // practice decision is the source of truth for screening and prescriptions,
-  // so a patient cannot finish the check-in only to be blocked afterwards by
-  // an older browser-stored profile.
+  // Resolve account and prescription access before asking for a pain score,
+  // so a patient cannot finish the check-in only to be blocked afterwards.
   syncPracticeAccess();
   if (!hasPathwayAccess()) return;
   if (!(await ensureVoiceModeChosen())) return;
@@ -2497,7 +2500,7 @@ async function startCalibrationFlow(
     cameraSetupStatus.hidden = false;
     statusEl.textContent = "Professional review recommended before exercise";
     setFeedbackBanner("tracking", message);
-    voiceGuidance.speak(message, {
+    speakCalibrationGuidance(message, {
       key: `calibration:${engine.exercise.id}:professional-review`,
       interrupt: true,
     });
@@ -2815,7 +2818,7 @@ function updateCalibrationCapture(angles, timestampMs) {
       "good",
       "Required joints found. Hold still while the personal measurement is recorded."
     );
-    voiceGuidance.speak(
+    speakCalibrationGuidance(
       "Position found. Hold still while I measure.",
       {
         key: `calibration:${engine.exercise.id}:${capture.type}:measuring:${calibrationSession.targetCaptures.length}`,
@@ -2935,10 +2938,9 @@ function presentCalibrationIssue(
     return;
   }
 
-  const spoken = voiceGuidance.speak(message, {
+  const spoken = speakCalibrationGuidance(message, {
     key: `calibration:${engine.exercise.id}:stalled:${capture.type}:${key}`,
     cooldownMs: CALIBRATION_STALL_REPEAT_MS,
-    preferImmediate: true,
   });
   if (spoken) capture.lastGuidanceAt = timestampMs;
 }
@@ -3003,7 +3005,7 @@ function finishCalibrationCapture(capture) {
         calibrationDraft.lastPositionCheckedAt = new Date().toISOString();
         calibrationSession.step = "result";
         renderCalibrationStep();
-        voiceGuidance.speak(
+        speakCalibrationGuidance(
           "Personal movement setup complete. Review and save your range.",
           {
             key: `calibration:${engine.exercise.id}:complete`,
@@ -3014,7 +3016,7 @@ function finishCalibrationCapture(capture) {
         renderCalibrationStep();
         beginCalibrationCapture("target", { awaitingReturn: true });
         const completed = calibrationSession.targetCaptures.length;
-        voiceGuidance.speak(
+        speakCalibrationGuidance(
           `Sample ${completed} saved. Return to your starting position. I will tell you when to move again.`,
           {
             key: `calibration:${engine.exercise.id}:return:${completed}`,
@@ -3031,7 +3033,7 @@ function finishCalibrationCapture(capture) {
     });
     calibrationStatus.textContent =
       `${error.message} I will retry automatically—reposition comfortably and hold still.`;
-    voiceGuidance.speak(
+    speakCalibrationGuidance(
       `${error.message} Reposition comfortably. I will retry automatically.`,
       {
         key: `calibration:${engine.exercise.id}:${capture.type}:retry`,
@@ -3088,7 +3090,7 @@ function announceCalibrationStage(type, { afterReturn = false } = {}) {
         "This short setup personalizes movement detection so I can recognize "
         + "your exercise more accurately. It does not change safety limits. "
       );
-    voiceGuidance.speak(
+    speakCalibrationGuidance(
       introduction
       + `${startInstruction} You do not need to press anything. I will measure automatically.`,
       {
@@ -3101,7 +3103,7 @@ function announceCalibrationStage(type, { afterReturn = false } = {}) {
 
   const targetInstruction = config.targetInstruction
     ?? `Move into a comfortable ${config.targetPhase.replaceAll("_", " ")} position.`;
-  voiceGuidance.speak(
+  speakCalibrationGuidance(
     `${afterReturn ? "Starting position found. " : "Starting position saved. "}`
     + `${targetInstruction} This is your only calibration movement. Hold the position; `
     + "I will measure automatically.",

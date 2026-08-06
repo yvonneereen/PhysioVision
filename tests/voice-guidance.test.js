@@ -455,7 +455,6 @@ class MockRecognition {
 
   abort() {
     this.abortCalled = true;
-    this.listeners.end?.();
   }
 
   emitResult(transcript) {
@@ -466,6 +465,10 @@ class MockRecognition {
 
   emitAudioStart() {
     this.listeners.audiostart?.();
+  }
+
+  emitAudioEnd() {
+    this.listeners.audioend?.();
   }
 
   emitInterimResult(transcript) {
@@ -489,13 +492,22 @@ const microphoneCheck = listeningGuidance.verifyListeningAccess({
   timeoutMs: 50,
 });
 const microphoneCheckRecognition = activeRecognitionInstance;
+let microphoneCheckResolved = false;
+microphoneCheck.then(() => { microphoneCheckResolved = true; });
 microphoneCheckRecognition.emitAudioStart();
-assert.equal(await microphoneCheck, true);
 assert.equal(
   microphoneCheckRecognition.abortCalled,
   true,
   "the Safari readiness check should release the microphone immediately"
 );
+await Promise.resolve();
+assert.equal(
+  microphoneCheckResolved,
+  false,
+  "the first prompt must wait until Safari confirms microphone audio has ended"
+);
+microphoneCheckRecognition.emitAudioEnd();
+assert.equal(await microphoneCheck, true);
 
 const deniedMicrophoneCheck = listeningGuidance.verifyListeningAccess({
   timeoutMs: 50,

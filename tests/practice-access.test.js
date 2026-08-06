@@ -43,12 +43,12 @@ assert.deepEqual(
   }),
   {
     view: PRACTICE_VIEWS.PATIENT_GATE,
-    reason: "screening_required",
+    reason: "plan_required",
     action: "plan-modal",
   }
 );
 
-assert.equal(
+assert.deepEqual(
   resolvePracticeAccess({
     loggedIn: true,
     role: "patient",
@@ -56,8 +56,47 @@ assert.equal(
       care_path: "wellness",
       wellness_screening_status: "eligible",
     },
-  }).view,
-  PRACTICE_VIEWS.PATIENT_WORKSPACE
+  }),
+  {
+    view: PRACTICE_VIEWS.PATIENT_GATE,
+    reason: "plan_required",
+    action: "plan-modal",
+  },
+  "the live guide should ask for a plan, not repeat the plan's safety screen"
+);
+
+assert.deepEqual(
+  resolvePracticeAccess({
+    loggedIn: true,
+    role: "patient",
+    patientProfile: {
+      care_path: "wellness",
+      wellness_screening_status: "pending",
+      wellness_plan: { days: [{ day: 1, exercises: [] }] },
+    },
+  }),
+  {
+    view: PRACTICE_VIEWS.PATIENT_WORKSPACE,
+    reason: "wellness_plan",
+  },
+  "an existing AI plan should open the live guide without re-checking screening status"
+);
+
+assert.deepEqual(
+  resolvePracticeAccess({
+    loggedIn: true,
+    role: "patient",
+    patientProfile: {
+      care_path: "wellness",
+      wellness_screening_status: "needs_review",
+      wellness_plan: { days: [{ day: 1, exercises: [] }] },
+    },
+  }),
+  {
+    view: PRACTICE_VIEWS.PATIENT_WORKSPACE,
+    reason: "wellness_plan",
+  },
+  "the exercise page must use the accepted plan rather than screening status"
 );
 
 assert.equal(

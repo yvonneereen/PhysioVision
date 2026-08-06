@@ -4537,6 +4537,9 @@ details.metrics summary {
   color: var(--muted);
   font-size: 1rem;
   font-style: normal;
+  line-height: 1.35;
+  max-width: 13rem;
+  text-align: right;
 }
 
 .plan-note {
@@ -7866,7 +7869,9 @@ details.metrics summary {
   }
 
   .generated-day > em {
-    display: none;
+    grid-column: 2;
+    max-width: none;
+    text-align: left;
   }
 
   .therapist-summary {

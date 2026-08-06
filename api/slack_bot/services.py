@@ -916,7 +916,6 @@ def _plan_preferences(patient, ctx, *, days_per_week=3, equipment="chair"):
         "weight_kg": patient.weight_kg,
         "age": ctx["age"],
         "days_per_week": days_per_week,
-        "minutes_per_session": 10,
         "equipment": equipment,
         "planning_notes": _clinical_notes_text(ctx),
     }

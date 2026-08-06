@@ -1759,8 +1759,9 @@
             <span aria-hidden="true">✦</span>
             <p>
               <strong>PhysioVision planning agent</strong>
-              I will match your goal, available time and equipment, then show
+              I will match your goal, weekly schedule and equipment, then show
               my reasoning before you decide whether to accept the draft.
+              Every selected exercise starts with 1 set of 6–10 repetitions.
             </p>
           </div>
           <div class="field-grid">
@@ -1783,17 +1784,6 @@
                 <option value="5">5 days</option>
                 <option value="6">6 days</option>
                 <option value="7">7 days</option>
-              </select>
-            </label>
-            <label>
-              <span>Time for each session</span>
-              <select name="minutesPerSession" required>
-                <option value="5">About 5 minutes</option>
-                <option value="10" selected>About 10 minutes</option>
-                <option value="15">About 15 minutes</option>
-                <option value="20">About 20 minutes</option>
-                <option value="25">About 25 minutes</option>
-                <option value="30">About 30 minutes</option>
               </select>
             </label>
             <label>
@@ -1944,7 +1934,7 @@
                     id="planRevisionRequest"
                     type="text"
                     maxlength="240"
-                    placeholder="For example: keep every session under 10 minutes"
+                    placeholder="For example: use the gentlest suitable exercises"
                   />
                   <button class="button button-dark" type="button" id="requestPlanRevision">
                     Ask AI to revise
@@ -2694,10 +2684,10 @@
   <script src="runtime-config.js"></script>
   <p id="textSizeStatus" class="sr-only" role="status" aria-live="polite"></p>
   <script type="module" src="text-size.js?v=1"></script>
-  <script type="module" src="i18n.js?v=10"></script>
+  <script type="module" src="i18n.js?v=11"></script>
   <script type="module" src="auth.js?v=31"></script>
-  <script type="module" src="ui.js?v=23"></script>
-  <script type="module" src="patient-dashboard.js?v=36"></script>
+  <script type="module" src="ui.js?v=24"></script>
+  <script type="module" src="patient-dashboard.js?v=37"></script>
   <script type="module" src="therapist.js?v=36"></script>
   <script type="module" src="exercise-library.js?v=15"></script>
   <script type="module" src="main.js?v=103"></script>

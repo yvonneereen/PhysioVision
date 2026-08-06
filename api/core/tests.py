@@ -1299,6 +1299,12 @@ class WellnessPlanAgentViewTests(APITestCase):
             user.patient_profile.wellness_plan["source"],
             "gemini_wellness_agent",
         )
+        saved_day = user.patient_profile.wellness_plan["days"][0]
+        self.assertEqual(saved_day["sets"], 1)
+        self.assertEqual(saved_day["repetitions_min"], 6)
+        self.assertEqual(saved_day["repetitions_max"], 10)
+        self.assertEqual(saved_day["dosage"], "1 set of 6–10 repetitions")
+        self.assertNotIn("duration_minutes", saved_day)
         self.assertIsNotNone(
             user.patient_profile.wellness_plan_accepted_at,
         )

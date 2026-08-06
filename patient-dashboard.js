@@ -23,8 +23,10 @@ import {
   shouldShowPhysiotherapistRequest,
 } from "./patient-dashboard-state.js?v=5";
 import { saveProfile } from "./personalization.js?v=9";
-import { getLocale, translateText } from "./i18n.js?v=10";
+import { getLocale, translateText } from "./i18n.js?v=11";
 import { EXERCISE_MAP } from "./exercises/registry.js";
+
+const WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions";
 
 const dashboard = document.getElementById("patientDashboard");
 const publicMain = document.getElementById("main-content");
@@ -500,7 +502,7 @@ function renderWellnessPlan(profile) {
     planList.appendChild(planRow({
       label: day.day,
       title: day.title,
-      detail: `${day.exercises} · ${day.duration}`,
+      detail: `${day.exercises} · ${day.dosage || WELLNESS_DOSAGE_LABEL}`,
       exerciseId: exerciseIds[0],
       note:
         "AI draft accepted by you. Stop if you feel unwell or develop new or concerning symptoms.",
@@ -1037,11 +1039,6 @@ function browserProfileFromApi(profile) {
     daysPerWeek:
       planConstraints.days_per_week
       ?? planConstraints.daysPerWeek,
-    minutesPerSession:
-      planConstraints.requested_minutes_per_session
-      ?? planConstraints.requestedMinutesPerSession
-      ?? planConstraints.minutes_per_session
-      ?? planConstraints.minutesPerSession,
     equipment: planConstraints.equipment,
     hasRelevantHistory: Boolean(profile.medical_history),
     medicalHistory: profile.medical_history ?? "",

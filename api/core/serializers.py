@@ -373,7 +373,13 @@ class WellnessPlanPreferencesSerializer(serializers.Serializer):
     focus_side = serializers.ChoiceField(choices=FocusSide.choices)
     cue_style = serializers.ChoiceField(choices=CueStyle.choices)
     days_per_week = serializers.IntegerField(min_value=1, max_value=7)
-    minutes_per_session = serializers.IntegerField(min_value=5, max_value=30)
+    # Kept optional while older deployed clients move to the fixed single-set
+    # dosage used by the current wellness planner.
+    minutes_per_session = serializers.IntegerField(
+        min_value=5,
+        max_value=30,
+        required=False,
+    )
     equipment = serializers.ChoiceField(
         choices=["none", "chair", "chair_band"],
     )

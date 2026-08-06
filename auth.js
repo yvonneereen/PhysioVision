@@ -578,9 +578,6 @@ async function seedProfileFromApi() {
       wellnessPlan,
       wellnessPlanAcceptedAt: p.wellness_plan_accepted_at ?? null,
       daysPerWeek: planConstraints.days_per_week,
-      minutesPerSession:
-        planConstraints.requested_minutes_per_session
-        ?? planConstraints.minutes_per_session,
       equipment: planConstraints.equipment,
       hasRelevantHistory: Boolean(p.medical_history),
       medicalHistory: p.medical_history ?? "",

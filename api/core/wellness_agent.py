@@ -88,6 +88,11 @@ DAY_SCHEDULES = {
     7: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
 }
 
+WELLNESS_SETS = 1
+WELLNESS_REPETITIONS_MIN = 6
+WELLNESS_REPETITIONS_MAX = 10
+WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions"
+
 
 def _clean_text(value, *, maximum):
     return re.sub(r"\s+", " ", str(value or "")).strip()[:maximum]
@@ -128,12 +133,6 @@ def normalize_wellness_plan(raw_plan, preferences):
             f"The draft must contain exactly {expected_days} sessions."
         )
 
-    requested_minutes = int(preferences.get("minutes_per_session", 10))
-    maximum_minutes = (
-        min(requested_minutes, 15)
-        if history_cautious
-        else requested_minutes
-    )
     maximum_exercises = 1 if history_cautious else 2
     days = []
     selected_ids = []
@@ -161,17 +160,6 @@ def normalize_wellness_plan(raw_plan, preferences):
             raise WellnessPlanValidationError(
                 "The draft included an exercise outside the reviewed catalogue."
             )
-        duration_minutes = raw_day.get(
-            "duration_minutes",
-            raw_day.get("durationMinutes", maximum_minutes),
-        )
-        try:
-            duration_minutes = int(duration_minutes)
-        except (TypeError, ValueError) as exc:
-            raise WellnessPlanValidationError(
-                "Every session needs a valid duration."
-            ) from exc
-        duration_minutes = min(maximum_minutes, max(5, duration_minutes))
         exercise_names = [available[item]["name"] for item in exercise_ids]
         selected_ids.extend(exercise_ids)
         days.append({
@@ -183,8 +171,10 @@ def normalize_wellness_plan(raw_plan, preferences):
             "exercise_ids": exercise_ids,
             "exerciseIds": exercise_ids,
             "exercises": " · ".join(exercise_names),
-            "duration_minutes": duration_minutes,
-            "duration": f"{duration_minutes} min",
+            "sets": WELLNESS_SETS,
+            "repetitions_min": WELLNESS_REPETITIONS_MIN,
+            "repetitions_max": WELLNESS_REPETITIONS_MAX,
+            "dosage": WELLNESS_DOSAGE_LABEL,
         })
 
     goal = preferences.get("goal", "stay_active")
@@ -204,17 +194,29 @@ def normalize_wellness_plan(raw_plan, preferences):
         for item in rationale[:3]
         if _clean_text(item, maximum=180)
     ]
+    rationale = [
+        item
+        for item in rationale
+        if not re.search(r"\b(?:minute|minutes|min|duration)\b", item, re.I)
+    ]
     if not rationale:
         rationale = [
             "The draft uses only reviewed exercises compatible with your answers and available equipment."
         ]
+    dosage_rationale = (
+        "Uses one set of 6–10 repetitions for each exercise to keep the "
+        "starting dose manageable."
+    )
+    if not any("6–10" in item for item in rationale):
+        rationale = rationale[:2] + [dosage_rationale]
     if history_cautious:
         rationale = [
             (
                 "Your recovered medical or injury history was treated as a "
                 "caution, so this draft uses the lower-load reviewed subset "
-                "and shorter sessions."
+                "and one movement per session."
             ),
+            dosage_rationale,
             (
                 "Every session still requires your review, and you should "
                 "stop if a movement causes pain or concerning symptoms."
@@ -247,8 +249,9 @@ def normalize_wellness_plan(raw_plan, preferences):
         "days": days,
         "constraints": {
             "days_per_week": expected_days,
-            "minutes_per_session": maximum_minutes,
-            "requested_minutes_per_session": requested_minutes,
+            "sets_per_exercise": WELLNESS_SETS,
+            "repetitions_min": WELLNESS_REPETITIONS_MIN,
+            "repetitions_max": WELLNESS_REPETITIONS_MAX,
             "equipment": preferences.get("equipment", "chair"),
             "recovered_history_considered": history_cautious,
             "safety_screen_required": True,
@@ -260,7 +263,8 @@ def normalize_wellness_plan(raw_plan, preferences):
                 [
                     (
                         "Applied the recovered-history caution: lower-load "
-                        "movements, one movement per session and a 15-minute cap."
+                        "movements, one movement per session and a fixed "
+                        "single-set dose."
                     )
                 ]
                 if history_cautious
@@ -313,7 +317,11 @@ def _planner_prompt(user, preferences, previous_plan=None, revision=""):
         "focus_side": preferences.get("focus_side"),
         "coaching_style": preferences.get("cue_style"),
         "days_per_week": preferences.get("days_per_week"),
-        "minutes_per_session": preferences.get("minutes_per_session"),
+        "fixed_dosage": {
+            "sets": WELLNESS_SETS,
+            "repetitions_min": WELLNESS_REPETITIONS_MIN,
+            "repetitions_max": WELLNESS_REPETITIONS_MAX,
+        },
         "equipment": preferences.get("equipment"),
         "user_notes": preferences.get("planning_notes", ""),
         "history_cautious_mode": bool(
@@ -344,18 +352,18 @@ The application has already completed a separate, deterministic safety screen.
 You do not diagnose, medically clear, or create rehabilitation treatment.
 
 Use only exercise IDs from reviewed_catalogue_tool_result. Create exactly the
-requested number of sessions, with one or two exercises per session and no
-session longer than minutes_per_session. Prefer gradual variety and the user's
-stated goal, activity, equipment and notes. A revision request may change the
-draft but can never loosen those rules.
+requested number of sessions, with one or two exercises per session. The
+application assigns every selected exercise one set of 6–10 repetitions; do not
+choose or change the dose. Prefer gradual variety and the user's stated goal,
+activity, equipment and notes. A revision request may change the draft but can
+never loosen those rules.
 
 If history_cautious_mode is true, treat the recovered history only as a
 conservative planning constraint, never as a diagnosis or medical clearance.
 Use only the already-filtered lower-load catalogue, choose exactly one movement
-per session, keep every session at or below 15 minutes, and do not claim that
-the plan will prevent pain. The rationale should briefly explain how the
-reported history made the draft more cautious without repeating sensitive
-details.
+per session, and do not claim that the plan will prevent pain. The rationale
+should briefly explain how the reported history made the draft more cautious
+without repeating sensitive details.
 
 Return JSON only, using this shape:
 {
@@ -364,12 +372,11 @@ Return JSON only, using this shape:
   "days": [
     {
       "title": "short session title",
-      "exercise_ids": ["reviewed-id"],
-      "duration_minutes": 10
+      "exercise_ids": ["reviewed-id"]
     }
   ]
 }
-Do not include markdown, medical claims, new exercises, sets, repetitions,
+Do not include markdown, medical claims, new exercises, dosage fields,
 diagnoses, or anything outside the JSON object.
 """.strip()
 
@@ -405,7 +412,10 @@ def accepted_plan_instruction(profile):
             "Create my plan with AI; do not invent a plan in chat."
         )
     sessions = "; ".join(
-        f"{day.get('day')}: {day.get('exercises')}"
+        (
+            f"{day.get('day')}: {day.get('exercises')} "
+            f"({day.get('dosage') or WELLNESS_DOSAGE_LABEL})"
+        )
         for day in plan.get("days", [])
     )
     return (

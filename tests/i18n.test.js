@@ -23,7 +23,7 @@ assert.ok(
 );
 assert.deepEqual(
   [...new Set(i18nCacheVersions)],
-  ["10"],
+  ["11"],
   "all browser entry points must use one i18n URL so only one DOM observer is created"
 );
 
@@ -145,7 +145,12 @@ assert.equal(
 assert.equal(
   translateText("Half squats · Calf raises · 10 min", "zh-SG"),
   "半蹲 · 提踵 · 10分钟",
-  "saved plan exercise lists and durations should translate as structured data"
+  "legacy saved plan exercise lists and durations should still translate"
+);
+assert.equal(
+  translateText("Half squats · Calf raises · 1 set of 6–10 repetitions", "zh-SG"),
+  "半蹲 · 提踵 · 1组，每组6–10次",
+  "new wellness-plan dosage should translate as structured data"
 );
 assert.equal(
   translateText(

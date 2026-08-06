@@ -34,6 +34,8 @@ const ACTIVITY_API_VALUES = Object.freeze({
   "Active most days": "active_most_days",
 });
 
+const WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions";
+
 (() => {
   const body = document.body;
   const header = document.querySelector(".site-header");
@@ -486,11 +488,11 @@ const ACTIVITY_API_VALUES = Object.freeze({
       title.textContent = day.title;
       const exercises = document.createElement("small");
       exercises.textContent = day.exercises;
-      const duration = document.createElement("em");
-      duration.textContent = day.duration;
+      const dosage = document.createElement("em");
+      dosage.textContent = day.dosage || WELLNESS_DOSAGE_LABEL;
 
       detail.append(title, exercises);
-      row.append(dayLabel, detail, duration);
+      row.append(dayLabel, detail, dosage);
       generatedWellnessPlan.appendChild(row);
     });
 
@@ -610,9 +612,6 @@ const ACTIVITY_API_VALUES = Object.freeze({
       focus_side: String(formData.get("focusSide") || "right"),
       cue_style: String(formData.get("cueStyle") || "gentle"),
       days_per_week: Number(formData.get("daysPerWeek") || 3),
-      minutes_per_session: Number(
-        formData.get("minutesPerSession") || 10
-      ),
       equipment: String(formData.get("equipment") || "chair"),
       planning_notes: String(
         formData.get("planningNotes") || ""
@@ -740,7 +739,6 @@ const ACTIVITY_API_VALUES = Object.freeze({
           wellnessPlan: profile.wellness_plan,
           wellnessPlanAcceptedAt: profile.wellness_plan_accepted_at,
           daysPerWeek: activePlanPreferences.days_per_week,
-          minutesPerSession: activePlanPreferences.minutes_per_session,
           equipment: activePlanPreferences.equipment,
           planningNotes: activePlanPreferences.planning_notes,
           hasRelevantHistory: Boolean(profile.medical_history),

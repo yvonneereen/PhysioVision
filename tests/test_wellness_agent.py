@@ -60,6 +60,14 @@ class WellnessAgentGuardrailTests(unittest.TestCase):
         self.assertEqual(len(plan["days"]), 3)
         self.assertEqual(plan["days"][0]["day"], "Mon")
         self.assertEqual(plan["days"][0]["exercise_ids"], ["half-squats"])
+        self.assertEqual(plan["days"][0]["sets"], 1)
+        self.assertEqual(plan["days"][0]["repetitions_min"], 6)
+        self.assertEqual(plan["days"][0]["repetitions_max"], 10)
+        self.assertEqual(
+            plan["days"][0]["dosage"],
+            "1 set of 6–10 repetitions",
+        )
+        self.assertNotIn("duration_minutes", plan["days"][0])
 
     def test_rejects_an_unreviewed_exercise(self):
         with self.assertRaises(WellnessPlanValidationError):
@@ -121,10 +129,9 @@ class WellnessAgentGuardrailTests(unittest.TestCase):
 
         self.assertEqual(len(plan["days"]), 7)
         self.assertEqual(plan["days"][-1]["day"], "Sun")
-        self.assertEqual(
-            plan["constraints"]["minutes_per_session"],
-            30,
-        )
+        self.assertEqual(plan["constraints"]["sets_per_exercise"], 1)
+        self.assertEqual(plan["constraints"]["repetitions_min"], 6)
+        self.assertEqual(plan["constraints"]["repetitions_max"], 10)
 
     def test_recovered_history_uses_cautious_catalogue(self):
         available = allowed_exercises(preferences(
@@ -137,7 +144,7 @@ class WellnessAgentGuardrailTests(unittest.TestCase):
         self.assertIn("leg-extensions", available)
         self.assertIn("hip-adduction", available)
 
-    def test_recovered_history_caps_duration_and_session_size(self):
+    def test_recovered_history_uses_fixed_dosage_and_session_size(self):
         cautious = preferences(
             has_relevant_history=True,
             medical_history="Recovered from an old knee injury.",
@@ -162,15 +169,18 @@ class WellnessAgentGuardrailTests(unittest.TestCase):
             cautious,
         )
 
-        self.assertEqual(
-            plan["constraints"]["minutes_per_session"],
-            15,
-        )
+        self.assertEqual(plan["constraints"]["sets_per_exercise"], 1)
+        self.assertEqual(plan["constraints"]["repetitions_min"], 6)
+        self.assertEqual(plan["constraints"]["repetitions_max"], 10)
         self.assertTrue(
             plan["constraints"]["recovered_history_considered"],
         )
         self.assertTrue(all(
-            day["duration_minutes"] == 15
+            day["dosage"] == "1 set of 6–10 repetitions"
+            for day in plan["days"]
+        ))
+        self.assertTrue(all(
+            "duration_minutes" not in day
             for day in plan["days"]
         ))
         self.assertNotIn("right knee", plan["summary"].lower())

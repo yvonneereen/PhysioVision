@@ -1004,6 +1004,73 @@ class AgentChatViewTests(APITestCase):
         self.assertEqual(response.data['detail'], 'The assistant is unavailable.')
 
 
+class GuidanceSpeechViewTests(APITestCase):
+    endpoint = '/api/auth/agent/speech/'
+
+    def make_user(self, role=UserRole.PATIENT):
+        email = f'speech-{role}@example.com'
+        return User.objects.create_user(
+            username=email,
+            email=email,
+            password='test-password',
+            role=role,
+        )
+
+    def test_authentication_is_required(self):
+        response = self.client.post(
+            self.endpoint,
+            {'text': 'Please stand comfortably.'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 401)
+
+    def test_only_patients_can_request_guidance_speech(self):
+        self.client.force_authenticate(self.make_user(UserRole.CLINICIAN))
+        response = self.client.post(
+            self.endpoint,
+            {'text': 'Please stand comfortably.'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 403)
+
+    @patch('api.core.views.generate_guidance_speech')
+    def test_exact_text_is_sent_to_speech_renderer(self, generate_speech):
+        self.client.force_authenticate(self.make_user())
+        generate_speech.return_value = {
+            'audio': 'UklGRg==',
+            'mime_type': 'audio/wav',
+            'provider': 'gemini_tts',
+        }
+        response = self.client.post(
+            self.endpoint,
+            {
+                'text': '  Before we begin,   how is your pain? ',
+                'locale': 'en-SG',
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['provider'], 'gemini_tts')
+        generate_speech.assert_called_once_with(
+            'Before we begin, how is your pain?',
+            'en-SG',
+        )
+
+    @patch('api.core.views.generate_guidance_speech')
+    def test_provider_failure_returns_fallback_signal(self, generate_speech):
+        from .speech import GuidanceSpeechUnavailable
+
+        self.client.force_authenticate(self.make_user())
+        generate_speech.side_effect = GuidanceSpeechUnavailable('private detail')
+        response = self.client.post(
+            self.endpoint,
+            {'text': 'Please stand comfortably.'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 503)
+        self.assertNotIn('private detail', response.data['detail'])
+
+
 class WellnessScreeningViewTests(APITestCase):
     endpoint = '/api/auth/wellness-screening/'
 

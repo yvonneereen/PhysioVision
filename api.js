@@ -250,6 +250,13 @@ export async function interpretSafetyLanguage({ stage, transcript }) {
   });
 }
 
+export async function generateGuidanceSpeech({ text, locale }) {
+  return request("POST", "/auth/agent/speech/", {
+    text,
+    locale: locale || runtimeWindow.document?.documentElement?.lang || "en-SG",
+  });
+}
+
 export async function acceptWellnessPlan(draftToken) {
   return request("POST", "/auth/agent/plan/accept/", {
     draft_token: draftToken,

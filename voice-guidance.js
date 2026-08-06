@@ -2,10 +2,13 @@ import {
   getSpeechLocale,
   translateText,
 } from "./i18n.js?v=7";
+import { generateGuidanceSpeech } from "./api.js?v=29";
 
 const VOICE_PREFERENCE_KEY = "physiovision.voice.enabled.v1";
 const DEFAULT_SPEECH_VOLUME = 1;
 const MICROPHONE_RELEASE_SETTLE_MS = 1200;
+const NEURAL_SPEECH_MIN_LENGTH = 18;
+const NEURAL_SPEECH_CACHE_LIMIT = 24;
 
 const GENTLE_VOICE_NAME =
   /\b(samantha|ava|jenny|aria|sonia|allison|susan|serena|karen|moira|tessa|fiona|zoe|kathy|amira|yasmin|tingting|meijia|sinji|xiaoxiao|vani|pallavi)\b|google (us|uk) english/i;
@@ -629,6 +632,12 @@ export class VoiceGuidance {
     this.listeningGeneration = 0;
     this.preferredVoice = null;
     this.voiceSelectionLocked = false;
+    this.neuralSpeechProvider = null;
+    this.audioContext = null;
+    this.activeAudioSource = null;
+    this.neuralSpeaking = false;
+    this.speechGeneration = 0;
+    this.neuralAudioCache = new Map();
     this.refreshPreferredVoice = () => {
       if (this.voiceSelectionLocked) return this.preferredVoice;
       const language = getSpeechLocale();
@@ -663,6 +672,33 @@ export class VoiceGuidance {
 
   get canListen() {
     return Boolean(this.Recognition);
+  }
+
+  setNeuralSpeechProvider(provider) {
+    this.neuralSpeechProvider = typeof provider === "function" ? provider : null;
+  }
+
+  async unlockNeuralAudio() {
+    const AudioContext =
+      this.window?.AudioContext ?? this.window?.webkitAudioContext;
+    if (!AudioContext) return false;
+    try {
+      if (!this.audioContext) this.audioContext = new AudioContext();
+      const resumePromise = this.audioContext.state === "suspended"
+        ? this.audioContext.resume()
+        : Promise.resolve();
+      // Start a silent one-frame buffer while the selection click still has
+      // user activation. Safari then permits the generated guidance returned
+      // by the asynchronous backend request to play through this context.
+      const source = this.audioContext.createBufferSource();
+      source.buffer = this.audioContext.createBuffer(1, 1, 24000);
+      source.connect(this.audioContext.destination);
+      source.start(0);
+      await resumePromise;
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   preparePreferredVoice({ timeoutMs = 1200, pollMs = 50 } = {}) {
@@ -777,10 +813,41 @@ export class VoiceGuidance {
 
     const now = Date.now();
     if (now - (this.lastSpoken.get(key) ?? 0) < cooldownMs) return false;
-    if (this.synthesis.speaking && !interrupt) return false;
+    if ((this.synthesis.speaking || this.neuralSpeaking) && !interrupt) {
+      return false;
+    }
 
     this.usePlaybackAudioSession();
-    if (interrupt) this.synthesis.cancel();
+    if (interrupt) this.cancelSpokenOutput();
+    this.lastSpoken.set(key, now);
+
+    const useNeuralSpeech = Boolean(
+      this.neuralSpeechProvider
+      && message.length >= NEURAL_SPEECH_MIN_LENGTH
+      && !/^Rep\s+\d+[.!]?$/i.test(message)
+    );
+    if (useNeuralSpeech) {
+      const generation = ++this.speechGeneration;
+      this.neuralSpeaking = true;
+      this.speakNeural(message, {
+        generation,
+        onEnd,
+        rate,
+        pitch,
+        volume,
+      });
+      return true;
+    }
+
+    return this.speakBrowser(message, { onEnd, rate, pitch, volume });
+  }
+
+  speakBrowser(message, {
+    onEnd = null,
+    rate = null,
+    pitch = null,
+    volume = DEFAULT_SPEECH_VOLUME,
+  } = {}) {
     const utterance = new this.window.SpeechSynthesisUtterance(message);
     if (!this.preferredVoice) this.refreshPreferredVoice();
     if (this.preferredVoice) utterance.voice = this.preferredVoice;
@@ -808,14 +875,100 @@ export class VoiceGuidance {
       1
     );
     if (typeof onEnd === "function") utterance.addEventListener("end", onEnd);
-    this.lastSpoken.set(key, now);
     this.synthesis.speak(utterance);
     return true;
   }
 
+  async decodeNeuralAudio(base64Audio) {
+    const binary = this.window?.atob
+      ? this.window.atob(base64Audio)
+      : globalThis.atob(base64Audio);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const context = this.audioContext;
+    if (!context) throw new Error("Audio context has not been unlocked.");
+    return context.decodeAudioData(bytes.buffer.slice(0));
+  }
+
+  async speakNeural(message, {
+    generation,
+    onEnd,
+    rate,
+    pitch,
+    volume,
+  }) {
+    try {
+      if (!this.audioContext) await this.unlockNeuralAudio();
+      if (!this.audioContext) throw new Error("Generated-audio playback unavailable.");
+      if (this.audioContext.state === "suspended") await this.audioContext.resume();
+
+      const locale = getSpeechLocale();
+      const cacheKey = `${locale}:${message}`;
+      let base64Audio = this.neuralAudioCache.get(cacheKey);
+      if (!base64Audio) {
+        const response = await this.neuralSpeechProvider({
+          text: message,
+          locale,
+        });
+        base64Audio = response?.audio;
+        if (!base64Audio) throw new Error("Generated guidance contained no audio.");
+        this.neuralAudioCache.set(cacheKey, base64Audio);
+        if (this.neuralAudioCache.size > NEURAL_SPEECH_CACHE_LIMIT) {
+          this.neuralAudioCache.delete(this.neuralAudioCache.keys().next().value);
+        }
+      }
+      const audioBuffer = await this.decodeNeuralAudio(base64Audio);
+      if (generation !== this.speechGeneration || !this.enabled) return;
+
+      const source = this.audioContext.createBufferSource();
+      const gain = this.audioContext.createGain();
+      gain.gain.value = Math.min(
+        Math.max(Number(volume) || DEFAULT_SPEECH_VOLUME, 0.2),
+        1
+      );
+      source.buffer = audioBuffer;
+      source.connect(gain);
+      gain.connect(this.audioContext.destination);
+      this.activeAudioSource = source;
+      source.addEventListener?.("ended", () => {
+        if (generation !== this.speechGeneration) return;
+        this.activeAudioSource = null;
+        this.neuralSpeaking = false;
+        onEnd?.();
+      });
+      // Older WebKit exposes onended but not addEventListener on audio sources.
+      if (!source.addEventListener) {
+        source.onended = () => {
+          if (generation !== this.speechGeneration) return;
+          this.activeAudioSource = null;
+          this.neuralSpeaking = false;
+          onEnd?.();
+        };
+      }
+      source.start(0);
+    } catch (error) {
+      if (generation !== this.speechGeneration || !this.enabled) return;
+      console.warn("Natural guidance audio unavailable; using browser voice.", error);
+      this.neuralSpeaking = false;
+      this.speakBrowser(message, { onEnd, rate, pitch, volume });
+    }
+  }
+
+  cancelSpokenOutput() {
+    this.speechGeneration += 1;
+    this.neuralSpeaking = false;
+    const activeSource = this.activeAudioSource;
+    this.activeAudioSource = null;
+    try {
+      activeSource?.stop?.(0);
+    } catch (_) {
+      // The source may already have ended.
+    }
+    this.synthesis?.cancel();
+  }
+
   cancel() {
     this.listeningGeneration += 1;
-    this.synthesis?.cancel();
+    this.cancelSpokenOutput();
     if (this.activeRecognition) {
       this.activeRecognition.abort();
       this.activeRecognition = null;
@@ -837,7 +990,7 @@ export class VoiceGuidance {
     this.listeningGeneration += 1;
     const listeningGeneration = this.listeningGeneration;
     this.activeRecognition?.abort();
-    this.synthesis?.cancel();
+    this.cancelSpokenOutput();
     const schedule = this.window?.setTimeout?.bind(this.window)
       ?? globalThis.setTimeout;
     const recognitionLanguage = getSpeechLocale();
@@ -1024,3 +1177,4 @@ export class VoiceGuidance {
 }
 
 export const voiceGuidance = new VoiceGuidance();
+voiceGuidance.setNeuralSpeechProvider(generateGuidanceSpeech);

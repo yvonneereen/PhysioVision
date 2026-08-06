@@ -65,6 +65,7 @@ from .safety_language import (
     available_safety_language_stage,
     interpret_safety_language,
 )
+from .speech import GuidanceSpeechUnavailable, generate_guidance_speech
 from .serializers import (
     CareInvitationAcceptSerializer,
     CareInvitationSerializer,
@@ -1063,6 +1064,36 @@ class SafetyLanguageInterpretationView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         return Response(interpretation)
+
+
+class GuidanceSpeechView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'guidance_speech'
+
+    def post(self, request):
+        if request.user.role != UserRole.PATIENT:
+            return Response(
+                {'detail': 'Spoken exercise guidance is available to patients only.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        transcript = ' '.join(str(request.data.get('text', '')).split())
+        locale = str(request.data.get('locale', 'en-SG')).strip()
+        if not transcript or len(transcript) > 700:
+            return Response(
+                {'detail': 'Spoken guidance must contain between 1 and 700 characters.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            audio = generate_guidance_speech(transcript, locale)
+        except GuidanceSpeechUnavailable:
+            # Do not expose provider details or the health-related transcript.
+            logger.warning('Guidance speech generation was unavailable')
+            return Response(
+                {'detail': 'Natural spoken guidance is temporarily unavailable.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response(audio)
 
 
 class WellnessScreeningView(APIView):

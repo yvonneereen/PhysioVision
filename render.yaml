@@ -54,3 +54,7 @@ services:
         sync: false
       - key: GEMINI_MODEL
         value: gemini-3.6-flash
+      - key: GEMINI_TTS_MODEL
+        value: gemini-3.1-flash-tts-preview
+      - key: GEMINI_TTS_VOICE
+        value: Sulafat

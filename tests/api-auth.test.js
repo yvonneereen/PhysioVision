@@ -203,6 +203,18 @@ await api.interpretSafetyLanguage({
   stage: "fall-wellbeing",
   transcript: "I cannot stand anymore",
 });
+responses.push({
+  status: 200,
+  body: {
+    audio: "UklGRg==",
+    mime_type: "audio/wav",
+    provider: "gemini_tts",
+  },
+});
+await api.generateGuidanceSpeech({
+  text: "Before we begin, how is your pain right now?",
+  locale: "en-SG",
+});
 assert.match(requests[0].url, /\/api\/auth\/register\/$/);
 assert.match(requests[2].url, /\/api\/auth\/verify-login\/$/);
 assert.match(requests[4].url, /\/api\/auth\/forgot-password\/$/);
@@ -236,6 +248,14 @@ assert.deepEqual(
   {
     stage: "fall-wellbeing",
     transcript: "I cannot stand anymore",
+    locale: "en-SG",
+  }
+);
+assert.match(requests[16].url, /\/api\/auth\/agent\/speech\/$/);
+assert.deepEqual(
+  JSON.parse(requests[16].options.body),
+  {
+    text: "Before we begin, how is your pain right now?",
     locale: "en-SG",
   }
 );

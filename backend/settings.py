@@ -34,6 +34,11 @@ if RENDER_EXTERNAL_HOSTNAME and RENDER_EXTERNAL_HOSTNAME not in ALLOWED_HOSTS:
 
 GEMINI_API_KEY = env('GEMINI_API_KEY', default='')
 GEMINI_MODEL = env('GEMINI_MODEL', default='gemini-3.6-flash')
+GEMINI_TTS_MODEL = env(
+    'GEMINI_TTS_MODEL',
+    default='gemini-3.1-flash-tts-preview',
+)
+GEMINI_TTS_VOICE = env('GEMINI_TTS_VOICE', default='Sulafat')
 
 
 # Application definition
@@ -81,6 +86,7 @@ REST_FRAMEWORK = {
         'emergency_alert_create': '12/hour',
         'emergency_alert_response': '30/hour',
         'safety_language_interpretation': '60/hour',
+        'guidance_speech': '180/hour',
     },
 }
 

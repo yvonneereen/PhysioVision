@@ -31,7 +31,7 @@ import {
   postPainCheckin,
   postSession,
   respondEmergencyAlert,
-} from "./api.js?v=28";
+} from "./api.js?v=29";
 import { DRAFT_EXERCISES } from "./exercises/catalog.js";
 import {
   parseConfirmationResponse,
@@ -42,7 +42,7 @@ import {
   readMicrophonePermissionState,
   shouldDeferMicrophonePreflightToSpeechRecognition,
   voiceGuidance,
-} from "./voice-guidance.js?v=17";
+} from "./voice-guidance.js?v=18";
 import { isWellnessEligible } from "./wellness-screening.js";
 import {
   PRACTICE_VIEWS,
@@ -399,6 +399,10 @@ function ensureVoiceModeChosen() {
 
 async function requestHandsFreeMicrophone() {
   if (!voiceGuidance.canSpeak || !voiceGuidance.canListen) return;
+
+  // Unlock the generated-audio output during the user's click. Safari may
+  // block audio that is first created only after the backend request returns.
+  void voiceGuidance.unlockNeuralAudio();
 
   voiceSetupHandsFree.disabled = true;
   voiceSetupButtons.disabled = true;

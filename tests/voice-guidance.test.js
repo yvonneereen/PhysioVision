@@ -333,6 +333,72 @@ assert.equal(
   "every prompt should restore playback mode after Safari microphone use"
 );
 
+const neuralSources = [];
+class MockAudioContext {
+  constructor() {
+    this.state = "suspended";
+    this.destination = {};
+  }
+
+  resume() {
+    this.state = "running";
+    return Promise.resolve();
+  }
+
+  createBuffer() {
+    return {};
+  }
+
+  createBufferSource() {
+    const source = {
+      listeners: {},
+      connect: () => {},
+      start: () => { source.started = true; },
+      stop: () => {},
+      addEventListener: (event, callback) => {
+        source.listeners[event] = callback;
+      },
+    };
+    neuralSources.push(source);
+    return source;
+  }
+
+  createGain() {
+    return { gain: { value: 0 }, connect: () => {} };
+  }
+
+  decodeAudioData() {
+    return Promise.resolve({ decoded: true });
+  }
+}
+
+const neuralWindow = {
+  ...mockWindow,
+  AudioContext: MockAudioContext,
+};
+const neuralGuidance = new VoiceGuidance(neuralWindow);
+let neuralRequest = null;
+let neuralEnded = false;
+neuralGuidance.setNeuralSpeechProvider(async (request) => {
+  neuralRequest = request;
+  return { audio: "AA==", mime_type: "audio/wav" };
+});
+assert.equal(await neuralGuidance.unlockNeuralAudio(), true);
+assert.equal(
+  neuralGuidance.speak("Before we begin, how is your pain right now?", {
+    onEnd: () => { neuralEnded = true; },
+  }),
+  true
+);
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.deepEqual(neuralRequest, {
+  text: "Before we begin, how is your pain right now?",
+  locale: "en-SG",
+});
+assert.equal(neuralSources[1].started, true);
+neuralSources[1].listeners.ended();
+assert.equal(neuralEnded, true);
+
 let activeRecognitionInstance = null;
 const recognitionInstances = [];
 class MockRecognition {

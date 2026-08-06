@@ -114,6 +114,11 @@ urlpatterns = [
         name='agent-safety-language',
     ),
     path(
+        'agent/speech/',
+        views.GuidanceSpeechView.as_view(),
+        name='agent-guidance-speech',
+    ),
+    path(
         'slack/link-code/',
         views.SlackLinkCodeView.as_view(),
         name='auth-slack-link-code',

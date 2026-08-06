@@ -53,6 +53,27 @@ const TRANSLATION_ROWS = [
   ["Start wellness exercises", "开始健康运动", "Mulakan senaman kesejahteraan", "நலவாழ்வு உடற்பயிற்சிகளைத் தொடங்கவும்"],
   ["Change my plan", "更改我的计划", "Tukar pelan saya", "எனது திட்டத்தை மாற்றவும்"],
   ["AI plan accepted", "AI计划已接受", "Pelan AI diterima", "AI திட்டம் ஏற்கப்பட்டது"],
+  ["A gentle 3-day balance and lower-body stability routine designed for Yvonne using a chair for support.", "为Yvonne设计的温和三天平衡与下肢稳定训练，并使用椅子辅助。", "Rutin keseimbangan dan kestabilan bahagian bawah badan selama 3 hari yang lembut, direka untuk Yvonne dengan sokongan kerusi.", "Yvonne-க்காக வடிவமைக்கப்பட்ட, நாற்காலி ஆதரவுடன் செய்யும் மென்மையான 3 நாள் சமநிலை மற்றும் கீழ் உடல் நிலைத்தன்மைப் பயிற்சி."],
+  ["Leg Strength and Ankle Balance", "腿部力量与脚踝平衡", "Kekuatan kaki dan keseimbangan buku lali", "கால் வலிமை மற்றும் கணுக்கால் சமநிலை"],
+  ["Hip Stability and Balance", "髋部稳定与平衡", "Kestabilan pinggul dan keseimbangan", "இடுப்பு நிலைத்தன்மை மற்றும் சமநிலை"],
+  ["Total Balance and Support", "全身平衡与支撑", "Keseimbangan menyeluruh dan sokongan", "முழுமையான சமநிலை மற்றும் ஆதரவு"],
+  ["Half squats", "半蹲", "Separuh cangkung", "அரை குந்துதல்"],
+  ["Seated leg extensions", "坐姿伸膝", "Luruskan kaki sambil duduk", "அமர்ந்தபடி காலை நீட்டுதல்"],
+  ["Heel cord stretch", "跟腱拉伸", "Regangan tendon tumit", "குதிகால் தசைநார் நீட்டுதல்"],
+  ["Calf raises", "提踵", "Angkat tumit", "குதிகால் உயர்த்துதல்"],
+  ["Hamstring curls", "腿后肌弯举", "Lengkuk hamstring", "பின்தொடை மடக்குதல்"],
+  ["Standing hip abduction", "站立髋外展", "Abduksi pinggul berdiri", "நின்றபடி இடுப்பை வெளிப்புறமாக நகர்த்துதல்"],
+  ["Supine straight-leg raises", "仰卧直腿抬高", "Angkat kaki lurus secara terlentang", "மல்லாந்து படுத்து நேராக காலை உயர்த்துதல்"],
+  ["Side-lying hip adduction", "侧卧髋内收", "Adduksi pinggul mengiring", "பக்கவாட்டில் படுத்து இடுப்பை உட்புறமாக நகர்த்துதல்"],
+  ["Elastic-band leg presses", "弹力带腿部推蹬", "Tekan kaki dengan jalur elastik", "எலாஸ்டிக் பட்டையுடன் கால் தள்ளுதல்"],
+  ["Mon", "周一", "Isn", "திங்கள்"],
+  ["Tue", "周二", "Sel", "செவ்வாய்"],
+  ["Wed", "周三", "Rab", "புதன்"],
+  ["Thu", "周四", "Kha", "வியாழன்"],
+  ["Fri", "周五", "Jum", "வெள்ளி"],
+  ["Sat", "周六", "Sab", "சனி"],
+  ["Sun", "周日", "Ahd", "ஞாயிறு"],
+  ["Ask your AI", "询问您的AI助手", "Tanya AI anda", "உங்கள் AI-யிடம் கேளுங்கள்"],
   ["Want a physiotherapist to guide you?", "希望物理治疗师指导您吗？", "Mahu ahli fisioterapi membimbing anda?", "உடற்பயிற்சி சிகிச்சையாளர் உங்களை வழிநடத்த வேண்டுமா?"],
   ["Request a physiotherapist", "请求物理治疗师", "Minta ahli fisioterapi", "உடற்பயிற்சி சிகிச்சையாளரைக் கோரவும்"],
   ["My progress", "我的进度", "Kemajuan saya", "எனது முன்னேற்றம்"],
@@ -497,8 +518,36 @@ export function getLanguageLabel(locale = activeLocale) {
 }
 
 function translateTemplate(text, locale) {
+  // Plans are stored as structured English data. Translate each segment when
+  // the dashboard joins exercise names and a duration with middle dots.
+  if (text.includes(" · ")) {
+    let changed = false;
+    const translatedParts = text.split(" · ").map((part) => {
+      const direct = TRANSLATIONS[locale]?.get(part);
+      if (direct) {
+        changed = true;
+        return direct;
+      }
+      const duration = part.match(/^(\d+) min$/);
+      if (!duration) return part;
+      changed = true;
+      const [, minutes] = duration;
+      return {
+        "zh-SG": `${minutes}分钟`,
+        "ms-SG": `${minutes} minit`,
+        "ta-SG": `${minutes} நிமிடம்`,
+      }[locale] ?? part;
+    });
+    if (changed) return translatedParts.join(" · ");
+  }
+
   const templates = {
     "zh-SG": [
+      [/^(\d+) min$/, (_, minutes) => `${minutes}分钟`],
+      [/^Session (\d+)$/, (_, session) => `第${session}次训练`],
+      [/^A gentle (\d+)-day balance and lower-body stability routine designed for (.+) using a chair for support\.$/, (_, days, name) => `为${name}设计的温和${days}天平衡与下肢稳定训练，并使用椅子辅助。`],
+      [/^A gradual plan focused on (.+)\.$/, (_, goal) => `一个循序渐进、以${TRANSLATIONS[locale]?.get(goal) ?? goal}为重点的计划。`],
+      [/^A cautious starting plan focused on (.+)\.$/, (_, goal) => `一个谨慎起步、以${TRANSLATIONS[locale]?.get(goal) ?? goal}为重点的计划。`],
       [/^Pain level (\d+) out of 10$/, (_, level) => `疼痛程度为10分中的${level}分`],
       [/^Pain level (\d+) recorded$/, (_, level) => `疼痛程度${level}已记录`],
       [/^I heard that your pain is (\d+) out of 10\. Is that correct\?$/, (_, level) => `我听到您的疼痛程度是10分中的${level}分。正确吗？`],
@@ -512,6 +561,11 @@ function translateTemplate(text, locale) {
       [/^(Confirmed|Requested): (.+) with (.+)\.$/, (_, status, when, clinician) => `${status === "Confirmed" ? "已确认" : "已请求"}：${when}，与${clinician}。`],
     ],
     "ms-SG": [
+      [/^(\d+) min$/, (_, minutes) => `${minutes} minit`],
+      [/^Session (\d+)$/, (_, session) => `Sesi ${session}`],
+      [/^A gentle (\d+)-day balance and lower-body stability routine designed for (.+) using a chair for support\.$/, (_, days, name) => `Rutin keseimbangan dan kestabilan bahagian bawah badan selama ${days} hari yang lembut, direka untuk ${name} dengan sokongan kerusi.`],
+      [/^A gradual plan focused on (.+)\.$/, (_, goal) => `Pelan beransur-ansur yang memberi tumpuan kepada ${TRANSLATIONS[locale]?.get(goal) ?? goal}.`],
+      [/^A cautious starting plan focused on (.+)\.$/, (_, goal) => `Pelan permulaan yang berhati-hati dan memberi tumpuan kepada ${TRANSLATIONS[locale]?.get(goal) ?? goal}.`],
       [/^Pain level (\d+) out of 10$/, (_, level) => `Tahap kesakitan ${level} daripada 10`],
       [/^Pain level (\d+) recorded$/, (_, level) => `Tahap kesakitan ${level} direkodkan`],
       [/^I heard that your pain is (\d+) out of 10\. Is that correct\?$/, (_, level) => `Saya mendengar tahap kesakitan anda ialah ${level} daripada 10. Adakah itu betul?`],
@@ -525,6 +579,11 @@ function translateTemplate(text, locale) {
       [/^(Confirmed|Requested): (.+) with (.+)\.$/, (_, status, when, clinician) => `${status === "Confirmed" ? "Disahkan" : "Diminta"}: ${when} bersama ${clinician}.`],
     ],
     "ta-SG": [
+      [/^(\d+) min$/, (_, minutes) => `${minutes} நிமிடம்`],
+      [/^Session (\d+)$/, (_, session) => `அமர்வு ${session}`],
+      [/^A gentle (\d+)-day balance and lower-body stability routine designed for (.+) using a chair for support\.$/, (_, days, name) => `${name}-க்காக வடிவமைக்கப்பட்ட, நாற்காலி ஆதரவுடன் செய்யும் மென்மையான ${days} நாள் சமநிலை மற்றும் கீழ் உடல் நிலைத்தன்மைப் பயிற்சி.`],
+      [/^A gradual plan focused on (.+)\.$/, (_, goal) => `${TRANSLATIONS[locale]?.get(goal) ?? goal} மீது கவனம் செலுத்தும் படிப்படியான திட்டம்.`],
+      [/^A cautious starting plan focused on (.+)\.$/, (_, goal) => `${TRANSLATIONS[locale]?.get(goal) ?? goal} மீது கவனம் செலுத்தும் எச்சரிக்கையான தொடக்கத் திட்டம்.`],
       [/^Pain level (\d+) out of 10$/, (_, level) => `வலி அளவு 10-இல் ${level}`],
       [/^Pain level (\d+) recorded$/, (_, level) => `வலி அளவு ${level} பதிவு செய்யப்பட்டது`],
       [/^I heard that your pain is (\d+) out of 10\. Is that correct\?$/, (_, level) => `உங்கள் வலி அளவு 10-இல் ${level} என்று கேட்டேன். அது சரியா?`],

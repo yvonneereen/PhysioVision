@@ -233,6 +233,41 @@ assert.match(
   "a pain question must not appear before the response-mode choice"
 );
 
+const showPainCheckinSource = functionSource(
+  "showPainCheckin",
+  "hidePainCheckin"
+);
+assert.ok(
+  showPainCheckinSource.indexOf('painCheckinEl.classList.remove("hidden")')
+    < showPainCheckinSource.indexOf("speakPainPrompt("),
+  "the pain question should be visible before spoken guidance begins"
+);
+assert.match(
+  showPainCheckinSource,
+  /statusEl\.textContent = context === "before"[\s\S]*?Pain check ready/,
+  "the status indicator should immediately confirm that the pain check is ready"
+);
+assert.match(
+  showPainCheckinSource,
+  /painCheckinEl\.scrollIntoView\(\{ behavior: "auto", block: "start" \}\)/,
+  "the pain question should appear without waiting for a scroll animation"
+);
+assert.doesNotMatch(
+  styles,
+  /\.pain-checkin\.hands-free-checkin:not\(\.safety-interview-active\)\s*\{\s*display:\s*none/,
+  "hands-free mode must not hide the visible pain question while audio starts"
+);
+assert.match(
+  source,
+  /function speakPainPrompt[\s\S]*?preferImmediate:\s*true/,
+  "pain and safety prompts should bypass network speech latency"
+);
+assert.match(
+  source,
+  /function speakPainPrompt[\s\S]*?voiceGroup:\s*PAIN_PROMPT_VOICE_GROUP[\s\S]*?rate:[\s\S]*?pitch:/,
+  "the pain question and confirmation should retain one voice and speaking style"
+);
+
 const calibrationFlowStart = source.indexOf(
   "async function openCalibrationFlow("
 );
@@ -271,8 +306,8 @@ assert.match(
 );
 assert.match(
   source,
-  /if \(!handsFreeVoiceEnabled\)[\s\S]*?Choose your pain level in the exercise panel to continue\.[\s\S]*?painCheckinEl\.scrollIntoView[\s\S]*?focus\(\{ preventScroll: true \}\)/,
-  "on-screen mode should reveal and focus the pain question instead of appearing unresponsive"
+  /Choose your pain level in the exercise panel to continue\.[\s\S]*?painCheckinEl\.scrollIntoView[\s\S]*?if \(!handsFreeVoiceEnabled\)[\s\S]*?focus\(\{ preventScroll: true \}\)/,
+  "the pain question should be revealed immediately and focused in on-screen mode"
 );
 assert.doesNotMatch(
   source,

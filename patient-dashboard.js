@@ -23,7 +23,7 @@ import {
   shouldShowPhysiotherapistRequest,
 } from "./patient-dashboard-state.js?v=3";
 import { saveProfile } from "./personalization.js?v=9";
-import { getLocale, translateText } from "./i18n.js?v=7";
+import { getLocale, translateText } from "./i18n.js?v=8";
 import { EXERCISE_MAP } from "./exercises/registry.js";
 
 const dashboard = document.getElementById("patientDashboard");

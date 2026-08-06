@@ -227,6 +227,33 @@ guidance.speak("Custom pace", {
 assert.equal(spoken[2].rate, 1.05);
 assert.equal(spoken[2].pitch, 0.95);
 
+guidance.speak("Before we begin, how is your pain right now?", {
+  key: "pain-question",
+  interrupt: true,
+  preferImmediate: true,
+  voiceGroup: "pain-checkin",
+  rate: 0.98,
+  pitch: 1.04,
+});
+const painQuestionUtterance = spoken[3];
+guidance.preferredVoice = standardVoice;
+guidance.speak("I heard that your pain is seven out of ten. Is that correct?", {
+  key: "pain-confirmation",
+  interrupt: true,
+  preferImmediate: true,
+  voiceGroup: "pain-checkin",
+  rate: 0.98,
+  pitch: 1.04,
+});
+const painConfirmationUtterance = spoken[4];
+assert.equal(
+  painConfirmationUtterance.voice,
+  painQuestionUtterance.voice,
+  "pain confirmation must keep the exact voice used for the first question"
+);
+assert.equal(painConfirmationUtterance.rate, painQuestionUtterance.rate);
+assert.equal(painConfirmationUtterance.pitch, painQuestionUtterance.pitch);
+
 let delayedVoiceList = [];
 let delayedVoicesChanged = null;
 const delayedSpoken = [];
@@ -360,6 +387,27 @@ assert.deepEqual(neuralRequest, {
 assert.equal(neuralSources[1].started, true);
 neuralSources[1].listeners.ended();
 assert.equal(neuralEnded, true);
+
+neuralRequest = null;
+const spokenBeforeImmediatePrompt = spoken.length;
+assert.equal(
+  neuralGuidance.speak("Please tell me your pain level from zero to ten.", {
+    interrupt: true,
+    preferImmediate: true,
+  }),
+  true
+);
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(
+  neuralRequest,
+  null,
+  "an immediate safety prompt must not wait for the neural speech service"
+);
+assert.equal(
+  spoken.length,
+  spokenBeforeImmediatePrompt + 1,
+  "an immediate safety prompt should use the ready browser voice"
+);
 
 let activeRecognitionInstance = null;
 const recognitionInstances = [];

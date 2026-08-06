@@ -7918,7 +7918,6 @@ details.metrics summary {
   gap: 0.75rem;
 }
 .pain-checkin.hidden { display: none; }
-.pain-checkin.hands-free-checkin:not(.safety-interview-active) { display: none; }
 .pain-checkin-context {
   color: var(--green);
   font-size: 1rem;

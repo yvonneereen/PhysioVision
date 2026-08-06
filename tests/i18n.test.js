@@ -23,7 +23,7 @@ assert.ok(
 );
 assert.deepEqual(
   [...new Set(i18nCacheVersions)],
-  ["7"],
+  ["8"],
   "all browser entry points must use one i18n URL so only one DOM observer is created"
 );
 
@@ -34,7 +34,7 @@ const voiceCacheVersions = voiceConsumerSources.flatMap((source) =>
 );
 assert.deepEqual(
   [...new Set(voiceCacheVersions)],
-  ["19"],
+  ["21"],
   "all voice consumers must share one voice-guidance module instance"
 );
 
@@ -116,6 +116,16 @@ const dashboardSources = [
   "No messages yet. Say hello or ask a question.",
   "Request sent. The physiotherapist will confirm the appointment.",
   "Request a physiotherapist? This pauses your self-guided wellness plan and shares your recent history with the care team.",
+  "Leg Strength and Ankle Balance",
+  "Hip Stability and Balance",
+  "Total Balance and Support",
+  "Half squats",
+  "Calf raises",
+  "Standing hip abduction",
+  "Mon",
+  "Wed",
+  "Sat",
+  "Ask your AI",
 ];
 
 for (const locale of ["zh-SG", "ms-SG", "ta-SG"]) {
@@ -131,6 +141,27 @@ for (const locale of ["zh-SG", "ms-SG", "ta-SG"]) {
 assert.equal(
   translateText("2 sets × 10 reps · 3 days/week", "zh-SG"),
   "2组 × 10次 · 每周3天"
+);
+assert.equal(
+  translateText("Half squats · Calf raises · 10 min", "zh-SG"),
+  "半蹲 · 提踵 · 10分钟",
+  "saved plan exercise lists and durations should translate as structured data"
+);
+assert.equal(
+  translateText(
+    "A gentle 4-day balance and lower-body stability routine designed for Mei using a chair for support.",
+    "zh-SG"
+  ),
+  "为Mei设计的温和4天平衡与下肢稳定训练，并使用椅子辅助。",
+  "personalized plan summaries should retain the user's name while translating"
+);
+assert.equal(
+  translateText("Half squats · Calf raises · 10 min", "ms-SG"),
+  "Separuh cangkung · Angkat tumit · 10 minit"
+);
+assert.equal(
+  translateText("Half squats · Calf raises · 10 min", "ta-SG"),
+  "அரை குந்துதல் · குதிகால் உயர்த்துதல் · 10 நிமிடம்"
 );
 assert.equal(
   translateText(

@@ -41,7 +41,7 @@ import {
   describeMicrophoneAccessFailure,
   readMicrophonePermissionState,
   voiceGuidance,
-} from "./voice-guidance.js?v=19";
+} from "./voice-guidance.js?v=21";
 import { isWellnessEligible } from "./wellness-screening.js";
 import {
   PRACTICE_VIEWS,
@@ -3507,6 +3507,9 @@ const recordedPainValueEl = document.getElementById("recordedPainValue");
 let painCheckinState = null;
 let painSafetyRestTimer = null;
 let painVoiceFallbackNeeded = false;
+const PAIN_PROMPT_VOICE_GROUP = "pain-checkin";
+const PAIN_PROMPT_RATE = 0.98;
+const PAIN_PROMPT_PITCH = 1.04;
 
 function painQuestion(context) {
   return context === "before"
@@ -3923,7 +3926,12 @@ function startPainVoiceListening({ expectedStage = null } = {}) {
   });
 }
 
-function speakPainPrompt(question, key, expectedStage, { rate } = {}) {
+function speakPainPrompt(
+  question,
+  key,
+  expectedStage,
+  { rate = PAIN_PROMPT_RATE, pitch = PAIN_PROMPT_PITCH } = {}
+) {
   const beginListening = () => {
     if (
       handsFreeVoiceEnabled &&
@@ -3935,7 +3943,12 @@ function speakPainPrompt(question, key, expectedStage, { rate } = {}) {
   const spoken = voiceGuidance.speak(question, {
     key,
     interrupt: true,
-    ...(Number.isFinite(rate) ? { rate } : {}),
+    // Safety questions must begin without waiting for a network voice request.
+    preferImmediate: true,
+    // Keep the initial question and every follow-up on the same exact voice.
+    voiceGroup: PAIN_PROMPT_VOICE_GROUP,
+    rate: Number.isFinite(rate) ? rate : PAIN_PROMPT_RATE,
+    pitch: Number.isFinite(pitch) ? pitch : PAIN_PROMPT_PITCH,
     onEnd: () => armVoiceListening(beginListening),
   });
   if (!spoken && handsFreeVoiceEnabled) {
@@ -4005,21 +4018,27 @@ function showPainCheckin(context = "after", {
     : "Voice input is unavailable in this browser. Choose a button.";
   updatePainCheckinPresentation();
   painCheckinEl.classList.remove("hidden");
+  statusEl.textContent = context === "before"
+    ? "Pain check ready — please answer"
+    : "Check-in ready — please answer";
   if (startAfter || continuation) toggleBtn.disabled = true;
 
-  if (!handsFreeVoiceEnabled) {
-    if (context === "before" && (startAfter || continuation)) {
-      cameraSetupStatus.textContent =
-        "Choose your pain level in the exercise panel to continue.";
-      cameraSetupStatus.hidden = false;
-    }
-    window.requestAnimationFrame(() => {
-      painCheckinEl.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (context === "before" && (startAfter || continuation)) {
+    cameraSetupStatus.textContent = handsFreeVoiceEnabled
+      ? "Pain question ready. Answer aloud or choose a number to continue."
+      : "Choose your pain level in the exercise panel to continue.";
+    cameraSetupStatus.hidden = false;
+  }
+
+  // Reveal the question before speech synthesis or model loading can delay it.
+  window.requestAnimationFrame(() => {
+    painCheckinEl.scrollIntoView({ behavior: "auto", block: "start" });
+    if (!handsFreeVoiceEnabled) {
       painLevelChoicesEl
         .querySelector("button:not([disabled])")
         ?.focus({ preventScroll: true });
-    });
-  }
+    }
+  });
 
   speakPainPrompt(
     painQuestion(context),

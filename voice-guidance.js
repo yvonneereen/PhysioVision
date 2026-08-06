@@ -1,7 +1,7 @@
 import {
   getSpeechLocale,
   translateText,
-} from "./i18n.js?v=7";
+} from "./i18n.js?v=8";
 import { generateGuidanceSpeech } from "./api.js?v=29";
 
 const VOICE_PREFERENCE_KEY = "physiovision.voice.enabled.v1";
@@ -611,6 +611,7 @@ export class VoiceGuidance {
     this.listeningGeneration = 0;
     this.preferredVoice = null;
     this.voiceSelectionLocked = false;
+    this.browserVoiceGroups = new Map();
     this.neuralSpeechProvider = null;
     this.audioContext = null;
     this.activeAudioSource = null;
@@ -633,6 +634,7 @@ export class VoiceGuidance {
     );
     this.window?.addEventListener?.("physiovision:language-change", (event) => {
       this.voiceSelectionLocked = false;
+      this.browserVoiceGroups.clear();
       this.preferredVoice = selectGentleVoice(
         this.synthesis?.getVoices?.() ?? [],
         event.detail?.speechLocale || getSpeechLocale()
@@ -782,6 +784,8 @@ export class VoiceGuidance {
     key = String(text),
     cooldownMs = 0,
     interrupt = false,
+    preferImmediate = false,
+    voiceGroup = "",
     onEnd = null,
     rate = null,
     pitch = null,
@@ -801,7 +805,8 @@ export class VoiceGuidance {
     this.lastSpoken.set(key, now);
 
     const useNeuralSpeech = Boolean(
-      this.neuralSpeechProvider
+      !preferImmediate
+      && this.neuralSpeechProvider
       && message.length >= NEURAL_SPEECH_MIN_LENGTH
       && !/^Rep\s+\d+[.!]?$/i.test(message)
     );
@@ -814,11 +819,18 @@ export class VoiceGuidance {
         rate,
         pitch,
         volume,
+        voiceGroup,
       });
       return true;
     }
 
-    return this.speakBrowser(message, { onEnd, rate, pitch, volume });
+    return this.speakBrowser(message, {
+      onEnd,
+      rate,
+      pitch,
+      volume,
+      voiceGroup,
+    });
   }
 
   speakBrowser(message, {
@@ -826,13 +838,30 @@ export class VoiceGuidance {
     rate = null,
     pitch = null,
     volume = DEFAULT_SPEECH_VOLUME,
+    voiceGroup = "",
   } = {}) {
     const utterance = new this.window.SpeechSynthesisUtterance(message);
-    if (!this.preferredVoice) this.refreshPreferredVoice();
-    if (this.preferredVoice) utterance.voice = this.preferredVoice;
+    const normalizedVoiceGroup = String(voiceGroup ?? "").trim();
+    const hasGroupedVoice = Boolean(
+      normalizedVoiceGroup
+      && this.browserVoiceGroups.has(normalizedVoiceGroup)
+    );
+    let selectedVoice = hasGroupedVoice
+      ? this.browserVoiceGroups.get(normalizedVoiceGroup)
+      : null;
+    if (!hasGroupedVoice) {
+      if (!this.preferredVoice) this.refreshPreferredVoice();
+      selectedVoice = this.preferredVoice;
+    }
+    if (normalizedVoiceGroup && !hasGroupedVoice) {
+      // Keep multi-step conversations on one exact system voice, even if the
+      // browser publishes or reorders its voice list between utterances.
+      this.browserVoiceGroups.set(normalizedVoiceGroup, selectedVoice ?? null);
+    }
+    if (selectedVoice) utterance.voice = selectedVoice;
     this.voiceSelectionLocked = true;
     utterance.lang =
-      this.preferredVoice?.lang ||
+      selectedVoice?.lang ||
       getSpeechLocale();
     const naturalProsody = conversationalProsody(message);
     const requestedRate = rate === null || rate === undefined
@@ -874,6 +903,7 @@ export class VoiceGuidance {
     rate,
     pitch,
     volume,
+    voiceGroup,
   }) {
     try {
       if (!this.audioContext) await this.unlockNeuralAudio();
@@ -928,7 +958,13 @@ export class VoiceGuidance {
       if (generation !== this.speechGeneration || !this.enabled) return;
       console.warn("Natural guidance audio unavailable; using browser voice.", error);
       this.neuralSpeaking = false;
-      this.speakBrowser(message, { onEnd, rate, pitch, volume });
+      this.speakBrowser(message, {
+        onEnd,
+        rate,
+        pitch,
+        volume,
+        voiceGroup,
+      });
     }
   }
 

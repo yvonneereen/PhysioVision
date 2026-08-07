@@ -91,6 +91,18 @@ class ProductionReadinessTests(APITestCase):
         self.assertEqual(hips.data['goal'], GoalChoice.STRONGER_HIPS)
         self.assertEqual(hips.data['custom_goal'], '')
 
+        shoulder = self.client.patch(
+            '/api/auth/me/',
+            {'goal': GoalChoice.SHOULDER_MOBILITY},
+            format='json',
+        )
+        self.assertEqual(shoulder.status_code, 200)
+        self.assertEqual(
+            shoulder.data['goal'],
+            GoalChoice.SHOULDER_MOBILITY,
+        )
+        self.assertEqual(shoulder.data['custom_goal'], '')
+
         custom = self.client.patch(
             '/api/auth/me/',
             {

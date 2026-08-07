@@ -7,7 +7,7 @@ import {
   measureHandExerciseFrame,
   measurePoseExerciseFrame,
 } from "./exercise-tracking.js?v=2";
-import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=42";
+import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=43";
 import { POSES } from "./poses.js";
 import {
   calibrationFrameMatchesPhase,
@@ -19,7 +19,7 @@ import {
   loadProfile,
   saveCalibration,
   validateCalibrationCapture,
-} from "./personalization.js?v=12";
+} from "./personalization.js?v=13";
 import {
   buildCalibrationSafetyContext,
   evaluateCalibrationReuse,
@@ -33,7 +33,7 @@ import {
   postSession,
   respondEmergencyAlert,
 } from "./api.js?v=29";
-import { DRAFT_EXERCISES } from "./exercises/catalog.js";
+import { DRAFT_EXERCISES } from "./exercises/catalog.js?v=2";
 import {
   parseConfirmationResponse,
   parsePainLevel,
@@ -43,7 +43,7 @@ import {
   isSafariBrowser,
   readMicrophonePermissionState,
   voiceGuidance,
-} from "./voice-guidance.js?v=25";
+} from "./voice-guidance.js?v=26";
 import {
   PRACTICE_VIEWS,
   hasAuthenticatedPracticeAccount,

@@ -2,7 +2,7 @@ import {
   hasSavedProfile,
   loadProfile,
   saveProfile,
-} from "./personalization.js?v=9";
+} from "./personalization.js?v=13";
 import {
   evaluateWellnessScreening,
   WELLNESS_SCREENING_KEYS,
@@ -16,7 +16,7 @@ import {
   postWellnessScreening,
   startEmergencyContactVerification,
 } from "./api.js?v=26";
-import { getLocale, translateText } from "./i18n.js?v=15";
+import { getLocale, translateText } from "./i18n.js?v=16";
 
 const GOAL_API_VALUES = Object.freeze({
   "Stronger knees": "stronger_knees",
@@ -24,6 +24,7 @@ const GOAL_API_VALUES = Object.freeze({
   "Move with less stiffness": "less_stiffness",
   "Stay active": "stay_active",
   "Stronger hips": "stronger_hips",
+  "Better shoulder movement": "shoulder_mobility",
   "Better ankle movement": "ankle_mobility",
   "Walk with confidence": "walking_confidence",
   "Other": "other",

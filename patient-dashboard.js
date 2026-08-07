@@ -24,10 +24,10 @@ import {
   mergeConsultationTranscript,
   shouldShowPhysiotherapistRequest,
 } from "./patient-dashboard-state.js?v=6";
-import { saveProfile } from "./personalization.js?v=9";
-import { getLocale, translateText } from "./i18n.js?v=15";
-import { voiceGuidance } from "./voice-guidance.js?v=25";
-import { EXERCISE_MAP } from "./exercises/registry.js";
+import { saveProfile } from "./personalization.js?v=13";
+import { getLocale, translateText } from "./i18n.js?v=16";
+import { voiceGuidance } from "./voice-guidance.js?v=26";
+import { EXERCISE_MAP } from "./exercises/registry.js?v=54";
 
 const WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions";
 
@@ -121,6 +121,7 @@ const GOAL_BROWSER_LABELS = Object.freeze({
   less_stiffness: "Move with less stiffness",
   stay_active: "Stay active",
   stronger_hips: "Stronger hips",
+  shoulder_mobility: "Better shoulder movement",
   ankle_mobility: "Better ankle movement",
   walking_confidence: "Walk with confidence",
   other: "Other",

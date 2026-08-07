@@ -4056,6 +4056,10 @@ details.metrics summary {
   background: var(--mint-light);
 }
 
+.choice-card-wide {
+  grid-column: 1 / -1;
+}
+
 .choice-card input {
   position: absolute;
   opacity: 0;

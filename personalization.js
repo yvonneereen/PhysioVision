@@ -12,6 +12,7 @@ const GOAL_API_VALUES = Object.freeze({
   "Move with less stiffness": "less_stiffness",
   "Stay active": "stay_active",
   "Stronger hips": "stronger_hips",
+  "Better shoulder movement": "shoulder_mobility",
   "Better ankle movement": "ankle_mobility",
   "Walk with confidence": "walking_confidence",
   "Other": "other",

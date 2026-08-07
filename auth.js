@@ -540,6 +540,7 @@ async function seedProfileFromApi() {
       less_stiffness: "Move with less stiffness",
       stay_active: "Stay active",
       stronger_hips: "Stronger hips",
+      shoulder_mobility: "Better shoulder movement",
       ankle_mobility: "Better ankle movement",
       walking_confidence: "Walk with confidence",
       other: "Other",

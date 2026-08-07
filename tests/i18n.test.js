@@ -23,7 +23,7 @@ assert.ok(
 );
 assert.deepEqual(
   [...new Set(i18nCacheVersions)],
-  ["15"],
+  ["16"],
   "all browser entry points must use one i18n URL so only one DOM observer is created"
 );
 
@@ -73,7 +73,7 @@ const voiceCacheVersions = voiceConsumerSources.flatMap((source) =>
 );
 assert.deepEqual(
   [...new Set(voiceCacheVersions)],
-  ["25"],
+  ["26"],
   "all voice consumers must share one voice-guidance module instance"
 );
 
@@ -104,6 +104,22 @@ assert.equal(getSpeechLocale(), "zh-CN");
 assert.equal(translateText("Text size"), "文字大小");
 assert.equal(translateText("Extra large"), "特大");
 assert.equal(translateText("Start camera guide"), "开始摄像头指导");
+assert.equal(translateText("Better shoulder movement"), "改善肩部活动");
+assert.equal(translateText("Shoulder pendulum"), "肩部钟摆运动");
+for (const locale of ["zh-SG", "ms-SG", "ta-SG"]) {
+  for (const source of [
+    "Better shoulder movement",
+    "Improve comfortable shoulder and arm mobility",
+    "Shoulder mobility",
+    "Shoulder pendulum",
+  ]) {
+    assert.notEqual(
+      translateText(source, locale),
+      source,
+      `${source} should be translated for ${locale}`
+    );
+  }
+}
 assert.equal(
   translateText("A patient-specific note that has no bundled translation"),
   "A patient-specific note that has no bundled translation",

@@ -112,6 +112,30 @@ class WellnessAgentGuardrailTests(unittest.TestCase):
         ):
             self.assertNotIn(exercise_id, available)
 
+    def test_shoulder_goal_uses_the_reviewed_pendulum_detector(self):
+        available = allowed_exercises(preferences(
+            goal="shoulder_mobility",
+            equipment="none",
+        ))
+        self.assertIn("pendulum", available)
+
+        plan = normalize_wellness_plan(
+            {
+                "summary": "A gradual shoulder-mobility plan.",
+                "days": [
+                    {"exercise_ids": ["pendulum"]}
+                    for _ in range(3)
+                ],
+            },
+            preferences(goal="shoulder_mobility", equipment="none"),
+        )
+
+        self.assertEqual(plan["goal"], "Better shoulder movement")
+        self.assertEqual(
+            plan["days"][0]["exercises"],
+            "Shoulder pendulum",
+        )
+
     def test_supports_a_seven_day_preference(self):
         plan = normalize_wellness_plan(
             {

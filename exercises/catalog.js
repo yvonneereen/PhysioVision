@@ -223,6 +223,7 @@ export const DRAFT_EXERCISES = [
     name: "Shoulder Pendulum",
     region: "Shoulder",
     category: "Mobility",
+    generalWellnessApproved: true,
     tags: [EXERCISE_TAGS.GENERAL, EXERCISE_TAGS.POST_OP, EXERCISE_TAGS.CLINICIAN_GUIDED],
     typicalUse: ["rotator-cuff conditions", "shoulder stiffness", "shoulder-surgery recovery"],
     instruction: "Lean forward and support one hand on a stable counter or table. Let the other arm hang completely relaxed. Shift the body gently to make the hanging arm move forward and backward, side to side and in small circles. Do not actively lift the shoulder.",
@@ -270,7 +271,7 @@ export const DRAFT_EXERCISE_MAP = Object.fromEntries(
 );
 
 export function requiresClinicianPlan(exercise) {
-  return exercise.tags.some((tag) =>
+  return !exercise.generalWellnessApproved && exercise.tags.some((tag) =>
     [EXERCISE_TAGS.CLINICIAN_GUIDED, EXERCISE_TAGS.POST_OP].includes(tag)
   );
 }

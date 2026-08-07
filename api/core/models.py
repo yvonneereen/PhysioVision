@@ -137,6 +137,7 @@ class GoalChoice(models.TextChoices):
     LESS_STIFFNESS = "less_stiffness", _("Move with less stiffness")
     STAY_ACTIVE    = "stay_active",    _("Stay active")
     STRONGER_HIPS  = "stronger_hips",  _("Stronger hips")
+    SHOULDER_MOBILITY = "shoulder_mobility", _("Better shoulder movement")
     ANKLE_MOBILITY = "ankle_mobility", _("Better ankle movement")
     WALKING_CONFIDENCE = "walking_confidence", _("Walk with confidence")
     OTHER          = "other",          _("Other")

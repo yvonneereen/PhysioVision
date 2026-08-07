@@ -114,6 +114,10 @@ function goalLabel(goal) {
     better_balance: "Balance",
     less_stiffness: "Stiffness",
     stay_active: "Stay active",
+    stronger_hips: "Hip strength",
+    shoulder_mobility: "Shoulder mobility",
+    ankle_mobility: "Ankle mobility",
+    walking_confidence: "Walking confidence",
   };
   return labels[goal] || goal || "General";
 }

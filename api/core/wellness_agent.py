@@ -12,6 +12,7 @@ GOAL_LABELS = {
     "less_stiffness": "Move with less stiffness",
     "stay_active": "Stay active",
     "stronger_hips": "Stronger hips",
+    "shoulder_mobility": "Better shoulder movement",
     "ankle_mobility": "Better ankle movement",
     "walking_confidence": "Walk with confidence",
     "other": "Other",
@@ -75,6 +76,12 @@ WELLNESS_EXERCISE_CATALOGUE = {
         "goals": ["stronger_knees", "stronger_hips", "walking_confidence"],
         "equipment": "band",
         "history_cautious": False,
+    },
+    "pendulum": {
+        "name": "Shoulder pendulum",
+        "goals": ["shoulder_mobility"],
+        "equipment": "none",
+        "history_cautious": True,
     },
 }
 

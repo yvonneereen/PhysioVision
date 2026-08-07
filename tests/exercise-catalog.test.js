@@ -46,7 +46,7 @@ for (const exercise of DRAFT_EXERCISES) {
     );
   }
 
-  const needsClinician = exercise.tags.some((tag) =>
+  const needsClinician = !exercise.generalWellnessApproved && exercise.tags.some((tag) =>
     [EXERCISE_TAGS.CLINICIAN_GUIDED, EXERCISE_TAGS.POST_OP].includes(tag)
   );
   assert.equal(requiresClinicianPlan(exercise), needsClinician);
@@ -65,6 +65,7 @@ assert.ok(
     EXERCISE_TAGS.SUPPORT_REQUIRED
   )
 );
+assert.equal(requiresClinicianPlan(DRAFT_EXERCISE_MAP.pendulum), false);
 
 assert.deepEqual(
   DRAFT_EXERCISES.filter((exercise) => exercise.liveTracking)

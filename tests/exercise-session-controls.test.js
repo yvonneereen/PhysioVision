@@ -157,6 +157,20 @@ assert.match(
   /function updateFeedbackPanel\([\s\S]*?movementAiConversationActive\(\)[\s\S]*?return lastFeedbackResult/,
   "repetition and phase progression should freeze while an AI question is active"
 );
+const resumeMovementAiSource = functionSource(
+  "resumeMovementAiAfterSpeech",
+  "speakMovementAiMessage"
+);
+assert.match(
+  resumeMovementAiSource,
+  /spokenCoachingCandidate = null/,
+  "resuming the wake listener should discard only stale movement-cue timing"
+);
+assert.doesNotMatch(
+  resumeMovementAiSource,
+  /resetSpokenCoaching\(\)|spokenRepCount\s*=\s*0/,
+  "resuming the wake listener must preserve the last announced rep"
+);
 assert.match(
   source,
   /function beginFallSafetyCheck\([\s\S]*?stopMovementAiGuide\(\)[\s\S]*?safetyCheckActive = true/,

@@ -1305,7 +1305,10 @@ function resumeMovementAiAfterSpeech(generation) {
   if (!movementAiCanListen(generation)) return;
   combinedPoseHistory = [];
   smoother.state = {};
-  resetSpokenCoaching();
+  // Resuming wake-phrase listening must not erase the last announced rep.
+  // Otherwise the unchanged rep count in the next camera frame is treated as
+  // new and spoken repeatedly (for example, "Rep 2" in a loop).
+  spokenCoachingCandidate = null;
   scheduleMovementAiWakeListening(350, generation);
 }
 

@@ -7,7 +7,7 @@ import {
   getMe,
   getPrescriptions,
   isLoggedIn,
-} from "./api.js?v=26";
+} from "./api.js?v=31";
 import { saveProfile } from "./personalization.js?v=13";
 
 const patientCareLink = document.getElementById("patientCareLink");

@@ -23,7 +23,7 @@ assert.ok(
 );
 assert.deepEqual(
   [...new Set(i18nCacheVersions)],
-  ["17"],
+  ["18"],
   "all browser entry points must use one i18n URL so only one DOM observer is created"
 );
 
@@ -73,7 +73,7 @@ const voiceCacheVersions = voiceConsumerSources.flatMap((source) =>
 );
 assert.deepEqual(
   [...new Set(voiceCacheVersions)],
-  ["26"],
+  ["27"],
   "all voice consumers must share one voice-guidance module instance"
 );
 
@@ -137,7 +137,7 @@ assert.equal(
 );
 
 const liveGuideSources = [
-  "Hands-free mode asks for microphone permission. The exact approved guidance text may be sent securely to Gemini to generate a clearer, more natural voice. Voice recognition may be processed by your browser provider. If fixed safety rules cannot match an answer, the recognized text may be sent to Gemini for constrained language interpretation. Gemini cannot change the safety wording or decide whether exercise is safe. Use the on-screen buttons to avoid voice generation and recognition.",
+  "Hands-free mode asks for microphone permission. The exact approved guidance text may be sent securely to Gemini to generate a clearer, more natural voice. Voice recognition may be processed by your browser provider. If fixed safety rules cannot match an answer, the recognized text may be sent to Gemini for constrained language interpretation. During the live camera guide, speech that begins with “Hey Guide” and the question that follows are sent to Gemini for an answer. Gemini cannot change the safety wording or decide whether exercise is safe. Use the on-screen buttons to avoid voice generation and recognition.",
   "Your camera feed is processed for movement guidance and is not recorded in this prototype.",
   "Local possible-fall check available",
   "The camera check is available. Verify an emergency contact in My profile before automatic alerts can be sent.",

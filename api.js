@@ -399,6 +399,6 @@ export async function sendCareMessage(body, patientId = null) {
 
 // ── Role-specific AI assistant ───────────────────────────────
 
-export async function sendAgentMessage(message) {
-  return request("POST", "/auth/agent/chat/", { message });
+export async function sendAgentMessage(message, context = {}) {
+  return request("POST", "/auth/agent/chat/", { message, context });
 }

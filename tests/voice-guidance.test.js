@@ -576,6 +576,29 @@ assert.equal(retryError, "");
 activeRecognitionInstance.emitResult("four");
 assert.equal(retryTranscript, "four");
 
+let terminalListeningErrorCode = "";
+listeningGuidance.listen({
+  maxNoSpeechRetries: 0,
+  onError: (_message, errorCode) => {
+    terminalListeningErrorCode = errorCode;
+  },
+});
+activeRecognitionInstance.emitError("no-speech");
+assert.equal(
+  terminalListeningErrorCode,
+  "no-speech",
+  "continuous command listeners should be able to distinguish an idle timeout"
+);
+
+listeningGuidance.listen();
+const recognitionBeforeListeningCancel = activeRecognitionInstance;
+listeningGuidance.cancelListening();
+assert.equal(
+  recognitionBeforeListeningCancel.abortCalled,
+  true,
+  "coaching audio should be able to release the microphone without cancelling speech output"
+);
+
 const pageLifecycleListeners = {};
 const lifecycleGuidance = new VoiceGuidance({
   ...listeningWindow,

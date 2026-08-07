@@ -6,7 +6,7 @@ import {
   getCareMessages, sendCareMessage, getCareMessageThreads,
   sendAgentMessage,
   getTriageQueue, claimTriagePatient, declineTriagePatient,
-} from "./api.js?v=28";
+} from "./api.js?v=31";
 import { excludeRosterPatientsFromTriage } from "./therapist-triage-state.js?v=1";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];

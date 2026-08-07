@@ -1,8 +1,8 @@
 import {
   getSpeechLocale,
   translateText,
-} from "./i18n.js?v=17";
-import { generateGuidanceSpeech } from "./api.js?v=29";
+} from "./i18n.js?v=18";
+import { generateGuidanceSpeech } from "./api.js?v=31";
 
 const VOICE_PREFERENCE_KEY = "physiovision.voice.enabled.v1";
 const DEFAULT_SPEECH_VOLUME = 1;
@@ -1112,13 +1112,17 @@ export class VoiceGuidance {
     this.synthesis?.cancel();
   }
 
-  cancel() {
+  cancelListening() {
     this.listeningGeneration += 1;
-    this.cancelSpokenOutput();
     if (this.activeRecognition) {
       this.activeRecognition.abort();
       this.activeRecognition = null;
     }
+  }
+
+  cancel() {
+    this.cancelListening();
+    this.cancelSpokenOutput();
   }
 
   listen({
@@ -1129,7 +1133,10 @@ export class VoiceGuidance {
     retryDelayMs = 350,
   } = {}) {
     if (!this.canListen) {
-      onError?.("Speech input is not supported in this browser. Use the buttons instead.");
+      onError?.(
+        "Speech input is not supported in this browser. Use the buttons instead.",
+        "unsupported"
+      );
       return false;
     }
 
@@ -1207,7 +1214,7 @@ export class VoiceGuidance {
         onResult?.(pendingTranscript, pendingAlternatives);
       };
 
-      const retryOrFail = (message) => {
+      const retryOrFail = (message, errorCode = "unknown") => {
         if (!isCurrentSession() || retryScheduled || resultDelivered) return;
         if (pendingTranscript) {
           deliverRecognizedResult();
@@ -1229,7 +1236,7 @@ export class VoiceGuidance {
         if (this.activeRecognition === recognition) {
           this.activeRecognition = null;
         }
-        onError?.(message);
+        onError?.(message, errorCode);
       };
 
       recognition.addEventListener("start", () => {
@@ -1267,7 +1274,8 @@ export class VoiceGuidance {
       });
       recognition.addEventListener("nomatch", () => {
         retryOrFail(
-          "I did not understand that. Please try again or use the buttons."
+          "I did not understand that. Please try again or use the buttons.",
+          "no-match"
         );
       });
       recognition.addEventListener("error", (event) => {
@@ -1279,7 +1287,8 @@ export class VoiceGuidance {
         }
         if (event.error === "no-speech") {
           retryOrFail(
-            "I could not hear an answer. Please try again or use the buttons."
+            "I could not hear an answer. Please try again or use the buttons.",
+            "no-speech"
           );
           return;
         }
@@ -1292,7 +1301,7 @@ export class VoiceGuidance {
           : event.error === "audio-capture"
             ? "No working microphone was found. Check your microphone or use the buttons."
             : "Speech recognition stopped. Please try again or use the buttons.";
-        onError?.(message);
+        onError?.(message, event.error || "unknown");
       });
       recognition.addEventListener("end", () => {
         if (this.listeningGeneration !== listeningGeneration) return;
@@ -1303,7 +1312,8 @@ export class VoiceGuidance {
           deliverRecognizedResult();
         } else if (!retryScheduled && !sessionComplete) {
           retryOrFail(
-            "I could not hear an answer. Please try again or use the buttons."
+            "I could not hear an answer. Please try again or use the buttons.",
+            "no-speech"
           );
         }
       });
@@ -1312,7 +1322,8 @@ export class VoiceGuidance {
         recognition.start();
       } catch (_) {
         retryOrFail(
-          "Speech recognition could not start. Please try again or use the buttons."
+          "Speech recognition could not start. Please try again or use the buttons.",
+          "start-failed"
         );
       }
     };

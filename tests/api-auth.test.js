@@ -260,6 +260,23 @@ assert.deepEqual(
   }
 );
 
+const movementContext = {
+  source: "camera_guide",
+  exercise_id: "half-squats",
+  phase: "lowering",
+  rep_count: 4,
+};
+responses.push({ status: 200, body: { reply: "Keep moving slowly.", role: "patient" } });
+await api.sendAgentMessage("Why should I move slowly?", movementContext);
+assert.match(requests.at(-1).url, /\/api\/auth\/agent\/chat\/$/);
+assert.deepEqual(
+  JSON.parse(requests.at(-1).options.body),
+  {
+    message: "Why should I move slowly?",
+    context: movementContext,
+  }
+);
+
 responses.push({ status: 200, body: { status: "ok" } });
 assert.equal(await api.warmApi(), true);
 assert.match(requests.at(-1).url, /\/api\/health\/$/);

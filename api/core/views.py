@@ -101,6 +101,40 @@ from .wellness_agent import (
 logger = logging.getLogger(__name__)
 
 
+def _clean_movement_agent_context(raw_context):
+    if (
+        not isinstance(raw_context, dict)
+        or raw_context.get('source') != 'camera_guide'
+    ):
+        return {}
+
+    try:
+        rep_count = int(raw_context.get('rep_count', 0) or 0)
+    except (TypeError, ValueError):
+        rep_count = 0
+    try:
+        set_number = int(raw_context.get('set_number', 1) or 1)
+    except (TypeError, ValueError):
+        set_number = 1
+    cues = raw_context.get('current_cues', [])
+    if not isinstance(cues, list):
+        cues = []
+
+    return {
+        'source': 'camera_guide',
+        'exercise_id': str(raw_context.get('exercise_id', ''))[:80],
+        'exercise_name': str(raw_context.get('exercise_name', ''))[:120],
+        'selected_side': str(raw_context.get('selected_side', ''))[:20],
+        'phase': str(raw_context.get('phase', ''))[:80],
+        'rep_count': max(0, min(rep_count, 1000)),
+        'set_number': max(1, min(set_number, 100)),
+        'tracking_ready': raw_context.get('tracking_ready') is True,
+        'current_cues': [str(cue)[:160] for cue in cues[:3]],
+        'session_active': raw_context.get('session_active') is True,
+        'camera_running': raw_context.get('camera_running') is True,
+    }
+
+
 def _rotate_token(user):
     Token.objects.filter(user=user).delete()
     return Token.objects.create(user=user)
@@ -1003,6 +1037,8 @@ class PatientPathwayChoiceView(APIView):
 
 class AgentChatView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'agent_chat'
 
     def post(self, request):
         message = str(request.data.get('message', '')).strip()
@@ -1019,6 +1055,12 @@ class AgentChatView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        movement_context = (
+            _clean_movement_agent_context(request.data.get('context'))
+            if request.user.role == UserRole.PATIENT
+            else {}
+        )
+
         try:
             command_result = (
                 dispatch_clinician_command(request.user, message)
@@ -1028,7 +1070,11 @@ class AgentChatView(APIView):
             reply = (
                 command_result['reply']
                 if command_result
-                else generate_agent_reply(request.user, message)
+                else generate_agent_reply(
+                    request.user,
+                    message,
+                    movement_context=movement_context,
+                )
             )
         except Exception:
             logger.exception('Gemini request failed')

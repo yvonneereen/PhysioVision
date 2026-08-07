@@ -32,7 +32,8 @@ import {
   postPainCheckin,
   postSession,
   respondEmergencyAlert,
-} from "./api.js?v=29";
+  sendAgentMessage,
+} from "./api.js?v=31";
 import { DRAFT_EXERCISES } from "./exercises/catalog.js?v=2";
 import {
   parseConfirmationResponse,
@@ -43,7 +44,7 @@ import {
   isSafariBrowser,
   readMicrophonePermissionState,
   voiceGuidance,
-} from "./voice-guidance.js?v=26";
+} from "./voice-guidance.js?v=27";
 import {
   PRACTICE_VIEWS,
   hasAuthenticatedPracticeAccount,
@@ -106,6 +107,7 @@ const statusEl    = document.getElementById("status");
 const toggleBtn   = document.getElementById("toggle");
 const finishExerciseBtn = document.getElementById("finishExercise");
 const cameraSessionHintEl = document.getElementById("cameraSessionHint");
+const movementAiStatusEl = document.getElementById("movementAiStatus");
 const fpsEl       = document.getElementById("fps");
 const exSelect    = document.getElementById("exerciseSelect");
 const sideSelect  = document.getElementById("sideSelect");
@@ -322,6 +324,9 @@ let resolveVoiceModeChoice = null;
 let preExerciseCheckinCompleted = false;
 let confirmedPreExercisePain = null;
 let cameraSetupCountdown = null;
+let movementAiState = "off";
+let movementAiGeneration = 0;
+let movementAiRestartTimer = null;
 const exerciseContent = new Map(
   DRAFT_EXERCISES.map((exercise) => [exercise.id, exercise])
 );
@@ -349,6 +354,7 @@ function finishVoiceModeChoice(handsFree) {
 }
 
 function resetVoiceModeChoice() {
+  stopMovementAiGuide();
   voiceGuidance.cancel();
   handsFreeVoiceEnabled = false;
   voiceModeChosenThisSession = false;
@@ -477,6 +483,13 @@ voiceSetupButtons.addEventListener("click", () => {
 soundToggle?.addEventListener("click", () => {
   if (!voiceGuidance.enabled) {
     handsFreeVoiceEnabled = false;
+    stopMovementAiGuide({ hide: !running });
+    if (running) {
+      setMovementAiStatus(
+        "off",
+        "AI voice questions stopped because spoken guidance is off."
+      );
+    }
     if (painCheckinState) updatePainCheckinPresentation();
   }
 });
@@ -908,6 +921,7 @@ function startFallSafetyVoiceListening() {
 
 function beginFallSafetyCheck(event) {
   if (safetyCheckActive) return;
+  stopMovementAiGuide();
   safetyCheckActive = true;
   fallSafetyClarificationMode = "";
   fallSafetyAiAttempts = 0;
@@ -1181,6 +1195,318 @@ let pendingSetStartCheck = null;
 let sessionAllSetsComplete = false;
 let lastFeedbackResult = null;
 
+const MOVEMENT_AI_TRANSIENT_LISTENING_ERRORS = new Set([
+  "no-match",
+  "no-speech",
+  "start-failed",
+]);
+const MOVEMENT_AI_WAKE_PATTERN =
+  /\b(?:(?:hey|hi|okay|ok)\s+)?(?:physio\s+)?guide\b[\s,:-]*(.*)$/i;
+
+function movementAiConversationActive() {
+  return ["question", "thinking", "speaking"].includes(movementAiState);
+}
+
+function setMovementAiStatus(state, message, { hide = false } = {}) {
+  if (!movementAiStatusEl) return;
+  movementAiStatusEl.dataset.state = state;
+  movementAiStatusEl.textContent = message;
+  movementAiStatusEl.classList.toggle("hidden", hide);
+}
+
+function clearMovementAiRestartTimer() {
+  if (movementAiRestartTimer === null) return;
+  window.clearTimeout(movementAiRestartTimer);
+  movementAiRestartTimer = null;
+}
+
+function movementAiCanListen(generation = movementAiGeneration) {
+  return Boolean(
+    generation === movementAiGeneration
+    && running
+    && handsFreeVoiceEnabled
+    && voiceGuidance.enabled
+    && voiceGuidance.canListen
+    && !safetyCheckActive
+    && !calibrationSession
+    && !painCheckinState
+  );
+}
+
+function stopMovementAiGuide({ hide = true } = {}) {
+  movementAiGeneration += 1;
+  movementAiState = "off";
+  clearMovementAiRestartTimer();
+  voiceGuidance.cancelListening();
+  setMovementAiStatus(
+    "off",
+    "AI voice questions start with the camera guide.",
+    { hide }
+  );
+}
+
+function parseMovementAiWakePhrase(transcript, alternatives = []) {
+  const candidates = [transcript, ...alternatives]
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean);
+  let wakeOnlyMatch = null;
+  for (const candidate of candidates) {
+    const match = candidate.match(MOVEMENT_AI_WAKE_PATTERN);
+    if (match) {
+      const result = {
+        matched: true,
+        question: String(match[1] ?? "").trim(),
+      };
+      if (result.question) return result;
+      wakeOnlyMatch = result;
+    }
+  }
+  return wakeOnlyMatch ?? { matched: false, question: "" };
+}
+
+function currentMovementAiContext() {
+  const feedback = lastFeedbackResult;
+  const currentReps = Number(feedback?.repCount ?? engine.repCount ?? 0);
+  return {
+    source: "camera_guide",
+    exercise_id: String(engine.exercise?.id ?? ""),
+    exercise_name: String(engine.exercise?.name ?? ""),
+    selected_side: String(sideSelect.value ?? ""),
+    phase: String(feedback?.phase ?? engine.phase ?? ""),
+    rep_count: completedSessionReps + (Number.isFinite(currentReps) ? currentReps : 0),
+    set_number: completedSetCount + 1,
+    tracking_ready: Boolean(feedback?.trackingReady),
+    current_cues: Array.isArray(feedback?.cues)
+      ? feedback.cues.slice(0, 3).map(personalizeCue)
+      : [],
+    session_active: Boolean(exerciseSessionActive),
+    camera_running: Boolean(running),
+  };
+}
+
+function scheduleMovementAiWakeListening(
+  delayMs = 350,
+  generation = movementAiGeneration
+) {
+  clearMovementAiRestartTimer();
+  if (!movementAiCanListen(generation)) return;
+  movementAiState = "wake";
+  setMovementAiStatus(
+    "wake",
+    "AI guide ready — say “Hey Guide” followed by your question."
+  );
+  movementAiRestartTimer = window.setTimeout(() => {
+    movementAiRestartTimer = null;
+    startMovementAiWakeListening(generation);
+  }, Math.max(0, Number(delayMs) || 0));
+}
+
+function resumeMovementAiAfterSpeech(generation) {
+  if (!movementAiCanListen(generation)) return;
+  combinedPoseHistory = [];
+  smoother.state = {};
+  resetSpokenCoaching();
+  scheduleMovementAiWakeListening(350, generation);
+}
+
+function speakMovementAiMessage(
+  message,
+  generation,
+  { key, preferImmediate = false } = {}
+) {
+  if (!movementAiCanListen(generation)) return false;
+  movementAiState = "speaking";
+  const spoken = voiceGuidance.speak(message, {
+    key: key || `movement-ai:${generation}:${Date.now()}`,
+    interrupt: true,
+    preferImmediate,
+    onEnd: () => resumeMovementAiAfterSpeech(generation),
+  });
+  if (!spoken) resumeMovementAiAfterSpeech(generation);
+  return spoken;
+}
+
+function captureMovementAiQuestion(generation) {
+  if (!movementAiCanListen(generation)) return;
+  movementAiState = "question";
+  setMovementAiStatus("question", "AI guide is listening to your question…");
+  const started = voiceGuidance.listen({
+    maxNoSpeechRetries: 1,
+    onStatus: (message) => {
+      if (generation === movementAiGeneration && movementAiState === "question") {
+        setMovementAiStatus("question", message);
+      }
+    },
+    onResult: (transcript) => {
+      void answerMovementAiQuestion(transcript, generation);
+    },
+    onError: (message) => {
+      if (!movementAiCanListen(generation)) return;
+      setMovementAiStatus("error", message);
+      speakMovementAiMessage(
+        "I did not hear a question. Movement guidance will continue.",
+        generation,
+        {
+          key: `movement-ai:no-question:${generation}`,
+          preferImmediate: true,
+        }
+      );
+    },
+  });
+  if (!started) {
+    setMovementAiStatus(
+      "error",
+      "AI voice questions are unavailable in this browser."
+    );
+  }
+}
+
+function beginMovementAiQuestion(question, generation) {
+  if (!movementAiCanListen(generation)) return;
+  if (holdInterval) {
+    clearHoldTimer(activeDose(engine.exercise).holdSeconds);
+  }
+  movementAiState = "question";
+  if (question) {
+    void answerMovementAiQuestion(question, generation);
+    return;
+  }
+
+  setMovementAiStatus("question", "Wake phrase heard — preparing to listen…");
+  const spoken = voiceGuidance.speak("I’m listening. What would you like to ask?", {
+    key: `movement-ai:prompt:${generation}`,
+    interrupt: true,
+    preferImmediate: true,
+    onEnd: () => captureMovementAiQuestion(generation),
+  });
+  if (!spoken) captureMovementAiQuestion(generation);
+}
+
+async function answerMovementAiQuestion(question, generation) {
+  const cleanedQuestion = String(question ?? "").trim();
+  if (!cleanedQuestion || !movementAiCanListen(generation)) {
+    scheduleMovementAiWakeListening(350, generation);
+    return;
+  }
+
+  movementAiState = "thinking";
+  setMovementAiStatus(
+    "thinking",
+    `AI guide heard: “${cleanedQuestion}” — preparing an answer…`
+  );
+  const context = currentMovementAiContext();
+  try {
+    const result = await sendAgentMessage(cleanedQuestion, context);
+    if (!movementAiCanListen(generation) || movementAiState !== "thinking") return;
+    const reply = String(result?.reply ?? "").trim();
+    if (!reply) throw new Error("The AI guide returned an empty answer.");
+    setMovementAiStatus("speaking", `AI guide: ${reply}`);
+    speakMovementAiMessage(reply, generation, {
+      key: `movement-ai:answer:${generation}:${cleanedQuestion}`,
+    });
+  } catch (_) {
+    if (!movementAiCanListen(generation)) return;
+    setMovementAiStatus(
+      "error",
+      "The AI guide is temporarily unavailable. Movement coaching will continue."
+    );
+    speakMovementAiMessage(
+      "The AI guide is temporarily unavailable. Movement coaching will continue.",
+      generation,
+      {
+        key: `movement-ai:error:${generation}`,
+        preferImmediate: true,
+      }
+    );
+  }
+}
+
+function startMovementAiWakeListening(generation = movementAiGeneration) {
+  if (!movementAiCanListen(generation)) return;
+  movementAiState = "wake";
+  setMovementAiStatus(
+    "wake",
+    "AI guide ready — say “Hey Guide” followed by your question."
+  );
+  const started = voiceGuidance.listen({
+    maxNoSpeechRetries: 0,
+    onResult: (transcript, alternatives) => {
+      if (!movementAiCanListen(generation)) return;
+      const wake = parseMovementAiWakePhrase(transcript, alternatives);
+      if (!wake.matched) {
+        scheduleMovementAiWakeListening(180, generation);
+        return;
+      }
+      beginMovementAiQuestion(wake.question, generation);
+    },
+    onError: (message, errorCode) => {
+      if (!movementAiCanListen(generation)) return;
+      if (MOVEMENT_AI_TRANSIENT_LISTENING_ERRORS.has(errorCode)) {
+        scheduleMovementAiWakeListening(650, generation);
+        return;
+      }
+      movementAiState = "error";
+      setMovementAiStatus("error", `${message} AI questions have stopped.`);
+    },
+  });
+  if (!started) {
+    movementAiState = "error";
+    setMovementAiStatus(
+      "error",
+      "AI voice questions are unavailable in this browser."
+    );
+  }
+}
+
+function startMovementAiGuide() {
+  stopMovementAiGuide({ hide: false });
+  if (!running) return;
+  if (!handsFreeVoiceEnabled || !voiceGuidance.enabled) {
+    setMovementAiStatus(
+      "off",
+      "AI voice questions are off in on-screen-button mode."
+    );
+    return;
+  }
+  if (!voiceGuidance.canListen) {
+    setMovementAiStatus(
+      "error",
+      "AI voice questions are unavailable in this browser."
+    );
+    return;
+  }
+  const generation = ++movementAiGeneration;
+  scheduleMovementAiWakeListening(350, generation);
+}
+
+function speakCameraCoaching(message, options = {}) {
+  if (movementAiConversationActive()) return false;
+  const generation = movementAiGeneration;
+  const resumeWakeListener = movementAiState === "wake"
+    && movementAiCanListen(generation);
+  if (resumeWakeListener) {
+    clearMovementAiRestartTimer();
+    movementAiState = "coaching";
+    voiceGuidance.cancelListening();
+    setMovementAiStatus(
+      "coaching",
+      "Movement cue speaking — “Hey Guide” listening will resume afterward."
+    );
+  }
+
+  const originalOnEnd = options.onEnd;
+  const finish = () => {
+    originalOnEnd?.();
+    if (resumeWakeListener) resumeMovementAiAfterSpeech(generation);
+  };
+  const spoken = voiceGuidance.speak(message, {
+    ...options,
+    onEnd: finish,
+  });
+  if (!spoken && resumeWakeListener) resumeMovementAiAfterSpeech(generation);
+  return spoken;
+}
+
 function exerciseSpokenInstruction(exercise) {
   const reviewedContent = exerciseContent.get(exercise.id);
   if (reviewedContent?.instruction) {
@@ -1203,7 +1529,7 @@ function resetSpokenCoaching() {
 }
 
 function queueSpokenMovementCue(state, cue, timestampMs) {
-  if (!running || calibrationSession || !cue) {
+  if (!running || calibrationSession || movementAiConversationActive() || !cue) {
     spokenCoachingCandidate = null;
     return;
   }
@@ -1232,7 +1558,7 @@ function queueSpokenMovementCue(state, cue, timestampMs) {
   }
 
   spokenCoachingCandidate.lastRequestedAt = timestampMs;
-  voiceGuidance.speak(cue, {
+  speakCameraCoaching(cue, {
     key: `movement:${engine.exercise.id}:${identity}`,
     cooldownMs: repeatAfterMs,
   });
@@ -1873,7 +2199,9 @@ function renderFrame() {
           updateCalibrationCapture(measurements, frameTimestamp);
           statusEl.textContent = "Personal calibration in progress";
         } else if (pendingSetStartCheck) {
-          updateSetStartingPositionCheck(measurements, frameTimestamp);
+          if (!movementAiConversationActive()) {
+            updateSetStartingPositionCheck(measurements, frameTimestamp);
+          }
         } else {
           const feedback = updateFeedbackPanel(measurements, frameTimestamp);
           statusEl.textContent = feedback.trackingReady
@@ -1903,7 +2231,9 @@ function renderFrame() {
           updateCalibrationCapture(measurements, frameTimestamp);
           statusEl.textContent = "Personal calibration in progress";
         } else if (pendingSetStartCheck) {
-          updateSetStartingPositionCheck(measurements, frameTimestamp);
+          if (!movementAiConversationActive()) {
+            updateSetStartingPositionCheck(measurements, frameTimestamp);
+          }
         } else {
           const feedback = updateFeedbackPanel(measurements, frameTimestamp);
           statusEl.textContent = feedback.trackingReady
@@ -1938,7 +2268,9 @@ function renderFrame() {
             updateCalibrationCapture(angles, frameTimestamp);
             statusEl.textContent = "Personal calibration in progress";
           } else if (pendingSetStartCheck) {
-            updateSetStartingPositionCheck(angles, frameTimestamp);
+            if (!movementAiConversationActive()) {
+              updateSetStartingPositionCheck(angles, frameTimestamp);
+            }
             processFallMonitoring(landmarks, frameTimestamp);
           } else {
             const feedback = updateFeedbackPanel(angles, frameTimestamp);
@@ -2040,7 +2372,7 @@ function updateSetStartingPositionCheck(measurements, timestampMs) {
   pendingSetStartCheck = null;
   statusEl.textContent = `Set ${setNumber} starting position confirmed — begin`;
   setFeedbackBanner("good", `Set ${setNumber} is ready. Begin when comfortable.`);
-  voiceGuidance.speak(
+  speakCameraCoaching(
     `Starting position confirmed. Begin set ${setNumber} when you are comfortable.`,
     {
       key: `set:${engine.exercise.id}:${setNumber}:ready`,
@@ -2063,7 +2395,7 @@ function handleCompletedSet(feedback) {
       "good",
       "All planned sets are complete. Choose Finish exercise when you are ready."
     );
-    voiceGuidance.speak(
+    speakCameraCoaching(
       "All planned sets are complete. Choose Finish exercise when you are ready.",
       {
         key: `sets:${engine.exercise.id}:complete`,
@@ -2101,7 +2433,7 @@ function handleCompletedSet(feedback) {
     "position",
     `Return to the starting position for set ${setNumber + 1}`
   );
-  voiceGuidance.speak(
+  speakCameraCoaching(
     `Set ${setNumber} complete. Return to your starting position for an automatic check before set ${setNumber + 1}.`,
     {
       key: `set:${engine.exercise.id}:${setNumber}:complete`,
@@ -2111,6 +2443,18 @@ function handleCompletedSet(feedback) {
 }
 
 function updateFeedbackPanel(angles, timestampMs) {
+  if (movementAiConversationActive()) {
+    return lastFeedbackResult ?? {
+      exercise: engine.exercise,
+      trackingReady: false,
+      limitedTracking: false,
+      trackingSide: sideSelect.value,
+      missingMeasurements: [],
+      phase: engine.phase ?? "",
+      repCount: Number(engine.repCount ?? 0),
+      cues: [],
+    };
+  }
   if (sessionAllSetsComplete && lastFeedbackResult) {
     return lastFeedbackResult;
   }
@@ -2258,7 +2602,7 @@ function updateFeedbackPanel(angles, timestampMs) {
 
   if (fb.repCount > spokenRepCount) {
     spokenRepCount = fb.repCount;
-    voiceGuidance.speak(`Rep ${fb.repCount}.`, {
+    speakCameraCoaching(`Rep ${fb.repCount}.`, {
       key: `rep:${engine.exercise.id}:${fb.repCount}`,
     });
   }
@@ -3343,18 +3687,34 @@ function hasPathwayAccess() {
   return true;
 }
 
-function announceExerciseInstruction(prefix = "") {
+function announceExerciseInstruction(prefix = "", { onEnd = null } = {}) {
   const clinicianNote = activeDose(engine.exercise).notes;
   const spokenInstruction = [
     prefix,
     exerciseSpokenInstruction(engine.exercise),
     clinicianNote ? `Your clinician's instruction is: ${clinicianNote}` : "",
+    handsFreeVoiceEnabled
+      ? "The AI guide is active. Say Hey Guide whenever you have a question."
+      : "",
   ].filter(Boolean).join(" ");
-  voiceGuidance.speak(spokenInstruction, {
+  const spoken = voiceGuidance.speak(spokenInstruction, {
     key: `instruction:${engine.exercise.id}`,
     cooldownMs: 3000,
     interrupt: true,
+    onEnd,
   });
+  if (!spoken) onEnd?.();
+  return spoken;
+}
+
+function setIntegratedCameraGuideActive(active) {
+  document.body?.classList.toggle("camera-guide-ai-active", active);
+  if (!active) return;
+
+  const standalonePanel = document.getElementById("agentChatPanel");
+  const standaloneLauncher = document.getElementById("agentChatLauncher");
+  if (standalonePanel) standalonePanel.hidden = true;
+  standaloneLauncher?.setAttribute("aria-expanded", "false");
 }
 
 async function activateCameraGuide({ announceInstruction = true } = {}) {
@@ -3397,6 +3757,7 @@ async function activateCameraGuide({ announceInstruction = true } = {}) {
           : "The camera check is active, but automatic alerts require a verified emergency contact.";
     }
     cameraStage?.classList.add("camera-active");
+    setIntegratedCameraGuideActive(true);
     if (exerciseUsesHand(engine.exercise)) {
       const combined = engine.exercise.trackingMode === TRACKING_MODES.POSE_AND_HAND;
       handFrameGuide.classList.remove("hidden");
@@ -3414,10 +3775,21 @@ async function activateCameraGuide({ announceInstruction = true } = {}) {
     toggleBtn.innerHTML = 'Pause camera guide <span aria-hidden="true">Ⅱ</span>';
     toggleBtn.disabled = false;
     finishExerciseBtn.disabled = false;
-    cameraSessionHintEl.textContent =
-      "Pausing only stops the camera. Choose “Finish exercise and check in” when you decide you are done.";
+    cameraSessionHintEl.textContent = handsFreeVoiceEnabled
+      ? (
+        "Camera tracking and AI questions are active together. Say “Hey Guide” "
+        + "to ask something, or choose Finish exercise and check in when done."
+      )
+      : (
+        "Pausing only stops the camera. Choose “Finish exercise and check in” "
+        + "when you decide you are done."
+      );
     renderFrame();
-    if (announceInstruction) announceExerciseInstruction();
+    if (announceInstruction) {
+      announceExerciseInstruction("", { onEnd: startMovementAiGuide });
+    } else {
+      startMovementAiGuide();
+    }
     return true;
   } catch (err) {
     statusEl.textContent = `Camera error: ${err.message}`;
@@ -3432,6 +3804,7 @@ function deactivateCameraGuide({
   statusMessage = "Camera paused — exercise not marked finished",
 } = {}) {
   running = false;
+  stopMovementAiGuide();
   voiceGuidance.cancel();
   resetSpokenCoaching();
   cancelAnimationFrame(rafId);
@@ -3443,6 +3816,7 @@ function deactivateCameraGuide({
   combinedPoseHistory = [];
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   cameraStage?.classList.remove("camera-active");
+  setIntegratedCameraGuideActive(false);
   handFrameGuide.classList.add("hidden");
   handFrameGuide.classList.remove("is-arm-mode");
   setupTip.textContent = cameraSetupTip(engine.exercise);

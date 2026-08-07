@@ -107,6 +107,66 @@ assert.match(
   /visibilitychange[\s\S]*?document\.hidden[\s\S]*?deactivateCameraGuide/,
   "an active camera guide should pause when its browser tab becomes hidden"
 );
+assert.match(
+  markup,
+  /id="movementAiStatus"[\s\S]*?AI voice questions start with the camera guide/,
+  "AI question status should be part of the camera session rather than a separate action"
+);
+assert.doesNotMatch(
+  markup,
+  /id="askMovementGuide"/,
+  "the integrated camera guide should not require a separate Ask AI button"
+);
+assert.match(
+  activateGuideSource,
+  /setIntegratedCameraGuideActive\(true\)/,
+  "the camera guide should take ownership of the AI interface when it starts"
+);
+assert.match(
+  source,
+  /function deactivateCameraGuide[\s\S]*?setIntegratedCameraGuideActive\(false\)/,
+  "pausing the camera should restore the standalone AI interface"
+);
+assert.match(
+  styles,
+  /\.camera-guide-ai-active \.agent-chat-launcher,[\s\S]*?\.camera-guide-ai-active \.agent-chat-panel/,
+  "the separate chat launcher and panel should be hidden during integrated guidance"
+);
+assert.match(
+  source,
+  /function startMovementAiGuide\([\s\S]*?scheduleMovementAiWakeListening/,
+  "starting the camera guide should start its wake-phrase listener"
+);
+assert.match(
+  activateGuideSource,
+  /announceExerciseInstruction\("", \{ onEnd: startMovementAiGuide \}\)[\s\S]*?startMovementAiGuide\(\)/,
+  "AI listening should begin from the same successful camera-start flow after its spoken introduction"
+);
+assert.match(
+  source,
+  /MOVEMENT_AI_WAKE_PATTERN[\s\S]*?Hey Guide[\s\S]*?parseMovementAiWakePhrase/,
+  "the integrated guide should require a clear wake phrase before sending a question"
+);
+assert.match(
+  source,
+  /sendAgentMessage\(cleanedQuestion, context\)/,
+  "uncoded guide questions should use the authenticated AI endpoint with movement context"
+);
+assert.match(
+  source,
+  /function updateFeedbackPanel\([\s\S]*?movementAiConversationActive\(\)[\s\S]*?return lastFeedbackResult/,
+  "repetition and phase progression should freeze while an AI question is active"
+);
+assert.match(
+  source,
+  /function beginFallSafetyCheck\([\s\S]*?stopMovementAiGuide\(\)[\s\S]*?safetyCheckActive = true/,
+  "a possible-fall safety check should preempt the conversational AI listener"
+);
+assert.match(
+  styles,
+  /\.movement-ai-status\s*\{[\s\S]*?\.movement-ai-status\[data-state="wake"\]::before/,
+  "the camera panel should visibly disclose when wake-phrase listening is active"
+);
 
 assert.doesNotMatch(
   deactivateSource,

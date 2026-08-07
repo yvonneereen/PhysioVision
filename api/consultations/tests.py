@@ -87,6 +87,89 @@ class PatientConsultationBookingTests(APITestCase):
 
         self.assertEqual(response.status_code, 403)
 
+    def test_clinician_can_initiate_consultation_for_linked_patient(self):
+        self.patient.primary_clinician = self.clinician
+        self.patient.save(update_fields=['primary_clinician', 'updated_at'])
+        self.client.force_authenticate(self.clinician_user)
+        proposed_time = timezone.now() + timedelta(days=2)
+
+        response = self.client.post(
+            '/api/consultations/initiate/',
+            {
+                'patient': str(self.patient.id),
+                'scheduled_at': proposed_time.isoformat(),
+                'duration_minutes': 45,
+                'clinician_notes': 'Review the recent knee pain trend.',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['status'], ConsultationStatus.REQUESTED)
+        self.assertEqual(
+            response.data['initiated_by'], ConsultationInitiator.CLINICIAN,
+        )
+        self.assertEqual(response.data['duration_minutes'], 45)
+        self.assertEqual(
+            response.data['clinician_notes'],
+            'Review the recent knee pain trend.',
+        )
+
+        self.client.force_authenticate(self.patient_user)
+        accepted = self.client.post(
+            f"/api/consultations/{response.data['id']}/accept/",
+            {},
+            format='json',
+        )
+        self.assertEqual(accepted.status_code, 200)
+        self.assertEqual(accepted.data['status'], ConsultationStatus.CONFIRMED)
+
+    def test_clinician_cannot_initiate_for_unlinked_patient(self):
+        self.client.force_authenticate(self.clinician_user)
+
+        response = self.client.post(
+            '/api/consultations/initiate/',
+            {
+                'patient': str(self.patient.id),
+                'scheduled_at': (timezone.now() + timedelta(days=2)).isoformat(),
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('patient', response.data)
+
+    def test_patient_cannot_initiate_clinician_consultation(self):
+        self.client.force_authenticate(self.patient_user)
+
+        response = self.client.post(
+            '/api/consultations/initiate/',
+            {
+                'patient': str(self.patient.id),
+                'scheduled_at': (timezone.now() + timedelta(days=2)).isoformat(),
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_clinician_cannot_initiate_consultation_in_the_past(self):
+        self.patient.primary_clinician = self.clinician
+        self.patient.save(update_fields=['primary_clinician', 'updated_at'])
+        self.client.force_authenticate(self.clinician_user)
+
+        response = self.client.post(
+            '/api/consultations/initiate/',
+            {
+                'patient': str(self.patient.id),
+                'scheduled_at': (timezone.now() - timedelta(minutes=5)).isoformat(),
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('scheduled_at', response.data)
+
     def test_patient_cannot_choose_the_appointment_time(self):
         self.client.force_authenticate(self.patient_user)
         payload = self.request_payload() | {

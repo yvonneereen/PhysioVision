@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=97" />
+  <link rel="stylesheet" href="style.css?v=98" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -2443,6 +2443,34 @@
 
         <!-- ── Consultations tab ──────────────────────────── -->
         <section class="tab-panel hidden" data-panel="consultations">
+          <div class="consult-initiate-grid">
+            <form class="consult-initiate-form" id="consult-initiate-form">
+              <div class="consult-initiate-heading">
+                <div><strong>Initiate a consultation</strong><span>Propose a time to any patient in your roster</span></div>
+              </div>
+              <label>Patient
+                <select id="consult-initiate-patient" required></select>
+              </label>
+              <div class="consult-initiate-fields">
+                <label>Date <input id="consult-initiate-date" type="date" required /></label>
+                <label>Time <input id="consult-initiate-time" type="time" required /></label>
+                <label>Duration
+                  <select id="consult-initiate-duration">
+                    <option value="30">30 minutes</option>
+                    <option value="45">45 minutes</option>
+                    <option value="60">60 minutes</option>
+                  </select>
+                </label>
+              </div>
+              <label>Reason or context <textarea id="consult-initiate-notes" rows="2" maxlength="2000" placeholder="Optional note for your records…"></textarea></label>
+              <button class="button button-coral button-small" type="submit">Send consultation proposal</button>
+              <p class="consult-initiate-status" id="consult-initiate-status" role="status"></p>
+            </form>
+            <div class="consult-recommendations">
+              <div class="consult-initiate-heading"><div><strong>Check-in recommended</strong><span>Trend signals that may benefit from review</span></div></div>
+              <div id="consult-recommendation-list"><p class="empty-state">No current recommendations.</p></div>
+            </div>
+          </div>
           <div class="patient-table-wrap">
             <div class="table-heading"><div><strong>Upcoming</strong><span>Requested &amp; confirmed</span></div></div>
             <div id="consult-upcoming"><p class="empty-state">Loading…</p></div>
@@ -2741,7 +2769,7 @@
   <script type="module" src="auth.js?v=32"></script>
   <script type="module" src="ui.js?v=28"></script>
   <script type="module" src="patient-dashboard.js?v=42"></script>
-  <script type="module" src="therapist.js?v=38"></script>
+  <script type="module" src="therapist.js?v=39"></script>
   <script type="module" src="exercise-library.js?v=17"></script>
   <script type="module" src="main.js?v=116"></script>
   <script type="module" src="agent-chat.js?v=33"></script>

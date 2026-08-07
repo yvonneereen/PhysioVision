@@ -1,7 +1,7 @@
 import {
   getMe, getPatients, isLoggedIn,
   getExercises, getPrescriptions, createPrescription,
-  getConsultations, updateConsultation, confirmConsultation, cancelConsultation, completeConsultation,
+  getConsultations, initiateConsultation, updateConsultation, confirmConsultation, cancelConsultation, completeConsultation,
   getPatientSessions, getPatientPainCheckins,
   getCareMessages, sendCareMessage, getCareMessageThreads,
   sendAgentMessage,
@@ -565,8 +565,69 @@ function renderConsultations() {
 
   const up = document.getElementById("consult-upcoming");
   const pa = document.getElementById("consult-past");
+  const patientSelect = document.getElementById("consult-initiate-patient");
+  const dateInput = document.getElementById("consult-initiate-date");
+  const recommendationList = document.getElementById("consult-recommendation-list");
+  if (patientSelect) {
+    const selected = patientSelect.value;
+    patientSelect.innerHTML = state.patients.length
+      ? state.patients.map(patient => `<option value="${patient.id}">${escapeHtml(patient.full_name || "Patient")}</option>`).join("")
+      : `<option value="">No linked patients</option>`;
+    patientSelect.disabled = state.patients.length === 0;
+    if ([...patientSelect.options].some(option => option.value === selected)) patientSelect.value = selected;
+  }
+  if (dateInput) dateInput.min = localDateInputValue();
+  if (recommendationList) {
+    const recommended = state.patients.filter(patient =>
+      patient.open_escalations_count > 0 || patient.trend === "declining");
+    recommendationList.innerHTML = recommended.length
+      ? recommended.map(patient => {
+          const reasons = [];
+          if (patient.open_escalations_count > 0) reasons.push(`${patient.open_escalations_count} open flag${patient.open_escalations_count === 1 ? "" : "s"}`);
+          if (patient.trend === "declining") reasons.push("declining movement trend");
+          return `<div class="consult-recommendation-row">
+            <div><strong>${escapeHtml(patient.full_name || "Patient")}</strong><span>${escapeHtml(reasons.join(" · "))}</span></div>
+            <button class="button button-light button-small" type="button" data-initiate-patient="${patient.id}">Propose check-in</button>
+          </div>`;
+        }).join("")
+      : `<p class="empty-state">No patients currently have a declining trend or open flag.</p>`;
+  }
   if (up) up.innerHTML = upcoming.length ? upcoming.map(c => consultRow(c, true)).join("") : `<p class="empty-state">No upcoming consultations.</p>`;
   if (pa) pa.innerHTML = past.length ? past.map(c => consultRow(c, false)).join("") : `<p class="empty-state">No past consultations.</p>`;
+}
+
+async function submitInitiatedConsultation(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const status = document.getElementById("consult-initiate-status");
+  if (!form.reportValidity()) return;
+  const button = form.querySelector('button[type="submit"]');
+  const scheduledAt = new Date(
+    `${document.getElementById("consult-initiate-date").value}T${document.getElementById("consult-initiate-time").value}`
+  );
+  if (!Number.isFinite(scheduledAt.getTime()) || scheduledAt.getTime() <= Date.now()) {
+    status.textContent = "Choose a future date and time.";
+    return;
+  }
+  button.disabled = true;
+  status.textContent = "Sending proposal…";
+  try {
+    await initiateConsultation({
+      patient: document.getElementById("consult-initiate-patient").value,
+      scheduled_at: scheduledAt.toISOString(),
+      duration_minutes: Number(document.getElementById("consult-initiate-duration").value),
+      clinician_notes: document.getElementById("consult-initiate-notes").value.trim(),
+    });
+    state.consultations = await getConsultations().then(unwrap);
+    form.reset();
+    status.textContent = "Proposal sent. The patient can now accept or decline it.";
+    renderConsultations();
+    renderOverview(state.patients, state.consultations);
+  } catch (error) {
+    status.textContent = error.message || "Could not send the consultation proposal.";
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function handleConsultAction(e) {
@@ -1140,6 +1201,14 @@ document.addEventListener("click", (e) => {
     return;
   }
 
+  const initiatePatient = e.target.closest("[data-initiate-patient]");
+  if (initiatePatient) {
+    const select = document.getElementById("consult-initiate-patient");
+    if (select) select.value = initiatePatient.getAttribute("data-initiate-patient");
+    document.getElementById("consult-initiate-date")?.focus();
+    return;
+  }
+
   const triageDecline = e.target.closest("[data-triage-decline]");
   if (triageDecline) {
     declineTriageRequest(triageDecline);
@@ -1210,5 +1279,6 @@ document.addEventListener("change", (e) => {
 });
 
 document.getElementById("rx-form")?.addEventListener("submit", submitPrescription);
+document.getElementById("consult-initiate-form")?.addEventListener("submit", submitInitiatedConsultation);
 
 window.pvLoadDashboard = loadDashboard;

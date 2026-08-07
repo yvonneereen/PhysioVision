@@ -91,6 +91,62 @@ class ConsultationViewSet(ModelViewSet):
             'requires_review': True,
         })
 
+    @action(detail=False, methods=['post'])
+    def initiate(self, request):
+        """Clinician proposes a new consultation without waiting for a request."""
+        if (
+            request.user.role != UserRole.CLINICIAN
+            or not hasattr(request.user, 'clinician_profile')
+        ):
+            raise PermissionDenied(
+                'Only a clinician can initiate a consultation.'
+            )
+        clinician = request.user.clinician_profile
+        patient = PatientProfile.objects.filter(
+            pk=request.data.get('patient'),
+            primary_clinician=clinician,
+        ).select_related('user').first()
+        if not patient:
+            raise ValidationError({
+                'patient': 'Select a patient linked to your clinician account.'
+            })
+        try:
+            scheduled_at = timezone.datetime.fromisoformat(
+                str(request.data.get('scheduled_at', '')).replace('Z', '+00:00')
+            )
+        except (TypeError, ValueError):
+            scheduled_at = None
+        if scheduled_at and timezone.is_naive(scheduled_at):
+            scheduled_at = timezone.make_aware(
+                scheduled_at,
+                timezone.get_current_timezone(),
+            )
+        if not scheduled_at or scheduled_at <= timezone.now():
+            raise ValidationError({
+                'scheduled_at': 'Choose a future consultation time.'
+            })
+        try:
+            duration = int(request.data.get('duration_minutes', 30))
+        except (TypeError, ValueError):
+            duration = 30
+        if duration not in {30, 45, 60}:
+            raise ValidationError({
+                'duration_minutes': 'Choose 30, 45, or 60 minutes.'
+            })
+        consultation = Consultation.objects.create(
+            patient=patient,
+            clinician=clinician,
+            scheduled_at=scheduled_at,
+            duration_minutes=duration,
+            status=ConsultationStatus.REQUESTED,
+            initiated_by=ConsultationInitiator.CLINICIAN,
+            clinician_notes=str(request.data.get('clinician_notes', '')).strip()[:2000],
+        )
+        return Response(
+            self.get_serializer(consultation).data,
+            status=status.HTTP_201_CREATED,
+        )
+
     @action(detail=True, methods=['post'])
     def confirm(self, request, pk=None):
         # Retained for older patient-proposed consultation records.

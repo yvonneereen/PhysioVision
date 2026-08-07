@@ -8670,3 +8670,85 @@ body .voice-setup-option strong,
     justify-self: center;
   }
 }
+
+/* Keep the camera setup action inside the stage on touch-sized screens.
+   The stage used to inherit a short flex height after the safety cards were
+   stacked, so the absolutely positioned setup content was clipped before its
+   primary button. */
+@media (max-width: 900px) {
+  .patient-practice-workspace .camera-column {
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .patient-practice-workspace .stage {
+    flex: 0 0 auto;
+    min-height: 680px;
+  }
+
+  .patient-practice-workspace .camera-placeholder {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .patient-practice-active .agent-chat-launcher {
+    right: 14px;
+    bottom: max(14px, env(safe-area-inset-bottom));
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    padding: 0;
+    overflow: hidden;
+    font-size: 0;
+  }
+
+  .patient-practice-active .agent-chat-launcher span {
+    font-size: 1.25rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .patient-practice-workspace .stage {
+    min-height: 610px;
+  }
+
+  .patient-practice-workspace .camera-placeholder {
+    align-content: start;
+    gap: 18px;
+    padding: 104px 16px 44px;
+  }
+
+  .patient-practice-workspace .position-guide {
+    margin-bottom: -125px;
+    transform: scale(0.62);
+    transform-origin: top center;
+  }
+
+  .patient-practice-workspace .camera-placeholder-actions {
+    width: min(440px, 100%);
+  }
+}
+
+@media (max-width: 900px) and (max-height: 600px) and (orientation: landscape) {
+  .patient-practice-workspace .stage {
+    min-height: 460px;
+  }
+
+  .patient-practice-workspace .camera-placeholder {
+    grid-template-columns: minmax(150px, 0.65fr) minmax(280px, 1fr);
+    align-content: center;
+    gap: 24px;
+    padding: 78px 28px 42px;
+  }
+
+  .patient-practice-workspace .position-guide {
+    margin-bottom: 0;
+    transform: scale(0.78);
+    transform-origin: center;
+  }
+
+  .patient-practice-workspace .camera-placeholder-actions {
+    width: 100%;
+  }
+}

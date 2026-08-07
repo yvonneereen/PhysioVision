@@ -65,6 +65,26 @@ assert.match(
   "the live camera tip must not cover setup instructions before the camera starts"
 );
 assert.match(
+  styles,
+  /@media \(max-width: 900px\)[\s\S]*?\.patient-practice-workspace \.camera-column\s*\{[\s\S]*?min-height: 0;[\s\S]*?overflow: visible;[\s\S]*?\.patient-practice-workspace \.stage\s*\{[\s\S]*?flex: 0 0 auto;[\s\S]*?min-height: 680px;[\s\S]*?\.patient-practice-workspace \.camera-placeholder\s*\{[\s\S]*?overflow-y: auto;/,
+  "the mobile camera stage should expand and remain scrollable instead of clipping its primary action"
+);
+assert.match(
+  styles,
+  /@media \(max-width: 640px\)[\s\S]*?\.patient-practice-workspace \.camera-placeholder\s*\{[\s\S]*?padding: 104px 16px 44px;[\s\S]*?\.patient-practice-workspace \.position-guide\s*\{[\s\S]*?transform: scale\(0\.62\);/,
+  "the portrait phone setup should compact its guide while retaining the camera action"
+);
+assert.match(
+  styles,
+  /@media \(max-width: 900px\) and \(max-height: 600px\) and \(orientation: landscape\)[\s\S]*?grid-template-columns: minmax\(150px, 0\.65fr\) minmax\(280px, 1fr\);/,
+  "the landscape phone setup should place its guide and primary action side by side"
+);
+assert.match(
+  styles,
+  /\.patient-practice-active \.agent-chat-launcher\s*\{[\s\S]*?width: 56px;[\s\S]*?height: 56px;[\s\S]*?font-size: 0;/,
+  "the mobile AI launcher should collapse to an icon so it cannot cover camera controls"
+);
+assert.match(
   source,
   /voiceSetupOverlay\.classList\.remove\("hidden"\);\s*voiceSetupOverlay\.scrollTop = 0;/,
   "each response-mode choice should open at the start of its scrollable content"

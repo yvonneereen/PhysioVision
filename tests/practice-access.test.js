@@ -6,6 +6,7 @@ import {
   resolvePracticeAccess,
   wellnessPlanDoseForExercise,
   wellnessPlanExerciseIds,
+  wellnessPlanIncludesExercise,
 } from "../practice-access.js";
 
 const acceptedPlan = {
@@ -37,6 +38,8 @@ assert.deepEqual(
   wellnessPlanExerciseIds(acceptedPlan),
   ["half-squats", "heel-raises"],
 );
+assert.equal(wellnessPlanIncludesExercise(acceptedPlan, "half-squats"), true);
+assert.equal(wellnessPlanIncludesExercise(acceptedPlan, "bridges"), false);
 assert.deepEqual(
   wellnessPlanDoseForExercise(acceptedPlan, "half-squats"),
   {
@@ -81,6 +84,40 @@ assert.deepEqual(
     dosage: "",
   },
   "cached camelCase plan fields should resolve to the same camera dose",
+);
+
+const legacyDosagePlan = {
+  source: "accepted_legacy_plan",
+  days: [
+    {
+      exercise_ids: ["half-squats", "calf-raises"],
+      dosage: "1 set of 6–10 repetitions",
+    },
+  ],
+};
+assert.deepEqual(
+  wellnessPlanDoseForExercise(legacyDosagePlan, "half-squats"),
+  {
+    mode: "wellness_plan",
+    source: "accepted_legacy_plan",
+    sets: 1,
+    reps: 10,
+    repsMin: 6,
+    repsMax: 10,
+    repetitionLabel: "6–10",
+    daysPerWeek: 1,
+    dosage: "1 set of 6–10 repetitions",
+  },
+  "older accepted plans should derive camera targets from their dosage text",
+);
+
+const unstructuredDosagePlan = {
+  days: [{ exercise_ids: ["half-squats"], dosage: "Follow your gentle plan" }],
+};
+assert.equal(
+  wellnessPlanDoseForExercise(unstructuredDosagePlan, "half-squats")?.mode,
+  "wellness_plan",
+  "a planned exercise must remain accessible when optional dosage details are incomplete",
 );
 
 assert.equal(hasAuthenticatedPracticeAccount(), false);

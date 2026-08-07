@@ -52,6 +52,35 @@ export function wellnessPlanExerciseIds(plan) {
   }))];
 }
 
+export function wellnessPlanIncludesExercise(plan, exerciseId) {
+  if (!exerciseId) return false;
+  const normalizedExerciseId = String(exerciseId);
+  return wellnessPlanExerciseIds(plan).includes(normalizedExerciseId);
+}
+
+function parseWellnessDosage(dosage) {
+  const text = typeof dosage === "string" ? dosage.trim() : "";
+  if (!text) return {};
+
+  const setsMatch = text.match(/\b(\d+)\s*sets?\b/i);
+  const repetitionsRangeMatch = text.match(
+    /\b(\d+)\s*(?:[-–—]|to)\s*(\d+)\s*(?:repetitions?|reps?)\b/i
+  );
+  const exactRepetitionsMatch = repetitionsRangeMatch
+    ? null
+    : text.match(/\b(\d+)\s*(?:repetitions?|reps?)\b/i);
+
+  return {
+    sets: positiveInteger(setsMatch?.[1]),
+    repetitionsMin: positiveInteger(
+      repetitionsRangeMatch?.[1] ?? exactRepetitionsMatch?.[1]
+    ),
+    repetitionsMax: positiveInteger(
+      repetitionsRangeMatch?.[2] ?? exactRepetitionsMatch?.[1]
+    ),
+  };
+}
+
 export function wellnessPlanDoseForExercise(plan, exerciseId) {
   if (!Array.isArray(plan?.days) || !exerciseId) return null;
   const normalizedExerciseId = String(exerciseId);
@@ -63,8 +92,11 @@ export function wellnessPlanDoseForExercise(plan, exerciseId) {
   if (!day) return null;
 
   const constraints = plan.constraints ?? {};
+  const dosage = typeof day.dosage === "string" ? day.dosage.trim() : "";
+  const parsedDosage = parseWellnessDosage(dosage);
   const sets = firstPositiveInteger(
     day.sets,
+    parsedDosage.sets,
     constraints.sets_per_exercise,
     constraints.setsPerExercise,
   );
@@ -75,6 +107,7 @@ export function wellnessPlanDoseForExercise(plan, exerciseId) {
   const minimumRepetitions = firstPositiveInteger(
     day.repetitions_min,
     day.repetitionsMin,
+    parsedDosage.repetitionsMin,
     constraints.repetitions_min,
     constraints.repetitionsMin,
     exactRepetitions,
@@ -82,20 +115,24 @@ export function wellnessPlanDoseForExercise(plan, exerciseId) {
   const maximumRepetitions = firstPositiveInteger(
     day.repetitions_max,
     day.repetitionsMax,
+    parsedDosage.repetitionsMax,
     constraints.repetitions_max,
     constraints.repetitionsMax,
     exactRepetitions,
   );
-  if (!sets || (!minimumRepetitions && !maximumRepetitions)) return null;
-
-  const repetitionsMin = Math.min(
-    minimumRepetitions ?? maximumRepetitions,
-    maximumRepetitions ?? minimumRepetitions,
-  );
-  const repetitionsMax = Math.max(
-    minimumRepetitions ?? maximumRepetitions,
-    maximumRepetitions ?? minimumRepetitions,
-  );
+  const hasRepetitions = Boolean(minimumRepetitions || maximumRepetitions);
+  const repetitionsMin = hasRepetitions
+    ? Math.min(
+      minimumRepetitions ?? maximumRepetitions,
+      maximumRepetitions ?? minimumRepetitions,
+    )
+    : null;
+  const repetitionsMax = hasRepetitions
+    ? Math.max(
+      minimumRepetitions ?? maximumRepetitions,
+      maximumRepetitions ?? minimumRepetitions,
+    )
+    : null;
   const daysPerWeek = firstPositiveInteger(
     constraints.days_per_week,
     constraints.daysPerWeek,
@@ -109,11 +146,13 @@ export function wellnessPlanDoseForExercise(plan, exerciseId) {
     reps: repetitionsMax,
     repsMin: repetitionsMin,
     repsMax: repetitionsMax,
-    repetitionLabel: repetitionsMin === repetitionsMax
-      ? String(repetitionsMax)
-      : `${repetitionsMin}–${repetitionsMax}`,
+    repetitionLabel: hasRepetitions
+      ? repetitionsMin === repetitionsMax
+        ? String(repetitionsMax)
+        : `${repetitionsMin}–${repetitionsMax}`
+      : "",
     daysPerWeek,
-    dosage: day.dosage ?? "",
+    dosage,
   };
 }
 

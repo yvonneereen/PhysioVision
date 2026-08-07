@@ -52,7 +52,8 @@ import {
   resolvePracticeAccess,
   wellnessPlanDoseForExercise,
   wellnessPlanExerciseIds,
-} from "./practice-access.js?v=3";
+  wellnessPlanIncludesExercise,
+} from "./practice-access.js?v=4";
 import {
   FallMonitor,
   fallMonitoringReadiness,
@@ -3638,6 +3639,10 @@ function renderPrescription(ex) {
   const p = activeDose(ex);
   const repetitions = p.repetitionLabel ?? p.reps;
   const setUnit = Number(p.sets) === 1 ? "set" : "sets";
+  const hasStructuredDose = Number.isFinite(Number(p.sets))
+    && Number(p.sets) > 0
+    && Number.isFinite(Number(p.reps))
+    && Number(p.reps) > 0;
   if (profile.carePath === "clinician" && !p.id) {
     prescEl.textContent = "This movement is not in your active prescription";
     if (repTargetEl) repTargetEl.textContent = "—";
@@ -3656,6 +3661,9 @@ function renderPrescription(ex) {
     if (repTargetEl) repTargetEl.textContent = "—";
   } else if (p.mode === "clinician_plan") {
     prescEl.textContent = "A clinician prescription is required";
+    if (repTargetEl) repTargetEl.textContent = "—";
+  } else if (p.mode === "wellness_plan" && !hasStructuredDose) {
+    prescEl.textContent = p.dosage || "Follow the dosage in your accepted AI plan";
     if (repTargetEl) repTargetEl.textContent = "—";
   } else {
     prescEl.textContent =
@@ -3795,7 +3803,10 @@ function hasPathwayAccess() {
   }
   if (
     practiceDecision.reason === "wellness_plan"
-    && activeDose(engine.exercise).mode !== "wellness_plan"
+    && !wellnessPlanIncludesExercise(
+      currentAcceptedWellnessPlan(),
+      engine.exercise.id
+    )
   ) {
     statusEl.textContent = "This exercise is not in your accepted AI plan";
     setFeedbackBanner(

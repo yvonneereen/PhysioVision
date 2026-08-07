@@ -472,8 +472,8 @@ assert.match(
 );
 assert.match(
   pathwayAccessSource,
-  /practiceDecision\.reason === "wellness_plan"[\s\S]*?activeDose\(engine\.exercise\)\.mode !== "wellness_plan"/,
-  "the camera should reject exercises outside the accepted wellness plan"
+  /practiceDecision\.reason === "wellness_plan"[\s\S]*?!wellnessPlanIncludesExercise\([\s\S]*?currentAcceptedWellnessPlan\(\)[\s\S]*?engine\.exercise\.id/,
+  "the camera should authorize an accepted exercise by plan membership, independently of dosage parsing"
 );
 assert.match(
   pathwayAccessSource,

@@ -1,4 +1,4 @@
-import { EXERCISES, EXERCISE_MAP } from "../exercises/registry.js?v=57";
+import { EXERCISES, EXERCISE_MAP } from "../exercises/registry.js?v=58";
 import { applyCalibration } from "../personalization.js";
 
 export { EXERCISES };

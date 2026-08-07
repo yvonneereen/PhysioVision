@@ -7,7 +7,7 @@ import {
   measureHandExerciseFrame,
   measurePoseExerciseFrame,
 } from "./exercise-tracking.js?v=2";
-import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=46";
+import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=47";
 import { POSES } from "./poses.js";
 import {
   calibrationFrameMatchesPhase,
@@ -44,7 +44,7 @@ import {
   isSafariBrowser,
   readMicrophonePermissionState,
   voiceGuidance,
-} from "./voice-guidance.js?v=29";
+} from "./voice-guidance.js?v=30";
 import {
   PRACTICE_VIEWS,
   acceptedWellnessPlan,
@@ -206,6 +206,8 @@ const handTrackingReadout   = document.getElementById("handTrackingReadout");
 const handModelStatus       = document.getElementById("handModelStatus");
 const handGuideText         = handFrameGuide?.querySelector(":scope > span");
 const soundToggle           = document.getElementById("soundToggle");
+const voiceSpeedSelect      = document.getElementById("voiceSpeedSelect");
+const voiceSetupSpeedSelect = document.getElementById("voiceSetupSpeedSelect");
 const voiceSetupOverlay     = document.getElementById("voiceSetupOverlay");
 const voiceSetupHandsFree   = document.getElementById("voiceSetupHandsFree");
 const voiceSetupButtons     = document.getElementById("voiceSetupButtons");
@@ -336,6 +338,8 @@ const exerciseContent = new Map(
 );
 
 voiceGuidance.attachToggle(soundToggle);
+voiceGuidance.attachRateControl(voiceSpeedSelect);
+voiceGuidance.attachRateControl(voiceSetupSpeedSelect);
 
 function armVoiceListening(callback) {
   callback();
@@ -1207,6 +1211,9 @@ let sessionSymmetryWarnings = 0;
 const sessionAngleStats = {}; // {angleName: {min, max, sum, count}}
 let spokenCoachingCandidate = null;
 let spokenRepCount = 0;
+let queuedSpokenRepCount = 0;
+const pendingRepAnnouncements = [];
+let repAnnouncementActive = false;
 let completedSetCount = 0;
 let completedSessionReps = 0;
 let pendingSetStartCheck = null;
@@ -1325,7 +1332,7 @@ function currentMovementAiContext() {
 }
 
 function scheduleMovementAiWakeListening(
-  delayMs = 350,
+  delayMs = 100,
   generation = movementAiGeneration
 ) {
   clearMovementAiRestartTimer();
@@ -1349,7 +1356,7 @@ function resumeMovementAiAfterSpeech(generation) {
   // Otherwise the unchanged rep count in the next camera frame is treated as
   // new and spoken repeatedly (for example, "Rep 2" in a loop).
   spokenCoachingCandidate = null;
-  scheduleMovementAiWakeListening(350, generation);
+  scheduleMovementAiWakeListening(100, generation);
 }
 
 function speakMovementAiMessage(
@@ -1374,6 +1381,7 @@ function captureMovementAiQuestion(generation) {
   setMovementAiStatus("question", "AI guide is listening to your question…");
   const started = voiceGuidance.listen({
     maxNoSpeechRetries: 1,
+    interimSilenceMs: 400,
     onStatus: (message) => {
       if (generation === movementAiGeneration && movementAiState === "question") {
         setMovementAiStatus("question", message);
@@ -1425,7 +1433,7 @@ function beginMovementAiQuestion(question, generation) {
 async function answerMovementAiQuestion(question, generation) {
   const cleanedQuestion = String(question ?? "").trim();
   if (!cleanedQuestion || !movementAiCanListen(generation)) {
-    scheduleMovementAiWakeListening(350, generation);
+    scheduleMovementAiWakeListening(100, generation);
     return;
   }
 
@@ -1437,7 +1445,7 @@ async function answerMovementAiQuestion(question, generation) {
   const context = currentMovementAiContext();
   const acknowledgement = new Promise((resolve) => {
     const spoken = speakMovementGuide(
-      "I heard your question. Let me check that for you.",
+      "Let me check.",
       {
         key: `movement-ai:acknowledged:${generation}:${cleanedQuestion}`,
         interrupt: true,
@@ -1482,6 +1490,7 @@ function startMovementAiWakeListening(generation = movementAiGeneration) {
   );
   const started = voiceGuidance.listen({
     maxNoSpeechRetries: 0,
+    interimSilenceMs: 350,
     onResult: (transcript, alternatives) => {
       if (!movementAiCanListen(generation)) return;
       const wake = parseMovementAiWakePhrase(transcript, alternatives);
@@ -1494,7 +1503,7 @@ function startMovementAiWakeListening(generation = movementAiGeneration) {
           );
           return;
         }
-        scheduleMovementAiWakeListening(180, generation);
+        scheduleMovementAiWakeListening(60, generation);
         return;
       }
       beginMovementAiQuestion(wake.question, generation);
@@ -1502,7 +1511,7 @@ function startMovementAiWakeListening(generation = movementAiGeneration) {
     onError: (message, errorCode) => {
       if (!movementAiCanListen(generation)) return;
       if (MOVEMENT_AI_TRANSIENT_LISTENING_ERRORS.has(errorCode)) {
-        scheduleMovementAiWakeListening(650, generation);
+        scheduleMovementAiWakeListening(180, generation);
         return;
       }
       movementAiState = "error";
@@ -1536,11 +1545,13 @@ function startMovementAiGuide() {
     return;
   }
   const generation = ++movementAiGeneration;
-  scheduleMovementAiWakeListening(350, generation);
+  scheduleMovementAiWakeListening(100, generation);
 }
 
 function speakCameraCoaching(message, options = {}) {
-  if (movementAiConversationActive()) return false;
+  if (movementAiConversationActive() || movementAiState === "coaching") {
+    return false;
+  }
   const generation = movementAiGeneration;
   const resumeWakeListener = movementAiState === "wake"
     && movementAiCanListen(generation);
@@ -1559,12 +1570,34 @@ function speakCameraCoaching(message, options = {}) {
     originalOnEnd?.();
     if (resumeWakeListener) resumeMovementAiAfterSpeech(generation);
   };
-  const spoken = speakMovementGuide(message, {
+  const speakAtFullVolume = () => {
+    if (resumeWakeListener && (
+      generation !== movementAiGeneration
+      || !running
+      || movementAiState !== "coaching"
+    )) {
+      return;
+    }
+    const spoken = speakMovementGuide(message, {
+      ...options,
+      onEnd: finish,
+    });
+    if (!spoken && resumeWakeListener) resumeMovementAiAfterSpeech(generation);
+  };
+  if (resumeWakeListener) {
+    // The wake listener places Safari in a quieter play-and-record session.
+    // Wait for it to release, then force playback mode before every coaching
+    // sentence so its first word is as loud as its last.
+    void voiceGuidance.prepareSpeechAfterMicrophoneRelease().then(
+      speakAtFullVolume,
+      speakAtFullVolume
+    );
+    return true;
+  }
+  return speakMovementGuide(message, {
     ...options,
     onEnd: finish,
   });
-  if (!spoken && resumeWakeListener) resumeMovementAiAfterSpeech(generation);
-  return spoken;
 }
 
 function exerciseSpokenInstruction(exercise) {
@@ -1586,21 +1619,35 @@ function exerciseSpokenInstruction(exercise) {
 function exerciseStartGuidance(exercise = engine?.exercise) {
   if (exercise?.id === "half-squats") {
     return (
-      "Begin your first half squat now. Keep both feet flat and keep the chair "
-      + "beside you. Bend both knees and hips slowly as if sitting back toward "
-      + "the chair, only as far as comfortable, then stand tall to complete one repetition."
+      "Before you begin, stand behind a stable chair and place both hands lightly "
+      + "on its back for balance. Place your feet about hip-width apart and keep "
+      + "your whole feet flat. Stand tall and look ahead. Begin now. Bend your "
+      + "knees slowly and move your hips back as if starting to sit on a chair. "
+      + "Lower only a little and only as far as comfortable. Keep your knees "
+      + "pointing in the same direction as your toes. Then slowly stand tall again."
     );
   }
   return exerciseSpokenInstruction(exercise);
 }
 
-function resetSpokenCoaching() {
+function resetSpokenCoaching({ preserveRepAnnouncements = false } = {}) {
   spokenCoachingCandidate = null;
   spokenRepCount = 0;
+  queuedSpokenRepCount = 0;
+  if (!preserveRepAnnouncements) {
+    pendingRepAnnouncements.length = 0;
+    repAnnouncementActive = false;
+  }
 }
 
 function queueSpokenMovementCue(state, cue, timestampMs) {
-  if (!running || calibrationSession || movementAiConversationActive() || !cue) {
+  if (
+    !running
+    || calibrationSession
+    || movementAiConversationActive()
+    || movementAiState === "coaching"
+    || !cue
+  ) {
     spokenCoachingCandidate = null;
     return;
   }
@@ -1633,6 +1680,77 @@ function queueSpokenMovementCue(state, cue, timestampMs) {
     key: `movement:${engine.exercise.id}:${identity}`,
     cooldownMs: repeatAfterMs,
   });
+}
+
+function repAnnouncementMessage({
+  repNumber,
+  setNumber,
+  setGoal,
+  isHold,
+  isLastPlannedSet,
+}) {
+  if (!setGoal) return `Rep ${repNumber}.`;
+  if (isHold) {
+    return isLastPlannedSet
+      ? `${setGoal} seconds complete. Stop now, return to a comfortable position, and rest. Choose Finish exercise when you are ready.`
+      : `${setGoal} seconds complete for set ${setNumber}. Return to a comfortable position and rest.`;
+  }
+  return isLastPlannedSet
+    ? `Rep ${repNumber}. You reached your goal of ${setGoal} repetitions. Stop squatting now, stand tall, and rest. Choose Finish exercise when you are ready.`
+    : `Rep ${repNumber}. Set ${setNumber} is complete. Stand tall and rest before the next set.`;
+}
+
+function processPendingRepAnnouncements() {
+  if (
+    repAnnouncementActive
+    || !pendingRepAnnouncements.length
+    || movementAiConversationActive()
+  ) {
+    return;
+  }
+  const announcement = pendingRepAnnouncements[0];
+  const spoken = speakCameraCoaching(
+    repAnnouncementMessage(announcement),
+    {
+      key: `rep:${announcement.exerciseId}:${announcement.setNumber}:${announcement.repNumber}`,
+      onEnd: () => {
+        const completed = pendingRepAnnouncements.shift();
+        if (completed) {
+          spokenRepCount = Math.max(spokenRepCount, completed.repNumber);
+        }
+        repAnnouncementActive = false;
+        window.setTimeout(processPendingRepAnnouncements, 100);
+      },
+    }
+  );
+  repAnnouncementActive = spoken;
+}
+
+function queueRepAnnouncements(feedback, metric) {
+  const detectedReps = Number(feedback?.repCount ?? 0);
+  if (!Number.isFinite(detectedReps) || detectedReps <= queuedSpokenRepCount) {
+    processPendingRepAnnouncements();
+    return;
+  }
+  const setNumber = completedSetCount + 1;
+  const plannedSets = plannedSetCount(feedback.exercise);
+  while (queuedSpokenRepCount < detectedReps) {
+    queuedSpokenRepCount += 1;
+    const measured = metric.isHold
+      ? queuedSpokenRepCount * metric.perHold
+      : queuedSpokenRepCount;
+    pendingRepAnnouncements.push({
+      exerciseId: feedback.exercise.id,
+      repNumber: queuedSpokenRepCount,
+      setNumber,
+      setGoal: metric.goal !== null && measured >= metric.goal
+        ? metric.goal
+        : null,
+      isHold: metric.isHold,
+      isLastPlannedSet: setNumber >= plannedSets,
+    });
+  }
+  processPendingRepAnnouncements();
 }
 
 // ── Hold timer state ──────────────────────────────────────────────────────────
@@ -2472,13 +2590,6 @@ function handleCompletedSet(feedback) {
       "good",
       "All planned sets are complete. Choose Finish exercise when you are ready."
     );
-    speakCameraCoaching(
-      "All planned sets are complete. Choose Finish exercise when you are ready.",
-      {
-        key: `sets:${engine.exercise.id}:complete`,
-        interrupt: true,
-      }
-    );
     return;
   }
 
@@ -2504,18 +2615,11 @@ function handleCompletedSet(feedback) {
   progressLbl.textContent = "Return to your starting position";
   renderPoseStrip(engine.exercise, engine.stages[0]);
   renderStaticPhaseFlow(engine);
-  resetSpokenCoaching();
+  resetSpokenCoaching({ preserveRepAnnouncements: true });
   statusEl.textContent = `Set ${setNumber} complete — checking the next starting position`;
   setFeedbackBanner(
     "position",
     `Return to the starting position for set ${setNumber + 1}`
-  );
-  speakCameraCoaching(
-    `Set ${setNumber} complete. Return to your starting position for an automatic check before set ${setNumber + 1}.`,
-    {
-      key: `set:${engine.exercise.id}:${setNumber}:complete`,
-      interrupt: true,
-    }
   );
 }
 
@@ -2533,6 +2637,7 @@ function updateFeedbackPanel(angles, timestampMs) {
     };
   }
   if (sessionAllSetsComplete && lastFeedbackResult) {
+    processPendingRepAnnouncements();
     return lastFeedbackResult;
   }
   const fb = engine.update(angles, timestampMs);
@@ -2595,6 +2700,7 @@ function updateFeedbackPanel(angles, timestampMs) {
   repCountEl.textContent = shown;
   if (repLabelEl) repLabelEl.textContent = metric.unit;
   if (setCompleteBadgeEl) setCompleteBadgeEl.classList.toggle("hidden", !setComplete);
+  queueRepAnnouncements(fb, metric);
 
   // Highlight active pose card without re-rendering the whole strip
   poseStripEl.querySelectorAll(".pose-card").forEach((card, i) => {
@@ -2687,13 +2793,6 @@ function updateFeedbackPanel(angles, timestampMs) {
   }
   setFeedbackBanner(bannerState, bannerCue);
   queueSpokenMovementCue(bannerState, bannerCue, timestampMs);
-
-  if (fb.repCount > spokenRepCount) {
-    spokenRepCount = fb.repCount;
-    speakCameraCoaching(`Rep ${fb.repCount}.`, {
-      key: `rep:${engine.exercise.id}:${fb.repCount}`,
-    });
-  }
 
   // Symmetry warning
   if (fb.symmetryWarning && fb.exercise.id !== "half-squats") {
@@ -2901,8 +3000,8 @@ function movementPhaseGuidance(feedback) {
     ?? "next";
   if (feedback.exercise.id === "half-squats") {
     return nextPhase === "squat"
-      ? "Bend the visible knee and hip a little more, only as far as is comfortable, then hold briefly."
-      : "Stand tall and straighten the visible knee and hip, then hold briefly.";
+      ? "Bend your knees slowly and move your hips back as if starting to sit. Lower only a little and keep your heels flat."
+      : "Press through your whole feet and slowly stand tall. Use the chair only for balance.";
   }
   return `Move slowly toward the ${nextPhase} position`;
 }

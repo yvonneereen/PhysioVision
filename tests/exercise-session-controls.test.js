@@ -158,6 +158,11 @@ assert.match(
   "starting the camera guide should start its wake-phrase listener"
 );
 assert.match(
+  source,
+  /function scheduleMovementAiWakeListening\(\s*delayMs = 100[\s\S]*?interimSilenceMs: 350/,
+  "Hey Guide should restart quickly and act on a completed phrase after a short silence"
+);
+assert.match(
   activateGuideSource,
   /announceExerciseInstruction\("", \{ onEnd: startMovementAiGuide \}\)[\s\S]*?startMovementAiGuide\(\)/,
   "AI listening should begin from the same successful camera-start flow after its spoken introduction"
@@ -174,7 +179,7 @@ assert.match(
 );
 assert.match(
   source,
-  /I heard your question\. Let me check that for you\.[\s\S]*?sendAgentMessage\(cleanedQuestion, context\)[\s\S]*?await acknowledgement/,
+  /Let me check\.[\s\S]*?sendAgentMessage\(cleanedQuestion, context\)[\s\S]*?await acknowledgement/,
   "Hey Guide should acknowledge a recognized question before waiting for the AI answer"
 );
 assert.match(
@@ -213,8 +218,28 @@ assert.match(
 );
 assert.match(
   source,
-  /function exerciseStartGuidance[\s\S]*?Begin your first half squat now[\s\S]*?then stand tall to complete one repetition/,
-  "the squat guide should explicitly tell the user when and how to start"
+  /function exerciseStartGuidance[\s\S]*?stand behind a stable chair[\s\S]*?feet about hip-width apart[\s\S]*?Keep your knees[\s\S]*?same direction as your toes/,
+  "the automatic squat guide should use clear chair, foot, and knee instructions before movement"
+);
+assert.match(
+  source,
+  /function queueRepAnnouncements[\s\S]*?while \(queuedSpokenRepCount < detectedReps\)[\s\S]*?pendingRepAnnouncements\.push/,
+  "every detected repetition should be queued instead of being discarded while another sentence is speaking"
+);
+assert.match(
+  source,
+  /function processPendingRepAnnouncements[\s\S]*?pendingRepAnnouncements\[0\][\s\S]*?onEnd:[\s\S]*?pendingRepAnnouncements\.shift/,
+  "queued repetition numbers should be spoken in order"
+);
+assert.match(
+  source,
+  /You reached your goal of \$\{setGoal\} repetitions\. Stop squatting now, stand tall, and rest/,
+  "the final repetition should clearly tell the user to stop and rest at the plan limit"
+);
+assert.doesNotMatch(
+  source,
+  /Move your (?:left|right) knee back so it stays over your foot/,
+  "squat corrections should avoid unclear knee-back wording"
 );
 assert.match(
   source,
@@ -399,6 +424,11 @@ assert.match(
   movementGuideSpeechSource,
   /preferImmediate:\s*true[\s\S]*?voiceGroup:\s*MOVEMENT_GUIDE_VOICE_GROUP[\s\S]*?volume:\s*MOVEMENT_GUIDE_VOLUME/,
   "all live guidance should bypass network latency at one maximum-volume voice"
+);
+assert.match(
+  functionSource("speakCameraCoaching", "exerciseSpokenInstruction"),
+  /cancelListening\(\)[\s\S]*?prepareSpeechAfterMicrophoneRelease\(\)[\s\S]*?speakAtFullVolume/,
+  "automatic coaching should wait for Safari's microphone session to release before speaking"
 );
 assert.match(
   source,

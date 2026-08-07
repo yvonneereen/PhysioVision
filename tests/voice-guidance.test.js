@@ -352,6 +352,8 @@ const settlingWindow = {
   navigator: { audioSession: safariAudioSession },
   setTimeout: (callback, delay) => {
     microphoneReleaseDelay = delay;
+    // Model Safari switching back to microphone mode while recognition ends.
+    safariAudioSession.type = "play-and-record";
     callback();
     return 1;
   },
@@ -363,7 +365,7 @@ assert.equal(
 );
 assert.equal(
   microphoneReleaseDelay,
-  1200,
+  400,
   "the first prompt should wait for Safari to release microphone audio mode"
 );
 assert.equal(
@@ -379,6 +381,35 @@ assert.equal(
   safariAudioSession.type,
   "playback",
   "every prompt should restore playback mode after Safari microphone use"
+);
+
+const rateSelections = [];
+const rateControl = {
+  value: "",
+  addEventListener: (event, callback) => {
+    if (event === "change") rateSelections.push(callback);
+  },
+};
+const slowerSpoken = [];
+const rateGuidance = new VoiceGuidance({
+  ...mockWindow,
+  speechSynthesis: {
+    ...mockWindow.speechSynthesis,
+    speak: (utterance) => slowerSpoken.push(utterance),
+  },
+});
+rateGuidance.attachRateControl(rateControl);
+assert.equal(rateControl.value, "normal");
+rateControl.value = "slower";
+rateSelections[0]();
+rateGuidance.speak("Use the selected guide speed.", {
+  rate: 1,
+  interrupt: true,
+});
+assert.equal(
+  slowerSpoken[0].rate,
+  0.86,
+  "the user-selected slower pace should apply to spoken guidance"
 );
 
 const neuralSources = [];
@@ -659,7 +690,7 @@ assert.equal(
 await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
 assert.equal(safariDeliveredTranscript, "five");
 assert.equal(safariListeningSession.type, "playback");
-assert.ok(safariListeningDelays.includes(1200));
+assert.ok(safariListeningDelays.includes(400));
 
 let interimTranscript = "";
 listeningGuidance.listen({
@@ -671,6 +702,21 @@ activeRecognitionInstance.emitInterimResult("seven");
 assert.equal(interimTranscript, "");
 activeRecognitionInstance.listeners.end?.();
 assert.equal(interimTranscript, "seven");
+
+let fastInterimTranscript = "";
+listeningGuidance.listen({
+  interimSilenceMs: 1,
+  onResult: (transcript) => {
+    fastInterimTranscript = transcript;
+  },
+});
+activeRecognitionInstance.emitInterimResult("hey guide how many repetitions");
+await new Promise((resolve) => globalThis.setTimeout(resolve, 10));
+assert.equal(
+  fastInterimTranscript,
+  "hey guide how many repetitions",
+  "a completed interim phrase should be delivered promptly after brief silence"
+);
 
 const retryStatuses = [];
 let retryError = "";

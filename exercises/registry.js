@@ -191,12 +191,12 @@ export const EXERCISES = [
     stageImages: ["standing", "squat", "standing"],
     symmetry: { joint: "knee", maxDiffDeg: 15, requiredForTracking: false },
     cues: {
-      "leftKnee<90": "Don't go too deep — this is a half squat only",
-      "rightKnee<90": "Don't go too deep — this is a half squat only",
-      "torsoLean>40": "Lift your chest slightly — avoid leaning too far forward",
-      "leftKneeForwardRatio>0.15": "Move your left knee back so it stays over your foot",
-      "rightKneeForwardRatio>0.15": "Move your right knee back so it stays over your foot",
-      "kneeDiff>15": "Keep both feet planted and bend both knees together as you sit your hips back",
+      "leftKnee<90": "Make the squat less deep. Lower only as far as is comfortable and controlled",
+      "rightKnee<90": "Make the squat less deep. Lower only as far as is comfortable and controlled",
+      "torsoLean>40": "Move your hips back and bring your chest comfortably upright",
+      "leftKneeForwardRatio>0.15": "Make the squat a little shallower. Keep your whole foot flat and move your hips back as if sitting",
+      "rightKneeForwardRatio>0.15": "Make the squat a little shallower. Keep your whole foot flat and move your hips back as if sitting",
+      "kneeDiff>15": "Point both knees in the same direction as your toes and bend both knees together",
     },
   },
 

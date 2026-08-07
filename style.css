@@ -1715,6 +1715,38 @@ html[lang="en-SG"] body {
   cursor: pointer;
 }
 
+.voice-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.voice-speed-control {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 8px 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.82);
+  background: rgba(9, 28, 30, 0.65);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.voice-speed-control select {
+  min-height: 30px;
+  max-width: 104px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.92);
+  font: inherit;
+}
+
 .setup-tip {
   position: absolute;
   right: 0;
@@ -1927,6 +1959,41 @@ html[lang="en-SG"] body {
   line-height: 1.45;
 }
 
+.voice-setup-speed {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 170px);
+  align-items: center;
+  gap: 5px 14px;
+  margin-top: 16px;
+  padding: 13px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.voice-setup-speed > span {
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.voice-setup-speed select {
+  min-height: 42px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--white);
+  font: inherit;
+  font-weight: 700;
+}
+
+.voice-setup-speed small {
+  grid-column: 1 / -1;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
 .voice-setup-status {
   min-height: 22px;
   margin-top: 14px !important;
@@ -1983,6 +2050,10 @@ html[lang="en-SG"] body {
 
   .voice-setup-option {
     min-height: 0;
+  }
+
+  .voice-setup-speed {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -7819,6 +7890,30 @@ details.metrics summary {
     top: 12px;
     right: 12px;
     left: 12px;
+  }
+
+  .status {
+    max-width: min(58%, 260px);
+  }
+
+  .voice-speed-control {
+    padding-left: 7px;
+  }
+
+  .voice-speed-control > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .voice-speed-control select {
+    max-width: 84px;
+    font-size: 1rem;
   }
 
   .sound-toggle {

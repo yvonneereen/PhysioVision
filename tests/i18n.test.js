@@ -23,7 +23,7 @@ assert.ok(
 );
 assert.deepEqual(
   [...new Set(i18nCacheVersions)],
-  ["21"],
+  ["22"],
   "all browser entry points must use one i18n URL so only one DOM observer is created"
 );
 
@@ -73,7 +73,7 @@ const voiceCacheVersions = voiceConsumerSources.flatMap((source) =>
 );
 assert.deepEqual(
   [...new Set(voiceCacheVersions)],
-  ["29"],
+  ["30"],
   "all voice consumers must share one voice-guidance module instance"
 );
 
@@ -104,6 +104,15 @@ assert.equal(getSpeechLocale(), "zh-CN");
 assert.equal(translateText("Text size"), "文字大小");
 assert.equal(translateText("Extra large"), "特大");
 assert.equal(translateText("Start camera guide"), "开始摄像头指导");
+assert.equal(translateText("Guide speed"), "指导语速");
+assert.equal(translateText("Slower"), "较慢");
+assert.equal(translateText("Rep 3."), "第3次。");
+assert.equal(
+  translateText(
+    "Rep 10. You reached your goal of 10 repetitions. Stop squatting now, stand tall, and rest. Choose Finish exercise when you are ready."
+  ),
+  "第10次。您已达到10次的目标。现在停止下蹲，站直并休息。准备好后选择“结束运动”。"
+);
 assert.equal(translateText("Better shoulder movement"), "改善肩部活动");
 assert.equal(translateText("Shoulder pendulum"), "肩部钟摆运动");
 for (const locale of ["zh-SG", "ms-SG", "ta-SG"]) {
@@ -142,9 +151,9 @@ const liveGuideSources = [
   "Local possible-fall check available",
   "The camera check is available. Verify an emergency contact in My profile before automatic alerts can be sent.",
   "Face the camera and step back until one complete hip, knee, and ankle line is visible. Keep the chair beside you and both feet in view.",
-  "Begin your first half squat now. Keep both feet flat and keep the chair beside you. Bend both knees and hips slowly as if sitting back toward the chair, only as far as comfortable, then stand tall to complete one repetition.",
+  "Before you begin, stand behind a stable chair and place both hands lightly on its back for balance. Place your feet about hip-width apart and keep your whole feet flat. Stand tall and look ahead. Begin now. Bend your knees slowly and move your hips back as if starting to sit on a chair. Lower only a little and only as far as comfortable. Keep your knees pointing in the same direction as your toes. Then slowly stand tall again.",
   "AI questions will be ready after camera setup is complete.",
-  "I heard your question. Let me check that for you.",
+  "Let me check.",
   "Personalized movement recognition is ready.",
   "Listen to the complete start instruction. Hey Guide will be ready afterward.",
   "Starting position confirmed.",
@@ -154,8 +163,8 @@ const liveGuideSources = [
   "Rep tracking is working from your left side. Keep moving slowly and follow the phase prompt.",
   "I cannot measure your right knee angle. Step farther back or turn slightly until one complete hip, knee, and ankle line is visible. Keep the chair beside you, not in front of the visible leg.",
   "I cannot measure a complete leg angle. Step farther back or turn slightly until one complete hip, knee, and ankle line is visible. Keep the chair beside you, not in front of the visible leg.",
-  "Bend the visible knee and hip a little more, only as far as is comfortable, then hold briefly.",
-  "Stand tall and straighten the visible knee and hip, then hold briefly.",
+  "Bend your knees slowly and move your hips back as if starting to sit. Lower only a little and keep your heels flat.",
+  "Press through your whole feet and slowly stand tall. Use the chair only for balance.",
   "I cannot measure a complete knee angle. Step farther back or turn slightly until one hip, knee, and ankle line is visible. Keep the chair beside you, not in front of the visible leg.",
   "I cannot measure a complete hip angle. Reposition until one shoulder, hip, knee, and ankle line is visible from head to foot.",
   "Keep every required joint visible so I can guide you safely.",

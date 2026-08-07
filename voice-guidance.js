@@ -1,16 +1,23 @@
 import {
   getSpeechLocale,
   translateText,
-} from "./i18n.js?v=21";
+} from "./i18n.js?v=22";
 import { generateGuidanceSpeech } from "./api.js?v=31";
 
 const VOICE_PREFERENCE_KEY = "physiovision.voice.enabled.v1";
+const VOICE_RATE_PREFERENCE_KEY = "physiovision.voice.rate.v1";
 const DEFAULT_SPEECH_VOLUME = 1;
-const MICROPHONE_RELEASE_SETTLE_MS = 1200;
+const MICROPHONE_RELEASE_SETTLE_MS = 400;
 const NEURAL_SPEECH_MIN_LENGTH = 18;
 const NEURAL_SPEECH_CACHE_LIMIT = 24;
 const NEURAL_TARGET_RMS = 0.16;
 const NEURAL_PEAK_CEILING = 0.86;
+
+export const SPEECH_RATE_PRESETS = Object.freeze({
+  normal: 1,
+  slower: 0.86,
+  slowest: 0.72,
+});
 
 const GENTLE_VOICE_NAME =
   /\b(samantha|ava|jenny|aria|sonia|allison|susan|serena|karen|moira|tessa|fiona|zoe|kathy|amira|yasmin|tingting|meijia|sinji|xiaoxiao|vani|pallavi)\b|google (us|uk) english/i;
@@ -659,6 +666,15 @@ function readStoredPreference(browserWindow) {
   }
 }
 
+function readStoredRatePreference(browserWindow) {
+  try {
+    const stored = browserWindow.localStorage.getItem(VOICE_RATE_PREFERENCE_KEY);
+    return Object.hasOwn(SPEECH_RATE_PRESETS, stored) ? stored : "normal";
+  } catch (_) {
+    return "normal";
+  }
+}
+
 export class VoiceGuidance {
   constructor(browserWindow = typeof window === "undefined" ? null : window) {
     this.window = browserWindow;
@@ -668,6 +684,10 @@ export class VoiceGuidance {
       browserWindow?.webkitSpeechRecognition ??
       null;
     this.enabled = browserWindow ? readStoredPreference(browserWindow) : false;
+    this.ratePreference = browserWindow
+      ? readStoredRatePreference(browserWindow)
+      : "normal";
+    this.rateControls = new Set();
     this.lastSpoken = new Map();
     this.activeRecognition = null;
     this.listeningGeneration = 0;
@@ -923,7 +943,47 @@ export class VoiceGuidance {
       this.preparePreferredVoice(),
       new Promise((resolve) => schedule(resolve, safeSettleMs)),
     ]);
+    // Safari can switch itself back to play-and-record while the recognizer is
+    // shutting down. Set playback again after the settling interval so the
+    // next sentence starts at its full level instead of growing louder midway.
+    this.usePlaybackAudioSession();
     return voice;
+  }
+
+  get speechRateMultiplier() {
+    return SPEECH_RATE_PRESETS[this.ratePreference]
+      ?? SPEECH_RATE_PRESETS.normal;
+  }
+
+  setRatePreference(preference) {
+    this.ratePreference = Object.hasOwn(SPEECH_RATE_PRESETS, preference)
+      ? preference
+      : "normal";
+    try {
+      this.window?.localStorage.setItem(
+        VOICE_RATE_PREFERENCE_KEY,
+        this.ratePreference
+      );
+    } catch (_) {
+      // Keep the choice for this page even if browser storage is unavailable.
+    }
+    this.renderRateControls();
+    return this.ratePreference;
+  }
+
+  renderRateControls() {
+    this.rateControls.forEach((control) => {
+      control.value = this.ratePreference;
+    });
+  }
+
+  attachRateControl(control) {
+    if (!control) return;
+    this.rateControls.add(control);
+    control.value = this.ratePreference;
+    control.addEventListener("change", () => {
+      this.setRatePreference(control.value);
+    });
   }
 
   setEnabled(enabled) {
@@ -1059,8 +1119,11 @@ export class VoiceGuidance {
     const requestedPitch = pitch === null || pitch === undefined
       ? naturalProsody.pitch
       : Number(pitch);
+    const preferredRate = (
+      Number.isFinite(requestedRate) ? requestedRate : naturalProsody.rate
+    ) * this.speechRateMultiplier;
     utterance.rate = Math.min(
-      Math.max(Number.isFinite(requestedRate) ? requestedRate : naturalProsody.rate, 0.5),
+      Math.max(preferredRate, 0.5),
       1.25
     );
     utterance.pitch = Math.min(
@@ -1133,6 +1196,9 @@ export class VoiceGuidance {
       const compressor = this.audioContext.createDynamicsCompressor?.() ?? null;
       gain.gain.value = normalizedNeuralSpeechGain(audioBuffer, volume);
       source.buffer = audioBuffer;
+      if (source.playbackRate) {
+        source.playbackRate.value = this.speechRateMultiplier;
+      }
       source.connect(gain);
       if (compressor) {
         compressor.threshold.value = -20;
@@ -1208,6 +1274,7 @@ export class VoiceGuidance {
     onStatus,
     maxNoSpeechRetries = 1,
     retryDelayMs = 350,
+    interimSilenceMs = 0,
   } = {}) {
     if (!this.canListen) {
       onError?.(
@@ -1223,6 +1290,8 @@ export class VoiceGuidance {
     this.cancelSpokenOutput();
     const schedule = this.window?.setTimeout?.bind(this.window)
       ?? globalThis.setTimeout;
+    const unschedule = this.window?.clearTimeout?.bind(this.window)
+      ?? globalThis.clearTimeout;
     const recognitionLanguage = getSpeechLocale();
     const allowedRetries = Math.max(0, Number(maxNoSpeechRetries) || 0);
     let retryCount = 0;
@@ -1246,6 +1315,13 @@ export class VoiceGuidance {
       let resultDelivered = false;
       let retryScheduled = false;
       let recognizerStoppedForResult = false;
+      let interimTimer = null;
+
+      const clearInterimTimer = () => {
+        if (interimTimer === null) return;
+        unschedule(interimTimer);
+        interimTimer = null;
+      };
 
       const extractResult = (event) => {
         const results = event?.results;
@@ -1285,6 +1361,7 @@ export class VoiceGuidance {
         }
         resultDelivered = true;
         sessionComplete = true;
+        clearInterimTimer();
         if (this.activeRecognition === recognition) {
           this.activeRecognition = null;
         }
@@ -1307,6 +1384,7 @@ export class VoiceGuidance {
 
       const retryOrFail = (message, errorCode = "unknown") => {
         if (!isCurrentSession() || retryScheduled || resultDelivered) return;
+        clearInterimTimer();
         if (pendingTranscript) {
           deliverRecognizedResult();
           return;
@@ -1351,9 +1429,25 @@ export class VoiceGuidance {
               ? `I can hear you: “${pendingTranscript}” — keep speaking.`
               : "Listening… Speak normally near your device."
           );
+          const silenceMs = Math.max(0, Number(interimSilenceMs) || 0);
+          if (pendingTranscript && silenceMs > 0) {
+            clearInterimTimer();
+            interimTimer = schedule(() => {
+              interimTimer = null;
+              if (!isCurrentSession() || !pendingTranscript) return;
+              recognizerStoppedForResult = true;
+              try {
+                recognition.stop();
+              } catch (_) {
+                deliverRecognizedResult();
+              }
+              schedule(deliverRecognizedResult, 200);
+            }, silenceMs);
+          }
           return;
         }
 
+        clearInterimTimer();
         recognizerStoppedForResult = true;
         try {
           recognition.stop();
@@ -1361,7 +1455,7 @@ export class VoiceGuidance {
           deliverRecognizedResult();
         }
         // Safari may not always dispatch `end` promptly after a final result.
-        schedule(deliverRecognizedResult, 450);
+        schedule(deliverRecognizedResult, 200);
       });
       recognition.addEventListener("nomatch", () => {
         retryOrFail(
@@ -1376,6 +1470,7 @@ export class VoiceGuidance {
         ) {
           return;
         }
+        clearInterimTimer();
         if (event.error === "no-speech") {
           retryOrFail(
             "I could not hear an answer. Please try again or use the buttons.",
@@ -1399,6 +1494,7 @@ export class VoiceGuidance {
         if (this.activeRecognition === recognition) {
           this.activeRecognition = null;
         }
+        clearInterimTimer();
         if (pendingTranscript) {
           deliverRecognizedResult();
         } else if (!retryScheduled && !sessionComplete) {

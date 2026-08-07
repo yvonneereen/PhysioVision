@@ -16,7 +16,7 @@ import {
   postWellnessScreening,
   startEmergencyContactVerification,
 } from "./api.js?v=31";
-import { getLocale, translateText } from "./i18n.js?v=21";
+import { getLocale, translateText } from "./i18n.js?v=22";
 
 const GOAL_API_VALUES = Object.freeze({
   "Stronger knees": "stronger_knees",

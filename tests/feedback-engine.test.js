@@ -306,12 +306,12 @@ const halfSquatBottom = (overrides = {}) =>
 
   assert.ok(
     kneeForward.cues.includes(
-      "Move your left knee back so it stays over your foot"
+      "Make the squat a little shallower. Keep your whole foot flat and move your hips back as if sitting"
     )
   );
   assert.ok(
     torsoLean.cues.includes(
-      "Lift your chest slightly — avoid leaning too far forward"
+      "Move your hips back and bring your chest comfortably upright"
     )
   );
   assert.equal(multipleProblems.cues.length, 1);

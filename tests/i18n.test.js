@@ -23,7 +23,7 @@ assert.ok(
 );
 assert.deepEqual(
   [...new Set(i18nCacheVersions)],
-  ["14"],
+  ["15"],
   "all browser entry points must use one i18n URL so only one DOM observer is created"
 );
 
@@ -73,7 +73,7 @@ const voiceCacheVersions = voiceConsumerSources.flatMap((source) =>
 );
 assert.deepEqual(
   [...new Set(voiceCacheVersions)],
-  ["24"],
+  ["25"],
   "all voice consumers must share one voice-guidance module instance"
 );
 
@@ -125,7 +125,22 @@ const liveGuideSources = [
   "Your camera feed is processed for movement guidance and is not recorded in this prototype.",
   "Local possible-fall check available",
   "The camera check is available. Verify an emergency contact in My profile before automatic alerts can be sent.",
-  "Face the camera and keep both feet, knees, hips, and shoulders fully visible.",
+  "Face the camera and keep one complete shoulder, hip, knee, and ankle line visible. Keep both legs visible when possible for symmetry feedback.",
+  "Tracking reps from your right side",
+  "Rep tracking is working from your left side. Keep both legs visible when possible for symmetry feedback.",
+  "I cannot measure your right knee and right hip angles. Step farther back or turn slightly until one complete shoulder, hip, knee, and ankle line is visible. Keep the chair beside you, not in front of the visible leg.",
+  "I cannot measure a complete leg angle. Step farther back or turn slightly until one complete shoulder, hip, knee, and ankle line is visible. Keep the chair beside you, not in front of the visible leg.",
+  "Bend the visible knee and hip a little more, only as far as is comfortable, then hold briefly.",
+  "Stand tall and straighten the visible knee and hip, then hold briefly.",
+  "I cannot measure a complete knee angle. Step farther back or turn slightly until one shoulder, hip, knee, and ankle line is visible. Keep the chair beside you, not in front of the visible leg.",
+  "I cannot measure a complete hip angle. Reposition until one shoulder, hip, knee, and ankle line is visible from head to foot.",
+  "Keep every required joint visible so I can guide you safely.",
+  "Hold reset — keep the required joints visible to restart",
+  "Hold reset — return to the target position to restart",
+  "Hold reset — return to the stretch to restart",
+  "Your hold was reset because tracking was lost. Return to the stretch and keep your full body visible.",
+  "I can’t see you. Please return to the marked area.",
+  "Step back and keep your full body visible.",
   "Close-up camera check",
   "Hand and wrist tracking",
   "Loading model…",
@@ -185,10 +200,10 @@ for (const locale of ["zh-SG", "ms-SG", "ta-SG"]) {
 
 assert.equal(
   translateText(
-    "Face the camera and keep both feet, knees, hips, and shoulders fully visible.",
+    "Face the camera and keep one complete shoulder, hip, knee, and ankle line visible. Keep both legs visible when possible for symmetry feedback.",
     "zh-SG"
   ),
-  "面向摄像头，并确保双脚、双膝、髋部和双肩完全可见。"
+  "面向摄像头，并确保一侧肩膀、髋部、膝盖和脚踝的完整轮廓可见。在可能的情况下，请保持双腿可见，以获得对称性反馈。"
 );
 assert.equal(
   translateText("Hand and wrist tracking", "zh-SG"),
@@ -235,7 +250,10 @@ const dashboardSources = [
   "Request sent. The physiotherapist will confirm the appointment.",
   "Request a physiotherapist? This pauses your self-guided wellness plan and shares your recent history with the care team.",
   "Leg Strength and Ankle Balance",
+  "Leg Strength & Ankle Balance",
   "Hip Stability and Balance",
+  "Hip Stability & Balance",
+  "Lower Body Balance Combo",
   "Total Balance and Support",
   "Half squats",
   "Calf raises",
@@ -244,6 +262,13 @@ const dashboardSources = [
   "Wed",
   "Sat",
   "Ask your AI",
+  "A gentle 3-day wellness routine designed to support your balance using a chair for steady support.",
+  "The draft uses only reviewed exercises compatible with your answers and available equipment.",
+  "Every session still requires your review, and you should stop if a movement causes pain or concerning symptoms.",
+  "Confirmed the general-wellness safety screen is eligible.",
+  "Applied the recovered-history caution: lower-load movements, one movement per session and a fixed single-set dose.",
+  "Filtered the reviewed catalogue to 7 compatible exercises.",
+  "Validated every exercise and session against fixed application limits.",
 ];
 
 for (const locale of ["zh-SG", "ms-SG", "ta-SG"]) {
@@ -256,6 +281,24 @@ for (const locale of ["zh-SG", "ms-SG", "ta-SG"]) {
   }
 }
 
+assert.equal(
+  translateText(
+    "A gentle 3-day wellness routine designed to support your balance using a chair for steady support.",
+    "zh-SG"
+  ),
+  "一个温和的三天健康运动计划，旨在通过稳固椅子的辅助来支持您的平衡。"
+);
+assert.equal(
+  translateText("Lower Body Balance Combo", "zh-SG"),
+  "下肢平衡组合"
+);
+assert.equal(
+  translateText(
+    "I cannot measure your right knee and right hip angles. Step farther back or turn slightly until one complete shoulder, hip, knee, and ankle line is visible. Keep the chair beside you, not in front of the visible leg.",
+    "zh-SG"
+  ),
+  "我无法测量您的右膝和右髋角度。请向后退或稍微转身，直到一侧肩膀、髋部、膝盖和脚踝的完整轮廓可见。请将椅子放在身旁，不要挡住可见的腿。"
+);
 assert.equal(
   translateText("2 sets × 10 reps · 3 days/week", "zh-SG"),
   "2组 × 10次 · 每周3天"

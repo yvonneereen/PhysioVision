@@ -25,8 +25,8 @@ import {
   shouldShowPhysiotherapistRequest,
 } from "./patient-dashboard-state.js?v=6";
 import { saveProfile } from "./personalization.js?v=9";
-import { getLocale, translateText } from "./i18n.js?v=14";
-import { voiceGuidance } from "./voice-guidance.js?v=24";
+import { getLocale, translateText } from "./i18n.js?v=15";
+import { voiceGuidance } from "./voice-guidance.js?v=25";
 import { EXERCISE_MAP } from "./exercises/registry.js";
 
 const WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions";
@@ -166,6 +166,14 @@ function formatDate(value, options = {}) {
     year: "numeric",
     ...options,
   }).format(parsed);
+}
+
+function localizableAiPlanSource(value, fallback) {
+  const source = String(value ?? "").trim();
+  const fallbackText = String(fallback ?? "").trim();
+  if (!source) return fallbackText;
+  if (getLocale() === "en-SG" || translateText(source) !== source) return source;
+  return fallbackText;
 }
 
 function setView(mode) {
@@ -504,14 +512,22 @@ function renderWellnessPlan(profile) {
     ?? null;
   planStatus.textContent = "AI plan accepted";
   planStatus.className = "status-pill";
-  planIntro.textContent =
-    plan.summary
-    ?? "Your accepted AI wellness plan uses reviewed, camera-trackable exercises.";
-  plan.days.forEach((day) => {
+  planIntro.textContent = localizableAiPlanSource(
+    plan.summary,
+    `A gradual plan focused on ${plan.goal ?? "Stay active"}.`,
+  );
+  plan.days.forEach((day, index) => {
     const exerciseIds = day.exercise_ids ?? day.exerciseIds ?? [];
+    const exerciseNames = exerciseIds
+      .map((exerciseId) => EXERCISE_MAP[exerciseId]?.name)
+      .filter(Boolean)
+      .join(" · ");
+    const sessionFallback = day.exercises
+      || exerciseNames
+      || `Session ${index + 1}`;
     planList.appendChild(planRow({
       label: day.day,
-      title: day.title,
+      title: localizableAiPlanSource(day.title, sessionFallback),
       detail: `${day.exercises} · ${day.dosage || WELLNESS_DOSAGE_LABEL}`,
       exerciseId: exerciseIds[0],
       note:
@@ -1425,6 +1441,15 @@ window.addEventListener("physiovision:profile-updated", (event) => {
     },
   };
   renderPlan(currentUser, currentData?.prescriptions ?? []);
+});
+
+window.addEventListener("physiovision:language-change", () => {
+  if (currentUser?.role !== "patient") return;
+  renderPlan(currentUser, currentData?.prescriptions ?? []);
+  if (!currentData) return;
+  renderTrend(currentData);
+  renderUpcomingConsultation(currentData.consultations);
+  renderPendingConsults(currentData.consultations);
 });
 
 window.addEventListener("focus", refreshPendingPhysiotherapistRequest);

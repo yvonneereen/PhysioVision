@@ -16,6 +16,7 @@ import {
   postWellnessScreening,
   startEmergencyContactVerification,
 } from "./api.js?v=26";
+import { getLocale, translateText } from "./i18n.js?v=15";
 
 const GOAL_API_VALUES = Object.freeze({
   "Stronger knees": "stronger_knees",
@@ -33,6 +34,14 @@ const ACTIVITY_API_VALUES = Object.freeze({
   "Mostly seated": "mostly_seated",
   "Active most days": "active_most_days",
 });
+
+function localizableAiPlanSource(value, fallback) {
+  const source = String(value ?? "").trim();
+  const fallbackText = String(fallback ?? "").trim();
+  if (!source) return fallbackText;
+  if (getLocale() === "en-SG" || translateText(source) !== source) return source;
+  return fallbackText;
+}
 
 const WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions";
 
@@ -485,7 +494,7 @@ const WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions";
   function renderWellnessPlan(plan, age) {
     activeWellnessPlan = plan;
     generatedWellnessPlan.innerHTML = "";
-    plan.days.forEach((day) => {
+    plan.days.forEach((day, index) => {
       const row = document.createElement("div");
       row.className = "generated-day";
 
@@ -493,7 +502,10 @@ const WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions";
       dayLabel.textContent = day.day;
       const detail = document.createElement("div");
       const title = document.createElement("strong");
-      title.textContent = day.title;
+      title.textContent = localizableAiPlanSource(
+        day.title,
+        day.exercises || `Session ${index + 1}`,
+      );
       const exercises = document.createElement("small");
       exercises.textContent = day.exercises;
       const dosage = document.createElement("em");
@@ -506,15 +518,24 @@ const WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions";
 
     const summary = document.getElementById("planSummary");
     if (summary) {
-      summary.textContent = plan.summary || `This reviewed draft focuses on ${
-        plan.goal.toLowerCase()
-      }${age ? ` and reflects the preferences supplied at age ${age}` : ""}.`;
+      summary.textContent = localizableAiPlanSource(
+        plan.summary,
+        `A gradual plan focused on ${plan.goal ?? "Stay active"}.`,
+      );
     }
     if (plannerRationale) {
+      const rationaleFallbacks = [
+        "The draft uses only reviewed exercises compatible with your answers and available equipment.",
+        "Uses one set of 6–10 repetitions for each exercise to keep the starting dose manageable.",
+        "Every session still requires your review, and you should stop if a movement causes pain or concerning symptoms.",
+      ];
       plannerRationale.replaceChildren(
-        ...(plan.rationale ?? []).map((reason) => {
+        ...(plan.rationale ?? []).map((reason, index) => {
           const item = document.createElement("p");
-          item.textContent = reason;
+          item.textContent = localizableAiPlanSource(
+            reason,
+            rationaleFallbacks[index] ?? rationaleFallbacks[0],
+          );
           return item;
         })
       );
@@ -899,5 +920,11 @@ const WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions";
         item.classList.toggle("active", item === button);
       });
     });
+  });
+
+  window.addEventListener("physiovision:language-change", () => {
+    if (activeWellnessPlan?.days?.length) {
+      renderWellnessPlan(activeWellnessPlan, activePlanPreferences?.age);
+    }
   });
 })();

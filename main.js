@@ -43,7 +43,7 @@ import {
   isSafariBrowser,
   readMicrophonePermissionState,
   voiceGuidance,
-} from "./voice-guidance.js?v=24";
+} from "./voice-guidance.js?v=25";
 import {
   PRACTICE_VIEWS,
   hasAuthenticatedPracticeAccount,

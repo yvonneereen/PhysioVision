@@ -8,8 +8,10 @@ import {
   parsePainSafetyResponse,
   parseRecoveryStatus,
   conversationalProsody,
+  normalizedNeuralSpeechGain,
   prepareGentleSpeech,
   readMicrophonePermissionState,
+  requiresSingleVoiceEngine,
   selectGentleVoice,
   VoiceGuidance,
 } from "../voice-guidance.js";
@@ -26,6 +28,20 @@ assert.equal(
 );
 assert.equal(
   isSafariBrowser("Mozilla/5.0 Chrome/128.0 Safari/537.36"),
+  false
+);
+assert.equal(
+  requiresSingleVoiceEngine("Mozilla/5.0 Version/18.3 Safari/605.1.15"),
+  true,
+  "Safari should keep one speech engine to prevent volume changes"
+);
+assert.equal(
+  requiresSingleVoiceEngine("Mozilla/5.0 (iPhone) CriOS/140.0 Mobile/15E148 Safari/604.1"),
+  true,
+  "all iOS browsers should keep one WebKit speech output path"
+);
+assert.equal(
+  requiresSingleVoiceEngine("Mozilla/5.0 Chrome/140.0 Safari/537.36"),
   false
 );
 assert.equal(
@@ -195,6 +211,13 @@ assert.deepEqual(
   conversationalProsody("Stop exercising and call 995 now."),
   { rate: 0.95, pitch: 1.02 }
 );
+assert.ok(
+  Math.abs(normalizedNeuralSpeechGain({
+    numberOfChannels: 1,
+    getChannelData: () => new Float32Array([0.1, -0.1, 0.1, -0.1]),
+  }) - 1.6) < 0.001,
+  "quiet generated speech should be raised to the shared target level"
+);
 
 class MockUtterance {
   constructor(text) {
@@ -343,6 +366,8 @@ assert.equal(
 );
 
 const neuralSources = [];
+const neuralGains = [];
+const neuralCompressors = [];
 class MockAudioContext {
   constructor() {
     this.state = "suspended";
@@ -373,11 +398,30 @@ class MockAudioContext {
   }
 
   createGain() {
-    return { gain: { value: 0 }, connect: () => {} };
+    const gain = { gain: { value: 0 }, connect: (target) => { gain.target = target; } };
+    neuralGains.push(gain);
+    return gain;
+  }
+
+  createDynamicsCompressor() {
+    const compressor = {
+      threshold: { value: 0 },
+      knee: { value: 0 },
+      ratio: { value: 0 },
+      attack: { value: 0 },
+      release: { value: 0 },
+      connect: (target) => { compressor.target = target; },
+    };
+    neuralCompressors.push(compressor);
+    return compressor;
   }
 
   decodeAudioData() {
-    return Promise.resolve({ decoded: true });
+    return Promise.resolve({
+      decoded: true,
+      numberOfChannels: 1,
+      getChannelData: () => new Float32Array([0.1, -0.1, 0.1, -0.1]),
+    });
   }
 }
 
@@ -405,8 +449,35 @@ assert.deepEqual(neuralRequest, {
   locale: "en-SG",
 });
 assert.equal(neuralSources[1].started, true);
+assert.ok(
+  Math.abs(neuralGains[0].gain.value - 1.6) < 0.001,
+  "generated guidance should be normalized before playback"
+);
+assert.equal(neuralCompressors[0].ratio.value, 6);
+assert.equal(neuralGains[0].target, neuralCompressors[0]);
 neuralSources[1].listeners.ended();
 assert.equal(neuralEnded, true);
+
+const safariSpokenBefore = spoken.length;
+let safariNeuralRequests = 0;
+const safariOutputGuidance = new VoiceGuidance({
+  ...neuralWindow,
+  navigator: {
+    userAgent: "Mozilla/5.0 Version/18.3 Safari/605.1.15",
+  },
+});
+safariOutputGuidance.setNeuralSpeechProvider(async () => {
+  safariNeuralRequests += 1;
+  return { audio: "AA==" };
+});
+safariOutputGuidance.speak(
+  "This longer guidance sentence must stay on one steady Safari output path.",
+  { interrupt: true }
+);
+await Promise.resolve();
+assert.equal(safariNeuralRequests, 0);
+assert.equal(spoken.length, safariSpokenBefore + 1);
+assert.equal(spoken.at(-1).volume, 1);
 
 neuralRequest = null;
 const spokenBeforeImmediatePrompt = spoken.length;
@@ -541,6 +612,38 @@ assert.equal(activeRecognitionInstance.stopCalled, true);
 assert.equal(deliveredTranscript, "None");
 assert.equal(recognitionAtDelivery, null);
 assert.equal(spoken.at(-1).text, "Where are you feeling the pain?");
+
+const safariListeningDelays = [];
+const safariListeningSession = { type: "play-and-record" };
+const safariListeningGuidance = new VoiceGuidance({
+  ...listeningWindow,
+  navigator: {
+    ...listeningWindow.navigator,
+    userAgent: "Mozilla/5.0 Version/18.3 Safari/605.1.15",
+    audioSession: safariListeningSession,
+  },
+  setTimeout: (callback, delay) => {
+    safariListeningDelays.push(delay);
+    callback();
+    return safariListeningDelays.length;
+  },
+});
+let safariDeliveredTranscript = "";
+safariListeningGuidance.listen({
+  onResult: (transcript) => {
+    safariDeliveredTranscript = transcript;
+  },
+});
+activeRecognitionInstance.emitResult("five");
+assert.equal(
+  safariDeliveredTranscript,
+  "",
+  "Safari should not deliver a result while its output can still be ducked"
+);
+await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
+assert.equal(safariDeliveredTranscript, "five");
+assert.equal(safariListeningSession.type, "playback");
+assert.ok(safariListeningDelays.includes(1200));
 
 let interimTranscript = "";
 listeningGuidance.listen({

@@ -9,6 +9,8 @@ const DEFAULT_SPEECH_VOLUME = 1;
 const MICROPHONE_RELEASE_SETTLE_MS = 1200;
 const NEURAL_SPEECH_MIN_LENGTH = 18;
 const NEURAL_SPEECH_CACHE_LIMIT = 24;
+const NEURAL_TARGET_RMS = 0.16;
+const NEURAL_PEAK_CEILING = 0.86;
 
 const GENTLE_VOICE_NAME =
   /\b(samantha|ava|jenny|aria|sonia|allison|susan|serena|karen|moira|tessa|fiona|zoe|kathy|amira|yasmin|tingting|meijia|sinji|xiaoxiao|vani|pallavi)\b|google (us|uk) english/i;
@@ -122,6 +124,58 @@ export function isSafariBrowser(userAgent) {
   const value = String(userAgent ?? "");
   return /safari/i.test(value)
     && !/(chrome|chromium|crios|android|edg|opr|firefox|fxios)/i.test(value);
+}
+
+export function requiresSingleVoiceEngine(userAgent) {
+  const value = String(userAgent ?? "");
+  // Safari changes between playback and play-and-record audio sessions when
+  // speech recognition is used. Mixing SpeechSynthesis and Web Audio across
+  // that transition produces an audible level jump even when both are set to
+  // volume 1. Every iOS browser uses WebKit, so keep one output path there too.
+  return isSafariBrowser(value)
+    || /\b(iPhone|iPad|iPod)\b|Macintosh.*Mobile/i.test(value);
+}
+
+export function normalizedNeuralSpeechGain(
+  audioBuffer,
+  requestedVolume = DEFAULT_SPEECH_VOLUME
+) {
+  const volume = Math.min(
+    Math.max(Number(requestedVolume) || DEFAULT_SPEECH_VOLUME, 0.2),
+    1
+  );
+  if (
+    !audioBuffer
+    || !Number.isInteger(audioBuffer.numberOfChannels)
+    || audioBuffer.numberOfChannels < 1
+    || typeof audioBuffer.getChannelData !== "function"
+  ) {
+    return volume;
+  }
+
+  let peak = 0;
+  let squareTotal = 0;
+  let sampleCount = 0;
+  for (let channel = 0; channel < audioBuffer.numberOfChannels; channel += 1) {
+    const samples = audioBuffer.getChannelData(channel);
+    for (let index = 0; index < samples.length; index += 1) {
+      const sample = Number(samples[index]) || 0;
+      const magnitude = Math.abs(sample);
+      if (magnitude > peak) peak = magnitude;
+      squareTotal += sample * sample;
+      sampleCount += 1;
+    }
+  }
+  if (!sampleCount || peak < 0.0001) return volume;
+
+  const rms = Math.sqrt(squareTotal / sampleCount);
+  const rmsGain = rms > 0 ? NEURAL_TARGET_RMS / rms : 1;
+  const peakGain = NEURAL_PEAK_CEILING / peak;
+  const normalization = Math.min(
+    Math.max(Math.min(rmsGain, peakGain), 0.65),
+    2.5
+  );
+  return volume * normalization;
 }
 
 export async function readMicrophonePermissionState(browserNavigator) {
@@ -621,6 +675,9 @@ export class VoiceGuidance {
     this.voiceSelectionLocked = false;
     this.browserVoiceGroups = new Map();
     this.neuralSpeechProvider = null;
+    this.singleVoiceEngine = requiresSingleVoiceEngine(
+      browserWindow?.navigator?.userAgent
+    );
     this.audioContext = null;
     this.activeAudioSource = null;
     this.neuralSpeaking = false;
@@ -937,6 +994,7 @@ export class VoiceGuidance {
 
     const useNeuralSpeech = Boolean(
       !preferImmediate
+      && !this.singleVoiceEngine
       && this.neuralSpeechProvider
       && message.length >= NEURAL_SPEECH_MIN_LENGTH
       && !/^Rep\s+\d+[.!]?$/i.test(message)
@@ -1061,13 +1119,21 @@ export class VoiceGuidance {
 
       const source = this.audioContext.createBufferSource();
       const gain = this.audioContext.createGain();
-      gain.gain.value = Math.min(
-        Math.max(Number(volume) || DEFAULT_SPEECH_VOLUME, 0.2),
-        1
-      );
+      const compressor = this.audioContext.createDynamicsCompressor?.() ?? null;
+      gain.gain.value = normalizedNeuralSpeechGain(audioBuffer, volume);
       source.buffer = audioBuffer;
       source.connect(gain);
-      gain.connect(this.audioContext.destination);
+      if (compressor) {
+        compressor.threshold.value = -20;
+        compressor.knee.value = 12;
+        compressor.ratio.value = 6;
+        compressor.attack.value = 0.01;
+        compressor.release.value = 0.18;
+        gain.connect(compressor);
+        compressor.connect(this.audioContext.destination);
+      } else {
+        gain.connect(this.audioContext.destination);
+      }
       this.activeAudioSource = source;
       source.addEventListener?.("ended", () => {
         if (generation !== this.speechGeneration) return;
@@ -1211,7 +1277,21 @@ export class VoiceGuidance {
         if (this.activeRecognition === recognition) {
           this.activeRecognition = null;
         }
-        onResult?.(pendingTranscript, pendingAlternatives);
+        const finishDelivery = () => {
+          if (this.listeningGeneration !== listeningGeneration) return;
+          onResult?.(pendingTranscript, pendingAlternatives);
+        };
+        if (this.singleVoiceEngine) {
+          // WebKit's `end` event means recognition has stopped, but its output
+          // can remain ducked briefly. Do not let the next prompt start until
+          // the device has returned to a stable playback session.
+          this.prepareSpeechAfterMicrophoneRelease().then(
+            finishDelivery,
+            finishDelivery
+          );
+        } else {
+          finishDelivery();
+        }
       };
 
       const retryOrFail = (message, errorCode = "unknown") => {

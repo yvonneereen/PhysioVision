@@ -1,4 +1,4 @@
-import { EXERCISES, EXERCISE_MAP } from "../exercises/registry.js?v=55";
+import { EXERCISES, EXERCISE_MAP } from "../exercises/registry.js?v=57";
 import { applyCalibration } from "../personalization.js";
 
 export { EXERCISES };
@@ -489,7 +489,7 @@ export class FeedbackEngine {
     if (!l || !r || l.lowConfidence || r.lowConfidence) return null;
     const diff = Math.abs(l.value - r.value);
     return diff > maxDiffDeg
-      ? `${diff.toFixed(0)}° difference between knees — keep them even`
+      ? "Keep both sides moving together through a comfortable range"
       : null;
   }
 }

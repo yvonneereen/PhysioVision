@@ -140,9 +140,10 @@ export const DRAFT_EXERCISES = [
     name: "Supported Single-Leg Balance",
     region: "Ankle & balance",
     category: "Balance",
+    generalWellnessApproved: true,
     tags: [EXERCISE_TAGS.GENERAL, EXERCISE_TAGS.SUPPORT_REQUIRED],
     typicalUse: ["reduced balance", "ankle instability", "fall prevention"],
-    instruction: "Stand beside a fixed counter or rail and hold it with both hands. Shift the weight onto one leg and lift the other foot slightly from the floor. Keep the trunk upright and the standing knee slightly relaxed. Place the raised foot down immediately if balance becomes unstable.",
+    instruction: "Stand beside a sturdy chair, fixed counter or rail and hold it with both hands. Shift your weight onto one leg and lift the other foot only slightly, like a small supported march. Keep your trunk upright and place the raised foot down immediately if you feel unsteady.",
   }),
   draftExercise({
     id: "clamshell",

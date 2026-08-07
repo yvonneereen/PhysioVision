@@ -1,7 +1,7 @@
 import {
   getSpeechLocale,
   translateText,
-} from "./i18n.js?v=18";
+} from "./i18n.js?v=21";
 import { generateGuidanceSpeech } from "./api.js?v=31";
 
 const VOICE_PREFERENCE_KEY = "physiovision.voice.enabled.v1";
@@ -1071,7 +1071,18 @@ export class VoiceGuidance {
       Math.max(Number(volume) || DEFAULT_SPEECH_VOLUME, 0.2),
       1
     );
-    if (typeof onEnd === "function") utterance.addEventListener("end", onEnd);
+    if (typeof onEnd === "function") {
+      let finished = false;
+      const finishOnce = () => {
+        if (finished) return;
+        finished = true;
+        onEnd();
+      };
+      utterance.addEventListener("end", finishOnce);
+      // Treat a browser synthesis failure as completion so a guided flow does
+      // not remain stuck waiting for an end event that will never arrive.
+      utterance.addEventListener("error", finishOnce);
+    }
     this.synthesis.speak(utterance);
     return true;
   }

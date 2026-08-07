@@ -28,60 +28,77 @@ WELLNESS_EXERCISE_CATALOGUE = {
         "goals": ["stronger_knees", "better_balance", "stay_active", "walking_confidence"],
         "equipment": "chair",
         "history_cautious": False,
+        "movement_type": "functional_strength",
     },
     "leg-extensions": {
         "name": "Seated leg extensions",
         "goals": ["stronger_knees", "stay_active"],
         "equipment": "chair",
         "history_cautious": True,
+        "movement_type": "strength",
     },
     "heel-cord-stretch": {
         "name": "Heel cord stretch",
         "goals": ["less_stiffness", "ankle_mobility", "walking_confidence"],
         "equipment": "none",
         "history_cautious": True,
+        "movement_type": "mobility",
     },
     "calf-raises": {
         "name": "Calf raises",
         "goals": ["stronger_knees", "better_balance", "ankle_mobility", "walking_confidence"],
         "equipment": "chair",
         "history_cautious": False,
+        "movement_type": "strength",
     },
     "hamstring-curls": {
         "name": "Hamstring curls",
         "goals": ["stronger_knees", "stay_active", "walking_confidence"],
         "equipment": "chair",
         "history_cautious": False,
+        "movement_type": "strength",
     },
     "hip-abduction": {
         "name": "Standing hip abduction",
         "goals": ["better_balance", "stronger_hips", "walking_confidence"],
         "equipment": "chair",
         "history_cautious": False,
+        "movement_type": "strength",
     },
     "straight-leg-raises-supine": {
         "name": "Supine straight-leg raises",
         "goals": ["stronger_knees", "stronger_hips"],
         "equipment": "none",
         "history_cautious": True,
+        "movement_type": "strength",
     },
     "hip-adduction": {
         "name": "Side-lying hip adduction",
         "goals": ["stronger_hips", "stay_active"],
         "equipment": "none",
         "history_cautious": True,
+        "movement_type": "strength",
     },
     "leg-presses": {
         "name": "Elastic-band leg presses",
         "goals": ["stronger_knees", "stronger_hips", "walking_confidence"],
         "equipment": "band",
         "history_cautious": False,
+        "movement_type": "strength",
     },
     "pendulum": {
         "name": "Shoulder pendulum",
         "goals": ["shoulder_mobility"],
         "equipment": "none",
         "history_cautious": True,
+        "movement_type": "mobility",
+    },
+    "supported_single_leg_balance": {
+        "name": "Supported Single-Leg Balance",
+        "goals": ["better_balance", "walking_confidence"],
+        "equipment": "chair",
+        "history_cautious": False,
+        "movement_type": "functional_balance",
     },
 }
 
@@ -99,6 +116,8 @@ WELLNESS_SETS = 1
 WELLNESS_REPETITIONS_MIN = 6
 WELLNESS_REPETITIONS_MAX = 10
 WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions"
+FUNCTIONAL_BALANCE_TYPE = "functional_balance"
+STRENGTH_MOVEMENT_TYPES = {"strength", "functional_strength"}
 
 
 def _clean_text(value, *, maximum):
@@ -121,6 +140,26 @@ def allowed_exercises(preferences):
             not history_cautious
             or exercise.get("history_cautious") is True
         )
+    }
+
+
+def _walking_confidence_rules(preferences, available):
+    if preferences.get("goal") != "walking_confidence":
+        return None
+
+    functional_ids = {
+        exercise_id
+        for exercise_id, exercise in available.items()
+        if exercise.get("movement_type") == FUNCTIONAL_BALANCE_TYPE
+    }
+    if not functional_ids:
+        return None
+
+    expected_days = int(preferences.get("days_per_week", 3))
+    return {
+        "functional_ids": functional_ids,
+        "minimum_balance_sessions": 1 if expected_days <= 3 else 2,
+        "maximum_strength_only_sessions": expected_days // 2,
     }
 
 
@@ -193,6 +232,40 @@ def normalize_wellness_plan(raw_plan, preferences):
             "The draft does not include an exercise related to the selected goal."
         )
 
+    walking_rules = _walking_confidence_rules(preferences, available)
+    if walking_rules:
+        balance_sessions = sum(
+            any(
+                exercise_id in walking_rules["functional_ids"]
+                for exercise_id in day["exercise_ids"]
+            )
+            for day in days
+        )
+        if balance_sessions < walking_rules["minimum_balance_sessions"]:
+            raise WellnessPlanValidationError(
+                "A Walk with confidence draft must include supported, direct "
+                "balance practice in enough sessions; strength work alone does "
+                "not satisfy this goal."
+            )
+
+        strength_only_sessions = sum(
+            all(
+                available[exercise_id].get("movement_type")
+                in STRENGTH_MOVEMENT_TYPES
+                for exercise_id in day["exercise_ids"]
+            )
+            for day in days
+        )
+        if (
+            strength_only_sessions
+            > walking_rules["maximum_strength_only_sessions"]
+        ):
+            raise WellnessPlanValidationError(
+                "A Walk with confidence draft cannot make most sessions "
+                "strength-only; include direct balance and walking-support "
+                "practice."
+            )
+
     rationale = raw_plan.get("rationale")
     if not isinstance(rationale, list):
         rationale = []
@@ -216,6 +289,15 @@ def normalize_wellness_plan(raw_plan, preferences):
     )
     if not any("6–10" in item for item in rationale):
         rationale = rationale[:2] + [dosage_rationale]
+    if walking_rules:
+        balance_rationale = (
+            "Includes supported balance practice to challenge balance directly "
+            "for walking confidence instead of relying on strengthening alone."
+        )
+        rationale = [
+            balance_rationale,
+            *[item for item in rationale if item != balance_rationale],
+        ][:3]
     if history_cautious:
         rationale = [
             (
@@ -277,6 +359,16 @@ def normalize_wellness_plan(raw_plan, preferences):
                 if history_cautious
                 else []
             ),
+            *(
+                [
+                    (
+                        "Required direct balance practice for the Walk with "
+                        "confidence goal."
+                    )
+                ]
+                if walking_rules
+                else []
+            ),
             "Validated every exercise and session against fixed application limits.",
         ],
     }
@@ -305,6 +397,7 @@ def _planner_prompt(user, preferences, previous_plan=None, revision=""):
             "name": item["name"],
             "suitable_goals": item["goals"],
             "equipment": item["equipment"],
+            "movement_type": item["movement_type"],
         }
         for exercise_id, item in available.items()
     ]
@@ -342,6 +435,20 @@ def _planner_prompt(user, preferences, previous_plan=None, revision=""):
         "previous_draft": previous_plan or None,
         "reviewed_catalogue_tool_result": catalogue,
     }
+    walking_rules = _walking_confidence_rules(preferences, available)
+    if walking_rules:
+        planning_input["selection_rules"] = [
+            (
+                "Include a functional_balance exercise in at least "
+                f"{walking_rules['minimum_balance_sessions']} sessions."
+            ),
+            (
+                "Use no more than "
+                f"{walking_rules['maximum_strength_only_sessions']} "
+                "strength-only sessions. Strengthening can support walking, "
+                "but it does not replace direct balance practice."
+            ),
+        ]
     return json.dumps(planning_input, ensure_ascii=True)
 
 
@@ -365,6 +472,10 @@ application assigns every selected exercise one set of 6–10 repetitions; do no
 choose or change the dose. Prefer gradual variety and the user's stated goal,
 activity, equipment and notes. A revision request may change the draft but can
 never loosen those rules.
+
+Follow every selection_rules item when it is present. For a Walk with
+confidence goal, functional_balance movements must directly challenge balance;
+strengthening alone is not balance or walking practice.
 
 If history_cautious_mode is true, treat the recovered history only as a
 conservative planning constraint, never as a diagnosis or medical clearance.

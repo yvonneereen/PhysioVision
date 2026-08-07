@@ -297,6 +297,22 @@ assert.equal(
 assert.equal(painConfirmationUtterance.rate, painQuestionUtterance.rate);
 assert.equal(painConfirmationUtterance.pitch, painQuestionUtterance.pitch);
 
+let browserCompletionCount = 0;
+guidance.speak("Continue after speech", {
+  key: "browser-completion-fallback",
+  interrupt: true,
+  preferImmediate: true,
+  onEnd: () => { browserCompletionCount += 1; },
+});
+const completionUtterance = spoken.at(-1);
+completionUtterance.listeners.error?.();
+completionUtterance.listeners.end?.();
+assert.equal(
+  browserCompletionCount,
+  1,
+  "a browser speech error should release the guided flow exactly once"
+);
+
 let delayedVoiceList = [];
 let delayedVoicesChanged = null;
 const delayedSpoken = [];

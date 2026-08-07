@@ -174,6 +174,16 @@ assert.match(
 );
 assert.match(
   source,
+  /I heard your question\. Let me check that for you\.[\s\S]*?sendAgentMessage\(cleanedQuestion, context\)[\s\S]*?await acknowledgement/,
+  "Hey Guide should acknowledge a recognized question before waiting for the AI answer"
+);
+assert.match(
+  source,
+  /\(\?:guide\|guy\|guys\)/,
+  "the wake phrase should tolerate common speech-recognition variants of Guide"
+);
+assert.match(
+  source,
   /function updateFeedbackPanel\([\s\S]*?movementAiConversationActive\(\)[\s\S]*?return lastFeedbackResult/,
   "repetition and phase progression should freeze while an AI question is active"
 );
@@ -200,6 +210,21 @@ assert.match(
   styles,
   /\.movement-ai-status\s*\{[\s\S]*?\.movement-ai-status\[data-state="wake"\]::before/,
   "the camera panel should visibly disclose when wake-phrase listening is active"
+);
+assert.match(
+  source,
+  /function exerciseStartGuidance[\s\S]*?Begin your first half squat now[\s\S]*?then stand tall to complete one repetition/,
+  "the squat guide should explicitly tell the user when and how to start"
+);
+assert.match(
+  source,
+  /fb\.exercise\.id !== "half-squats"/,
+  "half squats should not show a second raw symmetry-warning card"
+);
+assert.doesNotMatch(
+  source,
+  /difference between knees/,
+  "the live session should not display raw knee-angle differences"
 );
 
 assert.doesNotMatch(
@@ -366,14 +391,18 @@ assert.doesNotMatch(
   /\.pain-checkin\.hands-free-checkin:not\(\.safety-interview-active\)\s*\{\s*display:\s*none/,
   "hands-free mode must not hide the visible pain question while audio starts"
 );
+const movementGuideSpeechSource = functionSource(
+  "speakMovementGuide",
+  "movementAiConversationActive"
+);
 assert.match(
-  source,
-  /function speakPainPrompt[\s\S]*?preferImmediate:\s*true/,
-  "pain and safety prompts should bypass network speech latency"
+  movementGuideSpeechSource,
+  /preferImmediate:\s*true[\s\S]*?voiceGroup:\s*MOVEMENT_GUIDE_VOICE_GROUP[\s\S]*?volume:\s*MOVEMENT_GUIDE_VOLUME/,
+  "all live guidance should bypass network latency at one maximum-volume voice"
 );
 assert.match(
   source,
-  /function speakPainPrompt[\s\S]*?voiceGroup:\s*PAIN_PROMPT_VOICE_GROUP[\s\S]*?rate:[\s\S]*?pitch:/,
+  /function speakPainPrompt[\s\S]*?speakMovementGuide\(question[\s\S]*?voiceGroup:\s*PAIN_PROMPT_VOICE_GROUP[\s\S]*?rate:[\s\S]*?pitch:/,
   "the pain question and confirmation should retain one voice and speaking style"
 );
 
@@ -417,6 +446,35 @@ const pathwayAccessSource = functionSource(
   "hasPathwayAccess",
   "announceExerciseInstruction"
 );
+const activeDoseSource = functionSource(
+  "activeDose",
+  "movementAiConversationActive"
+);
+assert.match(
+  activeDoseSource,
+  /currentAcceptedWellnessPlan\(\)[\s\S]*?wellnessPlanDoseForExercise\(wellnessPlan, exercise\?\.id\)/,
+  "wellness camera targets should resolve from the accepted AI plan"
+);
+assert.ok(
+  activeDoseSource.indexOf("wellnessPlanDoseForExercise")
+    < activeDoseSource.indexOf("exercise?.prescription"),
+  "catalogue defaults should be used only when no accepted wellness plan exists"
+);
+assert.match(
+  functionSource("plannedSetCount", "updateSetStartingPositionCheck"),
+  /Number\(activeDose\(exercise\)\.sets\)/,
+  "set completion should use the accepted plan dose resolved by activeDose"
+);
+assert.match(
+  source,
+  /function refreshExerciseAccess\([\s\S]*?wellnessPlanExerciseIds\(wellnessPlan\)[\s\S]*?!plannedWellnessExercises\.has\(exercise\.id\)/,
+  "the wellness exercise selector should be limited to the accepted plan"
+);
+assert.match(
+  pathwayAccessSource,
+  /practiceDecision\.reason === "wellness_plan"[\s\S]*?activeDose\(engine\.exercise\)\.mode !== "wellness_plan"/,
+  "the camera should reject exercises outside the accepted wellness plan"
+);
 assert.match(
   pathwayAccessSource,
   /practiceDecision\.reason === "active_prescription"/,
@@ -448,8 +506,13 @@ const calibrationSpeechSource = functionSource(
 );
 assert.match(
   calibrationSpeechSource,
-  /preferImmediate:\s*true[\s\S]*?voiceGroup:\s*CALIBRATION_VOICE_GROUP/,
+  /speakMovementGuide\(message[\s\S]*?voiceGroup:\s*CALIBRATION_VOICE_GROUP/,
   "calibration speech should start immediately and keep one consistent voice"
+);
+assert.match(
+  source,
+  /announceCalibrationStage\("start", \{[\s\S]*?onEnd:[\s\S]*?beginCalibrationCapture\("start"/,
+  "calibration measurement should wait until the complete opening instruction finishes"
 );
 const finishCalibrationSource = functionSource(
   "finishCalibrationCapture",
@@ -471,8 +534,18 @@ const saveCalibrationSource = functionSource(
 );
 assert.match(
   saveCalibrationSource,
-  /saveCalibration\(draft\)[\s\S]*?engine\.changeExercise[\s\S]*?cancelCalibration\(\)[\s\S]*?speakCalibrationGuidance/,
-  "automatic saving should activate the measured range and return to the guide"
+  /saveCalibration\(draft\)[\s\S]*?engine\.changeExercise[\s\S]*?cancelCalibration\(\)[\s\S]*?announceExerciseInstruction[\s\S]*?onEnd:\s*startMovementAiGuide/,
+  "automatic saving should activate the range, announce the movement, and restart Hey Guide"
+);
+assert.match(
+  finishCalibrationSource,
+  /Starting position confirmed\.[\s\S]*?onEnd:\s*startMovementAiGuide/,
+  "the quick position check should restart Hey Guide after its start instruction"
+);
+assert.match(
+  finishCalibrationSource,
+  /Starting position saved\. Listen before making the calibration movement\.[\s\S]*?announceCalibrationStage\("target", \{[\s\S]*?onEnd:/,
+  "the target capture should not start before its spoken movement instruction finishes"
 );
 assert.doesNotMatch(
   markup,
@@ -735,8 +808,13 @@ assert.match(
 );
 assert.match(
   countdownSource,
-  /preferImmediate:\s*true[\s\S]*?voiceGroup:\s*PAIN_PROMPT_VOICE_GROUP/,
+  /speakMovementGuide\([\s\S]*?voiceGroup:\s*PAIN_PROMPT_VOICE_GROUP/,
   "the post-confirmation handoff should speak immediately in the same voice"
+);
+assert.match(
+  countdownSource,
+  /onEnd:\s*beginVisibleCountdown[\s\S]*?setTimeout\(beginVisibleCountdown, 12000\)/,
+  "camera setup should not cut off the complete spoken countdown instruction"
 );
 const cancelCountdownSource = functionSource(
   "cancelCameraSetupCountdown",

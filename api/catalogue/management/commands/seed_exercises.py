@@ -119,7 +119,10 @@ EXERCISES = [
             "torsoLean>40": "Lift your chest slightly — avoid leaning too far forward",
             "leftKneeForwardRatio>0.15":  "Move your left knee back so it stays over your foot",
             "rightKneeForwardRatio>0.15": "Move your right knee back so it stays over your foot",
-            "kneeDiff>15": "Keep both knees bending equally",
+            "kneeDiff>15": (
+                "Keep both feet planted and bend both knees together as you sit "
+                "your hips back"
+            ),
         },
         "calibration_config": {
             "startPhase": "standing",
@@ -544,6 +547,10 @@ def prototype_record(
     warning,
     sort_order,
     cues=None,
+    default_sets=1,
+    default_reps=1,
+    default_hold_seconds=None,
+    default_days_per_week="prescribed",
 ):
     """Create a conservative API record for an unvalidated live prototype."""
     return {
@@ -552,10 +559,14 @@ def prototype_record(
         "category": category,
         "camera_direction": camera_direction,
         "rep_rule": rep_rule,
-        "default_sets": 1,
-        "default_reps": 1,
-        "default_hold_seconds": None if category == "stretch" else 0,
-        "default_days_per_week": "prescribed",
+        "default_sets": default_sets,
+        "default_reps": default_reps,
+        "default_hold_seconds": (
+            default_hold_seconds
+            if default_hold_seconds is not None
+            else (None if category == "stretch" else 0)
+        ),
+        "default_days_per_week": default_days_per_week,
         "phase_confirmation_ms": 350,
         "max_cues": 1,
         "tracking_warning": warning,
@@ -650,7 +661,7 @@ EXERCISES.extend([
     prototype_record(
         "supported_single_leg_balance",
         "Supported Single-Leg Balance",
-        "mobility",
+        "balance",
         "front",
         "both_feet_down → supported_single_leg → both_feet_down",
         [
@@ -660,6 +671,9 @@ EXERCISES.extend([
         ["workingFootClearance", "standingKnee", "torsoLean"],
         "Safety-limited foot-lift proxy; support grip, stability and fall risk are not observable.",
         24,
+        default_reps=6,
+        default_hold_seconds=5,
+        default_days_per_week="2–3",
     ),
     prototype_record(
         "clamshell",

@@ -23,11 +23,12 @@ import {
   isPhysiotherapistRequestPending,
   mergeConsultationTranscript,
   shouldShowPhysiotherapistRequest,
-} from "./patient-dashboard-state.js?v=6";
+  walkingConfidencePlanNeedsRefresh,
+} from "./patient-dashboard-state.js?v=7";
 import { saveProfile } from "./personalization.js?v=13";
-import { getLocale, translateText } from "./i18n.js?v=18";
-import { voiceGuidance } from "./voice-guidance.js?v=28";
-import { EXERCISE_MAP } from "./exercises/registry.js?v=55";
+import { getLocale, translateText } from "./i18n.js?v=21";
+import { voiceGuidance } from "./voice-guidance.js?v=29";
+import { EXERCISE_MAP } from "./exercises/registry.js?v=57";
 
 const WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions";
 
@@ -487,22 +488,36 @@ function renderWellnessPlan(profile) {
   }
 
   const unavailableExercises = unavailableWellnessExercises(plan);
-  if (unavailableExercises.length) {
+  const needsBalanceRefresh = walkingConfidencePlanNeedsRefresh(plan);
+  if (unavailableExercises.length || needsBalanceRefresh) {
     firstExerciseId = null;
     primaryAction = "plan";
     planStatus.textContent = "Plan refresh needed";
     planStatus.className = "status-pill status-pill-review";
-    planIntro.textContent =
-      "Your saved AI plan contains an exercise that now requires physiotherapist approval.";
+    planIntro.textContent = needsBalanceRefresh
+      ? "Your saved walking-confidence plan needs more direct balance practice."
+      : "Your saved AI plan contains an exercise that now requires physiotherapist approval.";
     planList.appendChild(planRow({
       label: "!",
-      title: "Create a new AI wellness plan",
-      detail:
-        "The camera remains locked for clinician-only movements. A new draft will use only exercises available to your general-wellness pathway.",
-      note:
-        "Your safety-screen result is unchanged; only the incompatible saved plan needs replacing.",
+      title: needsBalanceRefresh
+        ? "Create an updated AI plan"
+        : "Create a new AI wellness plan",
+      detail: needsBalanceRefresh
+        ? (
+          "This plan was created before walking-confidence drafts were required "
+          + "to include supported balance. Create a new draft to apply the updated selection rules."
+        )
+        : (
+          "The camera remains locked for clinician-only movements. A new draft "
+          + "will use only exercises available to your general-wellness pathway."
+        ),
+      note: needsBalanceRefresh
+        ? "Your accepted plan is unchanged until you review and accept the replacement."
+        : "Your safety-screen result is unchanged; only the incompatible saved plan needs replacing.",
     }));
-    planStart.textContent = "Create a new AI plan";
+    planStart.textContent = needsBalanceRefresh
+      ? "Create an updated AI plan"
+      : "Create a new AI plan";
     return;
   }
 

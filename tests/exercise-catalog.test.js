@@ -65,6 +65,22 @@ assert.ok(
     EXERCISE_TAGS.SUPPORT_REQUIRED
   )
 );
+assert.equal(
+  DRAFT_EXERCISE_MAP.supported_single_leg_balance.generalWellnessApproved,
+  true
+);
+assert.equal(
+  requiresClinicianPlan(DRAFT_EXERCISE_MAP.supported_single_leg_balance),
+  false
+);
+assert.equal(
+  EXERCISE_MAP.supported_single_leg_balance.requiresClinicianPlan,
+  false
+);
+assert.notEqual(
+  EXERCISE_MAP.supported_single_leg_balance.prescription.mode,
+  "clinician_plan"
+);
 assert.equal(requiresClinicianPlan(DRAFT_EXERCISE_MAP.pendulum), false);
 
 assert.deepEqual(

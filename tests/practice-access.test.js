@@ -1,9 +1,87 @@
 import assert from "node:assert/strict";
 import {
   PRACTICE_VIEWS,
+  acceptedWellnessPlan,
   hasAuthenticatedPracticeAccount,
   resolvePracticeAccess,
+  wellnessPlanDoseForExercise,
+  wellnessPlanExerciseIds,
 } from "../practice-access.js";
+
+const acceptedPlan = {
+  source: "gemini_wellness_agent",
+  days: [
+    {
+      day: "Monday",
+      exercise_ids: ["half-squats", "heel-raises"],
+      sets: 1,
+      repetitions_min: 6,
+      repetitions_max: 10,
+      dosage: "1 set × 6–10 repetitions",
+    },
+  ],
+  constraints: {
+    days_per_week: 3,
+    sets_per_exercise: 1,
+    repetitions_min: 6,
+    repetitions_max: 10,
+  },
+};
+
+assert.equal(
+  acceptedWellnessPlan({ wellness_plan: acceptedPlan }),
+  acceptedPlan,
+  "the API's accepted plan should be preferred as the wellness source of truth",
+);
+assert.deepEqual(
+  wellnessPlanExerciseIds(acceptedPlan),
+  ["half-squats", "heel-raises"],
+);
+assert.deepEqual(
+  wellnessPlanDoseForExercise(acceptedPlan, "half-squats"),
+  {
+    mode: "wellness_plan",
+    source: "gemini_wellness_agent",
+    sets: 1,
+    reps: 10,
+    repsMin: 6,
+    repsMax: 10,
+    repetitionLabel: "6–10",
+    daysPerWeek: 3,
+    dosage: "1 set × 6–10 repetitions",
+  },
+  "camera targets should be derived from the accepted plan rather than catalogue defaults",
+);
+assert.equal(
+  wellnessPlanDoseForExercise(acceptedPlan, "bridges"),
+  null,
+  "an exercise outside the accepted plan must not inherit its catalogue dose",
+);
+
+const camelCasePlan = {
+  days: [{ exerciseIds: ["bridges"] }],
+  constraints: {
+    setsPerExercise: 2,
+    repetitionsMin: 4,
+    repetitionsMax: 8,
+    daysPerWeek: 2,
+  },
+};
+assert.deepEqual(
+  wellnessPlanDoseForExercise(camelCasePlan, "bridges"),
+  {
+    mode: "wellness_plan",
+    source: "accepted_wellness_plan",
+    sets: 2,
+    reps: 8,
+    repsMin: 4,
+    repsMax: 8,
+    repetitionLabel: "4–8",
+    daysPerWeek: 2,
+    dosage: "",
+  },
+  "cached camelCase plan fields should resolve to the same camera dose",
+);
 
 assert.equal(hasAuthenticatedPracticeAccount(), false);
 assert.equal(hasAuthenticatedPracticeAccount({ loggedIn: true }), true);

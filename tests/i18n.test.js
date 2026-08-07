@@ -23,7 +23,7 @@ assert.ok(
 );
 assert.deepEqual(
   [...new Set(i18nCacheVersions)],
-  ["18"],
+  ["21"],
   "all browser entry points must use one i18n URL so only one DOM observer is created"
 );
 
@@ -73,7 +73,7 @@ const voiceCacheVersions = voiceConsumerSources.flatMap((source) =>
 );
 assert.deepEqual(
   [...new Set(voiceCacheVersions)],
-  ["28"],
+  ["29"],
   "all voice consumers must share one voice-guidance module instance"
 );
 
@@ -141,9 +141,17 @@ const liveGuideSources = [
   "Your camera feed is processed for movement guidance and is not recorded in this prototype.",
   "Local possible-fall check available",
   "The camera check is available. Verify an emergency contact in My profile before automatic alerts can be sent.",
-  "Face the camera and keep one complete hip, knee, and ankle line visible. Keep both shoulders and legs visible when possible for posture and symmetry feedback.",
+  "Face the camera and step back until one complete hip, knee, and ankle line is visible. Keep the chair beside you and both feet in view.",
+  "Begin your first half squat now. Keep both feet flat and keep the chair beside you. Bend both knees and hips slowly as if sitting back toward the chair, only as far as comfortable, then stand tall to complete one repetition.",
+  "AI questions will be ready after camera setup is complete.",
+  "I heard your question. Let me check that for you.",
+  "Personalized movement recognition is ready.",
+  "Listen to the complete start instruction. Hey Guide will be ready afterward.",
+  "Starting position confirmed.",
+  "Hold your standing position with your full body visible.",
+  "Move into a comfortable squat position.",
   "Tracking reps from your right side",
-  "Rep tracking is working from your left side. Keep both legs visible when possible for symmetry feedback.",
+  "Rep tracking is working from your left side. Keep moving slowly and follow the phase prompt.",
   "I cannot measure your right knee angle. Step farther back or turn slightly until one complete hip, knee, and ankle line is visible. Keep the chair beside you, not in front of the visible leg.",
   "I cannot measure a complete leg angle. Step farther back or turn slightly until one complete hip, knee, and ankle line is visible. Keep the chair beside you, not in front of the visible leg.",
   "Bend the visible knee and hip a little more, only as far as is comfortable, then hold briefly.",
@@ -189,6 +197,8 @@ const liveGuideSources = [
   "Personal range saved automatically — movement guide ready",
   "Your measured joint angles are saved automatically and will help the guide recognize your comfortable movement range. Safety limits are unchanged.",
   "This movement is not in your active prescription",
+  "This movement is not in your accepted AI plan",
+  "Choose one of the movements in your accepted AI wellness plan",
   "The server could not register this alert. No automatic contact notification is available.",
   "No automatic contact alert was sent",
   "Exercise stopped for a safety check",
@@ -216,10 +226,10 @@ for (const locale of ["zh-SG", "ms-SG", "ta-SG"]) {
 
 assert.equal(
   translateText(
-    "Face the camera and keep one complete hip, knee, and ankle line visible. Keep both shoulders and legs visible when possible for posture and symmetry feedback.",
+    "Face the camera and step back until one complete hip, knee, and ankle line is visible. Keep the chair beside you and both feet in view.",
     "zh-SG"
   ),
-  "面向摄像头，并确保一侧髋部、膝盖和脚踝的完整轮廓可见。在可能的情况下，请保持双肩和双腿可见，以获得姿势和对称性反馈。"
+  "面向摄像头并后退，直到一侧髋部、膝盖和脚踝的完整轮廓可见。将椅子放在身旁，并确保双脚入镜。"
 );
 assert.equal(
   translateText("Hand and wrist tracking", "zh-SG"),
@@ -318,6 +328,10 @@ assert.equal(
 assert.equal(
   translateText("2 sets × 10 reps · 3 days/week", "zh-SG"),
   "2组 × 10次 · 每周3天"
+);
+assert.equal(
+  translateText("1 set × 6–10 reps · 3 days/week", "zh-SG"),
+  "1组 × 6–10次 · 每周3天"
 );
 assert.equal(
   translateText(

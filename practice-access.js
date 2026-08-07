@@ -20,6 +20,103 @@ function profileValue(profile, apiName, browserName) {
   return profile?.[apiName] ?? profile?.[browserName];
 }
 
+function positiveInteger(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0
+    ? Math.floor(number)
+    : null;
+}
+
+function firstPositiveInteger(...values) {
+  for (const value of values) {
+    const number = positiveInteger(value);
+    if (number !== null) return number;
+  }
+  return null;
+}
+
+export function acceptedWellnessPlan(profile) {
+  const candidates = [profile?.wellness_plan, profile?.wellnessPlan];
+  return candidates.find(
+    (plan) => Array.isArray(plan?.days) && plan.days.length > 0
+  ) ?? null;
+}
+
+export function wellnessPlanExerciseIds(plan) {
+  if (!Array.isArray(plan?.days)) return [];
+  return [...new Set(plan.days.flatMap((day) => {
+    const exerciseIds = day?.exercise_ids ?? day?.exerciseIds;
+    return Array.isArray(exerciseIds)
+      ? exerciseIds.map((exerciseId) => String(exerciseId))
+      : [];
+  }))];
+}
+
+export function wellnessPlanDoseForExercise(plan, exerciseId) {
+  if (!Array.isArray(plan?.days) || !exerciseId) return null;
+  const normalizedExerciseId = String(exerciseId);
+  const day = plan.days.find((candidate) => {
+    const exerciseIds = candidate?.exercise_ids ?? candidate?.exerciseIds;
+    return Array.isArray(exerciseIds)
+      && exerciseIds.some((item) => String(item) === normalizedExerciseId);
+  });
+  if (!day) return null;
+
+  const constraints = plan.constraints ?? {};
+  const sets = firstPositiveInteger(
+    day.sets,
+    constraints.sets_per_exercise,
+    constraints.setsPerExercise,
+  );
+  const exactRepetitions = firstPositiveInteger(
+    day.reps,
+    day.repetitions,
+  );
+  const minimumRepetitions = firstPositiveInteger(
+    day.repetitions_min,
+    day.repetitionsMin,
+    constraints.repetitions_min,
+    constraints.repetitionsMin,
+    exactRepetitions,
+  );
+  const maximumRepetitions = firstPositiveInteger(
+    day.repetitions_max,
+    day.repetitionsMax,
+    constraints.repetitions_max,
+    constraints.repetitionsMax,
+    exactRepetitions,
+  );
+  if (!sets || (!minimumRepetitions && !maximumRepetitions)) return null;
+
+  const repetitionsMin = Math.min(
+    minimumRepetitions ?? maximumRepetitions,
+    maximumRepetitions ?? minimumRepetitions,
+  );
+  const repetitionsMax = Math.max(
+    minimumRepetitions ?? maximumRepetitions,
+    maximumRepetitions ?? minimumRepetitions,
+  );
+  const daysPerWeek = firstPositiveInteger(
+    constraints.days_per_week,
+    constraints.daysPerWeek,
+    plan.days.length,
+  );
+
+  return {
+    mode: "wellness_plan",
+    source: plan.source ?? "accepted_wellness_plan",
+    sets,
+    reps: repetitionsMax,
+    repsMin: repetitionsMin,
+    repsMax: repetitionsMax,
+    repetitionLabel: repetitionsMin === repetitionsMax
+      ? String(repetitionsMax)
+      : `${repetitionsMin}–${repetitionsMax}`,
+    daysPerWeek,
+    dosage: day.dosage ?? "",
+  };
+}
+
 export function resolvePracticeAccess({
   loggedIn,
   role = null,
@@ -61,11 +158,7 @@ export function resolvePracticeAccess({
     "primary_clinician",
     "primaryClinician"
   );
-  const wellnessPlan = profileValue(
-    patientProfile,
-    "wellness_plan",
-    "wellnessPlan"
-  );
+  const wellnessPlan = acceptedWellnessPlan(patientProfile);
 
   if (carePath === "wellness") {
     if (!Array.isArray(wellnessPlan?.days) || wellnessPlan.days.length === 0) {

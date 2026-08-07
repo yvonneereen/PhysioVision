@@ -1,11 +1,14 @@
 import unittest
 from pathlib import Path
 import sys
+import json
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from api.core.wellness_agent import (
     WellnessPlanValidationError,
+    _planner_prompt,
     allowed_exercises,
     normalize_wellness_plan,
 )
@@ -124,13 +127,99 @@ class WellnessAgentGuardrailTests(unittest.TestCase):
         available = allowed_exercises(preferences(equipment="chair_band"))
 
         for exercise_id in (
-            "supported_single_leg_balance",
             "ankle_pumps",
             "heel_slides",
             "hip_bridge",
             "clamshell",
         ):
             self.assertNotIn(exercise_id, available)
+
+    def test_walk_with_confidence_catalogue_includes_direct_balance(self):
+        walking_preferences = preferences(
+            goal="walking_confidence",
+            equipment="chair",
+            days_per_week=6,
+        )
+        available = allowed_exercises(walking_preferences)
+
+        self.assertEqual(
+            available["supported_single_leg_balance"]["movement_type"],
+            "functional_balance",
+        )
+
+        prompt = json.loads(_planner_prompt(
+            SimpleNamespace(first_name="Yvonne"),
+            walking_preferences,
+        ))
+        supported = next(
+            item
+            for item in prompt["reviewed_catalogue_tool_result"]
+            if item["id"] == "supported_single_leg_balance"
+        )
+        self.assertEqual(supported["movement_type"], "functional_balance")
+        self.assertTrue(any(
+            "at least 2 sessions" in rule
+            for rule in prompt["selection_rules"]
+        ))
+
+    def test_rejects_strength_only_walk_with_confidence_draft(self):
+        with self.assertRaisesRegex(
+            WellnessPlanValidationError,
+            "strength work alone",
+        ):
+            normalize_wellness_plan(
+                {
+                    "days": [
+                        {"exercise_ids": ["half-squats"]},
+                        {"exercise_ids": ["calf-raises"]},
+                        {"exercise_ids": ["hamstring-curls"]},
+                        {"exercise_ids": ["hip-abduction"]},
+                        {"exercise_ids": ["calf-raises"]},
+                        {"exercise_ids": ["half-squats"]},
+                    ],
+                },
+                preferences(
+                    goal="walking_confidence",
+                    equipment="chair",
+                    days_per_week=6,
+                ),
+            )
+
+    def test_walk_with_confidence_plan_balances_function_and_strength(self):
+        plan = normalize_wellness_plan(
+            {
+                "summary": "A varied walking-confidence plan.",
+                "rationale": ["Matches the selected goal."],
+                "days": [
+                    {"exercise_ids": ["supported_single_leg_balance"]},
+                    {"exercise_ids": ["heel-cord-stretch"]},
+                    {"exercise_ids": ["half-squats"]},
+                    {"exercise_ids": ["heel-cord-stretch"]},
+                    {"exercise_ids": ["supported_single_leg_balance"]},
+                    {"exercise_ids": ["calf-raises"]},
+                ],
+            },
+            preferences(
+                goal="walking_confidence",
+                equipment="chair",
+                days_per_week=6,
+            ),
+        )
+
+        balance_sessions = [
+            day
+            for day in plan["days"]
+            if "supported_single_leg_balance" in day["exercise_ids"]
+        ]
+        self.assertEqual(len(balance_sessions), 2)
+        self.assertIn(
+            "challenge balance directly",
+            plan["rationale"][0],
+        )
+        self.assertIn(
+            "Required direct balance practice",
+            " ".join(plan["agent_trace"]),
+        )
 
     def test_shoulder_goal_uses_the_reviewed_pendulum_detector(self):
         available = allowed_exercises(preferences(

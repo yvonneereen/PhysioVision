@@ -36,6 +36,24 @@ export function shouldShowPhysiotherapistRequest(profile = {}) {
   return !isClinicianGuidedProfile(profile) && !hasMedicalCondition;
 }
 
+export function walkingConfidencePlanNeedsRefresh(plan = {}) {
+  const goal = String(plan.goal ?? "")
+    .trim()
+    .toLowerCase()
+    .replaceAll("_", " ");
+  if (goal !== "walk with confidence" && goal !== "walking confidence") {
+    return false;
+  }
+
+  const days = Array.isArray(plan.days) ? plan.days : [];
+  const minimumBalanceSessions = days.length <= 3 ? 1 : 2;
+  const balanceSessions = days.filter((day) => {
+    const exerciseIds = day?.exercise_ids ?? day?.exerciseIds ?? [];
+    return exerciseIds.includes("supported_single_leg_balance");
+  }).length;
+  return balanceSessions < minimumBalanceSessions;
+}
+
 function number(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;

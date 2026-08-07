@@ -108,7 +108,7 @@ export const EXERCISES = [
     prescription: { sets: 3, reps: 10, holdSeconds: 5, daysPerWeek: "4–5" },
     camera: "front", // required for bilateral symmetry and facing-direction checks
     trackingWarning:
-      "Face the camera and keep one complete hip, knee, and ankle line visible. Keep both shoulders and legs visible when possible for posture and symmetry feedback.",
+      "Face the camera and step back until one complete hip, knee, and ankle line is visible. Keep the chair beside you and both feet in view.",
     trackedAngles: {
       leftKnee:  { points: ["leftHip",  "leftKnee",  "leftAnkle"]  },
       rightKnee: { points: ["rightHip", "rightKnee", "rightAnkle"] },
@@ -196,7 +196,7 @@ export const EXERCISES = [
       "torsoLean>40": "Lift your chest slightly — avoid leaning too far forward",
       "leftKneeForwardRatio>0.15": "Move your left knee back so it stays over your foot",
       "rightKneeForwardRatio>0.15": "Move your right knee back so it stays over your foot",
-      "kneeDiff>15": "Keep both knees bending equally",
+      "kneeDiff>15": "Keep both feet planted and bend both knees together as you sit your hips back",
     },
   },
 
@@ -746,16 +746,16 @@ export const EXERCISES = [
     name: "Supported Single-Leg Balance",
     category: "balance",
     trackingMaturity: "engineering_prototype_partial_observation",
-    requiresClinicianPlan: true,
+    requiresClinicianPlan: false,
     requiresReturnAfterHold: true,
     trackingHoldSeconds: 5,
-    prescription: { mode: "clinician_plan", sets: null, reps: null, holdSeconds: null, daysPerWeek: "as prescribed" },
+    prescription: { sets: 1, reps: 6, holdSeconds: 5, daysPerWeek: "2–3" },
     camera: "front",
     phaseConfirmationMs: 350,
     maxCues: 1,
-    safetyNote: "Stand next to a sturdy chair or wall and hold it lightly throughout. Only lift your foot when you feel steady — lower it immediately if you feel unsteady.",
+    safetyNote: "Keep both hands on a sturdy chair, fixed counter or rail throughout. Lift one foot only slightly and lower it immediately if you feel unsteady.",
     trackingWarning:
-      "Safety-limited prototype: use a full-body frontal view beside a fixed support with another person nearby if prescribed. It recognises foot lift and upright posture, but cannot verify your grip, support stability or imminent fall risk.",
+      "Safety-limited prototype: use a full-body frontal view beside a sturdy fixed support. It recognises a small foot lift and upright posture, but cannot verify your grip, support stability or imminent fall risk.",
     phases: [
       { name: "both_feet_down", workingFootClearance: [-0.05, 0.1], torsoLean: [0, 35] },
       { name: "supported_single_leg", workingFootClearance: [0.13, 1.0], torsoLean: [0, 35] },

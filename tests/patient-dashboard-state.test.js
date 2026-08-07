@@ -8,6 +8,7 @@ import {
   isPhysiotherapistRequestPending,
   mergeConsultationTranscript,
   shouldShowPhysiotherapistRequest,
+  walkingConfidencePlanNeedsRefresh,
 } from "../patient-dashboard-state.js";
 
 const dates = [
@@ -222,6 +223,33 @@ assert.equal(
   }),
   false,
   "a patient with medical history must not see the self-referral action",
+);
+
+assert.equal(
+  walkingConfidencePlanNeedsRefresh({
+    goal: "Walk with confidence",
+    days: Array.from({ length: 6 }, () => ({
+      exercise_ids: ["half-squats"],
+    })),
+  }),
+  true,
+  "an older strength-only walking plan should require a new reviewed draft",
+);
+
+assert.equal(
+  walkingConfidencePlanNeedsRefresh({
+    goal: "Walk with confidence",
+    days: [
+      { exercise_ids: ["supported_single_leg_balance"] },
+      { exercise_ids: ["heel-cord-stretch"] },
+      { exercise_ids: ["half-squats"] },
+      { exercise_ids: ["heel-cord-stretch"] },
+      { exercise_ids: ["supported_single_leg_balance"] },
+      { exercise_ids: ["calf-raises"] },
+    ],
+  }),
+  false,
+  "a walking plan with the required supported balance should remain active",
 );
 
 assert.equal(

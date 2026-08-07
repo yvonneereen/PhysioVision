@@ -7,7 +7,7 @@ import {
   measureHandExerciseFrame,
   measurePoseExerciseFrame,
 } from "./exercise-tracking.js?v=2";
-import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=44";
+import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=46";
 import { POSES } from "./poses.js";
 import {
   calibrationFrameMatchesPhase,
@@ -34,7 +34,7 @@ import {
   respondEmergencyAlert,
   sendAgentMessage,
 } from "./api.js?v=31";
-import { DRAFT_EXERCISES } from "./exercises/catalog.js?v=2";
+import { DRAFT_EXERCISES } from "./exercises/catalog.js?v=3";
 import {
   parseConfirmationResponse,
   parsePainLevel,
@@ -44,12 +44,15 @@ import {
   isSafariBrowser,
   readMicrophonePermissionState,
   voiceGuidance,
-} from "./voice-guidance.js?v=28";
+} from "./voice-guidance.js?v=29";
 import {
   PRACTICE_VIEWS,
+  acceptedWellnessPlan,
   hasAuthenticatedPracticeAccount,
   resolvePracticeAccess,
-} from "./practice-access.js?v=2";
+  wellnessPlanDoseForExercise,
+  wellnessPlanExerciseIds,
+} from "./practice-access.js?v=3";
 import {
   FallMonitor,
   fallMonitoringReadiness,
@@ -698,7 +701,7 @@ async function submitFallEmergencyResponse(response) {
     if (response !== "okay") {
       renderFallAlertDelivery(updated);
       if (["notified", "partial"].includes(updated.status)) {
-        voiceGuidance.speak(
+        speakMovementGuide(
           "An alert request was sent to your emergency contact. This does not mean they answered. No ambulance was dispatched.",
           { key: `fall-contact-alert:${updated.id}` }
         );
@@ -759,7 +762,7 @@ function showFallSafetyResult(response, event = {}) {
   }
   void submitFallEmergencyResponse(response);
 
-  voiceGuidance.speak(
+  speakMovementGuide(
     `${fallSafetyResultTitle.textContent} ${fallSafetyResultMessage.textContent}` +
       (response === "okay"
         ? ""
@@ -788,7 +791,7 @@ function requestFallSafetyOkayClarification() {
       startFallSafetyVoiceListening();
     }
   };
-  const spoken = voiceGuidance.speak(clarification, {
+  const spoken = speakMovementGuide(clarification, {
     key: "possible-fall-clarify-okay",
     interrupt: true,
     onEnd: () => armVoiceListening(listenAfterQuestion),
@@ -808,7 +811,7 @@ function requestFallSafetyUnknownClarification(transcript) {
       startFallSafetyVoiceListening();
     }
   };
-  const spoken = voiceGuidance.speak(
+  const spoken = speakMovementGuide(
     "I could not tell whether you are safe. Tell me what happened, whether you "
     + "can stand or move, and how much pain you feel. You can also use one of "
     + "the large buttons.",
@@ -837,7 +840,7 @@ function requestFallSafetyAiClarification(prompt) {
       startFallSafetyVoiceListening();
     }
   };
-  const spoken = voiceGuidance.speak(fixedPrompt, {
+  const spoken = speakMovementGuide(fixedPrompt, {
     key: `possible-fall:ai-clarification:${fallSafetyAiAttempts}`,
     interrupt: true,
     rate: 0.97,
@@ -954,7 +957,7 @@ function beginFallSafetyCheck(event) {
   document.body.classList.add("fall-safety-open");
   fallSafetyOkay.focus({ preventScroll: true });
 
-  const spoken = voiceGuidance.speak(
+  const spoken = speakMovementGuide(
     "We noticed a possible fall and stopped the exercise. Are you okay? Tell me how you feel, or use one of the large buttons.",
     {
       key: "possible-fall-check",
@@ -979,15 +982,15 @@ function beginFallSafetyCheck(event) {
       Math.max(fallSafetySecondsRemaining, 0)
     );
     if (fallSafetySecondsRemaining === 30) {
-      voiceGuidance.speak("Thirty seconds left to answer.", {
+      speakMovementGuide("Thirty seconds left to answer.", {
         key: "possible-fall-countdown-30",
       });
     } else if (fallSafetySecondsRemaining === 10) {
-      voiceGuidance.speak("Ten seconds left to answer.", {
+      speakMovementGuide("Ten seconds left to answer.", {
         key: "possible-fall-countdown-10",
       });
     } else if (fallSafetySecondsRemaining === 5) {
-      voiceGuidance.speak("Five seconds left to answer.", {
+      speakMovementGuide("Five seconds left to answer.", {
         key: "possible-fall-countdown-5",
       });
     } else if (fallSafetySecondsRemaining <= 0) {
@@ -1167,20 +1170,34 @@ function goalMetric(exercise = engine?.exercise) {
   return { isHold: false, unit: "reps", perHold: 0, goal: hasReps ? reps : null };
 }
 
+function currentAcceptedWellnessPlan() {
+  const identity = currentPracticeIdentity();
+  if (identity.role !== "patient") return null;
+  return acceptedWellnessPlan(identity.patientProfile)
+    ?? acceptedWellnessPlan(profile);
+}
+
 function activeDose(exercise = engine?.exercise) {
-  if (profile.carePath !== "clinician") return exercise?.prescription ?? {};
-  const prescription = activePrescriptions.get(exercise?.id);
-  if (!prescription) return {};
-  return {
-    id: prescription.id,
-    sets: prescription.sets,
-    reps: prescription.reps,
-    holdSeconds: prescription.hold_seconds ?? 0,
-    daysPerWeek: prescription.days_per_week,
-    notes: prescription.notes,
-    clinicianName: prescription.clinician_name,
-    updatedAt: prescription.updated_at ?? prescription.updatedAt ?? null,
-  };
+  if (profile.carePath === "clinician") {
+    const prescription = activePrescriptions.get(exercise?.id);
+    if (!prescription) return {};
+    return {
+      id: prescription.id,
+      sets: prescription.sets,
+      reps: prescription.reps,
+      holdSeconds: prescription.hold_seconds ?? 0,
+      daysPerWeek: prescription.days_per_week,
+      notes: prescription.notes,
+      clinicianName: prescription.clinician_name,
+      updatedAt: prescription.updated_at ?? prescription.updatedAt ?? null,
+    };
+  }
+
+  const wellnessPlan = currentAcceptedWellnessPlan();
+  if (wellnessPlan) {
+    return wellnessPlanDoseForExercise(wellnessPlan, exercise?.id) ?? {};
+  }
+  return exercise?.prescription ?? {};
 }
 
 // Accumulated per-session stats (reset on each camera start)
@@ -1200,8 +1217,30 @@ const MOVEMENT_AI_TRANSIENT_LISTENING_ERRORS = new Set([
   "no-speech",
   "start-failed",
 ]);
+const MOVEMENT_GUIDE_VOICE_GROUP = "movement-guide";
+const MOVEMENT_GUIDE_VOLUME = 1;
+const MOVEMENT_GUIDE_RATE = 0.98;
+const MOVEMENT_GUIDE_PITCH = 1.03;
 const MOVEMENT_AI_WAKE_PATTERN =
-  /\b(?:(?:hey|hi|okay|ok)\s+)?(?:physio\s+)?guide\b[\s,:-]*(.*)$/i;
+  /\b(?:(?:hey|hi|okay|ok)\s+)?(?:physio\s+)?(?:guide|guy|guys)\b[\s,:-]*(.*)$/i;
+
+function speakMovementGuide(message, options = {}) {
+  const {
+    rate = MOVEMENT_GUIDE_RATE,
+    pitch = MOVEMENT_GUIDE_PITCH,
+    ...speechOptions
+  } = options;
+  return voiceGuidance.speak(message, {
+    ...speechOptions,
+    // Live guidance must begin immediately. Using one prepared system voice
+    // avoids both generated-audio latency and Safari output-level changes.
+    preferImmediate: true,
+    voiceGroup: MOVEMENT_GUIDE_VOICE_GROUP,
+    volume: MOVEMENT_GUIDE_VOLUME,
+    rate,
+    pitch,
+  });
+}
 
 function movementAiConversationActive() {
   return ["question", "thinking", "speaking"].includes(movementAiState);
@@ -1315,14 +1354,13 @@ function resumeMovementAiAfterSpeech(generation) {
 function speakMovementAiMessage(
   message,
   generation,
-  { key, preferImmediate = false } = {}
+  { key } = {}
 ) {
   if (!movementAiCanListen(generation)) return false;
   movementAiState = "speaking";
-  const spoken = voiceGuidance.speak(message, {
+  const spoken = speakMovementGuide(message, {
     key: key || `movement-ai:${generation}:${Date.now()}`,
     interrupt: true,
-    preferImmediate,
     onEnd: () => resumeMovementAiAfterSpeech(generation),
   });
   if (!spoken) resumeMovementAiAfterSpeech(generation);
@@ -1351,7 +1389,6 @@ function captureMovementAiQuestion(generation) {
         generation,
         {
           key: `movement-ai:no-question:${generation}`,
-          preferImmediate: true,
         }
       );
     },
@@ -1376,10 +1413,9 @@ function beginMovementAiQuestion(question, generation) {
   }
 
   setMovementAiStatus("question", "Wake phrase heard — preparing to listen…");
-  const spoken = voiceGuidance.speak("I’m listening. What would you like to ask?", {
+  const spoken = speakMovementGuide("I’m listening. What would you like to ask?", {
     key: `movement-ai:prompt:${generation}`,
     interrupt: true,
-    preferImmediate: true,
     onEnd: () => captureMovementAiQuestion(generation),
   });
   if (!spoken) captureMovementAiQuestion(generation);
@@ -1398,8 +1434,20 @@ async function answerMovementAiQuestion(question, generation) {
     `AI guide heard: “${cleanedQuestion}” — preparing an answer…`
   );
   const context = currentMovementAiContext();
+  const acknowledgement = new Promise((resolve) => {
+    const spoken = speakMovementGuide(
+      "I heard your question. Let me check that for you.",
+      {
+        key: `movement-ai:acknowledged:${generation}:${cleanedQuestion}`,
+        interrupt: true,
+        onEnd: resolve,
+      }
+    );
+    if (!spoken) resolve();
+  });
   try {
     const result = await sendAgentMessage(cleanedQuestion, context);
+    await acknowledgement;
     if (!movementAiCanListen(generation) || movementAiState !== "thinking") return;
     const reply = String(result?.reply ?? "").trim();
     if (!reply) throw new Error("The AI guide returned an empty answer.");
@@ -1408,6 +1456,7 @@ async function answerMovementAiQuestion(question, generation) {
       key: `movement-ai:answer:${generation}:${cleanedQuestion}`,
     });
   } catch (_) {
+    await acknowledgement;
     if (!movementAiCanListen(generation)) return;
     setMovementAiStatus(
       "error",
@@ -1418,7 +1467,6 @@ async function answerMovementAiQuestion(question, generation) {
       generation,
       {
         key: `movement-ai:error:${generation}`,
-        preferImmediate: true,
       }
     );
   }
@@ -1437,6 +1485,14 @@ function startMovementAiWakeListening(generation = movementAiGeneration) {
       if (!movementAiCanListen(generation)) return;
       const wake = parseMovementAiWakePhrase(transcript, alternatives);
       if (!wake.matched) {
+        if (/^\s*(?:hey|hi|okay|ok)\b/i.test(String(transcript ?? ""))) {
+          speakMovementAiMessage(
+            "I heard you. Say Hey Guide, then ask your question.",
+            generation,
+            { key: `movement-ai:wake-help:${generation}` }
+          );
+          return;
+        }
         scheduleMovementAiWakeListening(180, generation);
         return;
       }
@@ -1502,7 +1558,7 @@ function speakCameraCoaching(message, options = {}) {
     originalOnEnd?.();
     if (resumeWakeListener) resumeMovementAiAfterSpeech(generation);
   };
-  const spoken = voiceGuidance.speak(message, {
+  const spoken = speakMovementGuide(message, {
     ...options,
     onEnd: finish,
   });
@@ -1526,6 +1582,17 @@ function exerciseSpokenInstruction(exercise) {
   ].filter(Boolean).join(" ");
 }
 
+function exerciseStartGuidance(exercise = engine?.exercise) {
+  if (exercise?.id === "half-squats") {
+    return (
+      "Begin your first half squat now. Keep both feet flat and keep the chair "
+      + "beside you. Bend both knees and hips slowly as if sitting back toward "
+      + "the chair, only as far as comfortable, then stand tall to complete one repetition."
+    );
+  }
+  return exerciseSpokenInstruction(exercise);
+}
+
 function resetSpokenCoaching() {
   spokenCoachingCandidate = null;
   spokenRepCount = 0;
@@ -1536,7 +1603,7 @@ function queueSpokenMovementCue(state, cue, timestampMs) {
     spokenCoachingCandidate = null;
     return;
   }
-  if (!["adjust", "tracking", "position"].includes(state)) {
+  if (!["adjust", "tracking", "position", "ready"].includes(state)) {
     spokenCoachingCandidate = null;
     return;
   }
@@ -1551,7 +1618,7 @@ function queueSpokenMovementCue(state, cue, timestampMs) {
     return;
   }
 
-  const stableForMs = state === "adjust" ? 800 : 800;
+  const stableForMs = state === "ready" ? 2500 : 800;
   const repeatAfterMs = state === "adjust" ? 8000 : 8000;
   if (
     timestampMs - spokenCoachingCandidate.firstSeenAt < stableForMs ||
@@ -1579,7 +1646,7 @@ const CALIBRATION_TARGET_MOVEMENTS = 1;
 const CALIBRATION_RETURN_STABLE_MS = 350;
 const CALIBRATION_STALL_REMINDER_MS = 5000;
 const CALIBRATION_STALL_REPEAT_MS = 12000;
-const CALIBRATION_VOICE_GROUP = "calibration";
+const CALIBRATION_VOICE_GROUP = MOVEMENT_GUIDE_VOICE_GROUP;
 // Calibration is a deliberate hold, so accept lower-confidence landmarks than
 // live tracking (0.5). This lets occluded side-lying/floor poses (e.g. clamshell,
 // where one knee/hip overlaps the other) still measure and cache a personal range.
@@ -1590,11 +1657,8 @@ let calibrationSession = null;
 let calibrationDraft = null;
 
 function speakCalibrationGuidance(message, options = {}) {
-  return voiceGuidance.speak(message, {
+  return speakMovementGuide(message, {
     ...options,
-    // Calibration prompts describe what is on screen right now. Generated
-    // speech can arrive after the UI has already advanced to the next step.
-    preferImmediate: true,
     voiceGroup: CALIBRATION_VOICE_GROUP,
   });
 }
@@ -1645,6 +1709,10 @@ EXERCISES.forEach((ex) => {
 });
 
 function refreshExerciseAccess() {
+  const wellnessPlan = currentAcceptedWellnessPlan();
+  const plannedWellnessExercises = new Set(
+    wellnessPlanExerciseIds(wellnessPlan)
+  );
   EXERCISES.forEach((exercise) => {
     const option = [...exSelect.options].find((item) => item.value === exercise.id);
     if (!option) return;
@@ -1653,7 +1721,11 @@ function refreshExerciseAccess() {
     } else if (profile.carePath === "needs_review") {
       option.disabled = true;
     } else {
-      option.disabled = Boolean(exercise.comingSoon || exercise.requiresClinicianPlan);
+      option.disabled = Boolean(
+        exercise.comingSoon
+        || exercise.requiresClinicianPlan
+        || (wellnessPlan && !plannedWellnessExercises.has(exercise.id))
+      );
     }
   });
 }
@@ -1786,6 +1858,7 @@ window.addEventListener("physiovision:profile-updated", (event) => {
   );
   smoother.state = {};
   repCountEl.textContent = "0";
+  renderPrescription(engine.exercise);
   resetSpokenCoaching();
   progressEl.style.width = "0%";
   setFeedbackBanner("ready");
@@ -2585,6 +2658,15 @@ function updateFeedbackPanel(angles, timestampMs) {
     bannerCue = fb.inHold
       ? "Hold reset — keep the required joints visible to restart"
       : movementTrackingGuidance(fb);
+  } else if (
+    fb.exercise.id === "half-squats"
+    && fb.repCount === 0
+    && fb.phase === "standing"
+    && fb.expectedNextPhase === "squat"
+    && !personalizedCues.length
+  ) {
+    bannerState = "ready";
+    bannerCue = exerciseStartGuidance(fb.exercise);
   } else if (!fb.sequenceOnTrack && fb.positionRecognized) {
     bannerState = "adjust";
     bannerCue =
@@ -2595,10 +2677,12 @@ function updateFeedbackPanel(angles, timestampMs) {
   } else if (fb.limitedTracking && !personalizedCues.length) {
     bannerState = "good";
     bannerCue =
-      `Rep tracking is working from your ${fb.trackingSide} side. Keep both legs visible when possible for symmetry feedback.`;
+      `Rep tracking is working from your ${fb.trackingSide} side. Keep moving slowly and follow the phase prompt.`;
   } else {
     bannerState = personalizedCues.length ? "adjust" : "good";
-    bannerCue = personalizedCues[0] ?? "";
+    bannerCue = fb.exercise.id === "half-squats" && personalizedCues.length
+      ? `${movementPhaseGuidance(fb)} ${personalizedCues[0]}`
+      : personalizedCues[0] ?? "";
   }
   setFeedbackBanner(bannerState, bannerCue);
   queueSpokenMovementCue(bannerState, bannerCue, timestampMs);
@@ -2611,7 +2695,7 @@ function updateFeedbackPanel(angles, timestampMs) {
   }
 
   // Symmetry warning
-  if (fb.symmetryWarning) {
+  if (fb.symmetryWarning && fb.exercise.id !== "half-squats") {
     symWarnEl.textContent = fb.symmetryWarning;
     symWarnEl.classList.remove("hidden");
   } else {
@@ -2676,10 +2760,6 @@ function calibrationPurposeMessage(config = engine?.exercise?.calibration) {
       "Your movement baseline is saved automatically and will help the guide "
       + "recognize your movement. Safety limits are unchanged."
     );
-}
-
-function calibrationCompletionSpeech(config = engine?.exercise?.calibration) {
-  return `${calibrationPurposeMessage(config)} Begin when you are comfortable.`;
 }
 
 function renderPersonalization() {
@@ -2951,14 +3031,25 @@ async function startCalibrationFlow(
     targetCaptures: [],
     capture: null,
   };
+  stopMovementAiGuide({ hide: false });
+  setMovementAiStatus(
+    "paused",
+    "AI questions will be ready after camera setup is complete."
+  );
   calibrationOverlay.classList.remove("hidden");
   renderCalibrationStep();
-  beginCalibrationCapture("start", {
-    durationMs: calibrationMode === "position-check"
-      ? SESSION_POSITION_CAPTURE_MS
-      : CALIBRATION_CAPTURE_MS,
+  calibrationStatus.textContent =
+    "Listen to the complete instruction, then hold your starting position.";
+  announceCalibrationStage("start", {
+    onEnd: () => {
+      if (!calibrationSession) return;
+      beginCalibrationCapture("start", {
+        durationMs: calibrationMode === "position-check"
+          ? SESSION_POSITION_CAPTURE_MS
+          : CALIBRATION_CAPTURE_MS,
+      });
+    },
   });
-  announceCalibrationStage("start");
   calibrationCancel.focus();
 }
 
@@ -2980,10 +3071,6 @@ function saveCompletedCalibration(draft) {
   const hasPersonalRange = Boolean(
     engine.exercise.calibration.personalizedKeys.length
   );
-  const purposeMessage = calibrationPurposeMessage(
-    engine.exercise.calibration
-  );
-
   saveCalibration(draft);
   if (isPracticeAccountAuthenticated()) {
     postCalibration({
@@ -3004,13 +3091,12 @@ function saveCompletedCalibration(draft) {
   statusEl.textContent = hasPersonalRange
     ? "Personal range saved automatically — movement guide ready"
     : "Personal tracking baseline saved automatically — movement guide ready";
-  setFeedbackBanner("good", purposeMessage);
-  speakCalibrationGuidance(
-    calibrationCompletionSpeech(engine.exercise.calibration),
-    {
-      key: `calibration:${engine.exercise.id}:saved-automatically`,
-      interrupt: true,
-    }
+  setFeedbackBanner("ready", exerciseStartGuidance(engine.exercise));
+  announceExerciseInstruction(
+    hasPersonalRange
+      ? "Personalized movement recognition is ready."
+      : "Personal movement tracking is ready.",
+    { onEnd: startMovementAiGuide }
   );
 }
 
@@ -3148,9 +3234,15 @@ function updateCalibrationCapture(angles, timestampMs) {
     }
 
     capture.awaitingReturn = false;
-    resetCalibrationPositionTimer(capture);
+    calibrationSession.capture = null;
     calibrationStatus.textContent = calibrationWaitingMessage("target");
-    announceCalibrationStage("target", { afterReturn: true });
+    announceCalibrationStage("target", {
+      afterReturn: true,
+      onEnd: () => {
+        if (!calibrationSession) return;
+        beginCalibrationCapture("target");
+      },
+    });
     return;
   }
 
@@ -3201,13 +3293,6 @@ function updateCalibrationCapture(angles, timestampMs) {
     setFeedbackBanner(
       "good",
       "Required joints found. Hold still while the personal measurement is recorded."
-    );
-    speakCalibrationGuidance(
-      "Position found. Hold still while I measure.",
-      {
-        key: `calibration:${engine.exercise.id}:${capture.type}:measuring:${calibrationSession.targetCaptures.length}`,
-        cooldownMs: 2500,
-      }
     );
     return;
   }
@@ -3376,17 +3461,26 @@ function finishCalibrationCapture(capture) {
         statusEl.textContent =
           "Starting position confirmed — movement guide ready";
         setFeedbackBanner(
-          "good",
-          "Starting position confirmed. Begin when you are comfortable."
+          "ready",
+          exerciseStartGuidance(engine.exercise)
         );
-        announceExerciseInstruction("Starting position confirmed.");
+        announceExerciseInstruction(
+          "Starting position confirmed.",
+          { onEnd: startMovementAiGuide }
+        );
         return;
       }
       calibrationSession.startFrames = capture.frames;
       calibrationSession.step = "target";
       renderCalibrationStep();
-      beginCalibrationCapture("target");
-      announceCalibrationStage("target");
+      calibrationStatus.textContent =
+        "Starting position saved. Listen before making the calibration movement.";
+      announceCalibrationStage("target", {
+        onEnd: () => {
+          if (!calibrationSession) return;
+          beginCalibrationCapture("target");
+        },
+      });
     } else {
       calibrationSession.targetCaptures.push(capture.frames);
       if (
@@ -3465,42 +3559,50 @@ function calibrationWaitingMessage(type) {
     : `Move into a comfortable ${phase.replaceAll("_", " ")} position and hold it. Measurement starts automatically.`;
 }
 
-function announceCalibrationStage(type, { afterReturn = false } = {}) {
+function announceCalibrationStage(
+  type,
+  { afterReturn = false, onEnd = null } = {}
+) {
   const config = engine.exercise.calibration;
+  const finish = () => {
+    if (calibrationSession) onEnd?.();
+  };
   if (type === "start") {
     const startInstruction = config.startInstruction
       ?? `Hold your ${config.startPhase.replaceAll("_", " ")} position with your full body visible.`;
     const introduction = calibrationSession.mode === "position-check"
       ? (
-        "I will reuse your saved personalized movement range. This quick "
-        + "position check confirms your starting position before the session. "
+        "I will quickly confirm your starting position using your saved personal range. "
       )
       : (
-        "This short setup personalizes movement detection so I can recognize "
-        + "your exercise more accurately. It does not change safety limits. "
+        "Let’s personalize movement recognition before you begin. "
       );
-    speakCalibrationGuidance(
+    const spoken = speakCalibrationGuidance(
       introduction
-      + `${startInstruction} You do not need to press anything. I will measure automatically.`,
+      + `${startInstruction} Hold still after this instruction. I will measure automatically and tell you when to move.`,
       {
         key: `calibration:${engine.exercise.id}:start`,
         interrupt: true,
+        onEnd: finish,
       }
     );
+    if (!spoken) finish();
     return;
   }
 
   const targetInstruction = config.targetInstruction
     ?? `Move into a comfortable ${config.targetPhase.replaceAll("_", " ")} position.`;
-  speakCalibrationGuidance(
+  const spoken = speakCalibrationGuidance(
     `${afterReturn ? "Starting position found. " : "Starting position saved. "}`
     + `${targetInstruction} This is your only calibration movement. Hold the position; `
     + "I will measure automatically.",
     {
       key: `calibration:${engine.exercise.id}:target:${calibrationSession.targetCaptures.length + 1}:${afterReturn ? "return" : "first"}`,
       interrupt: true,
+      onEnd: finish,
     }
   );
+  if (!spoken) finish();
 }
 
 function cancelCalibration() {
@@ -3534,22 +3636,30 @@ function renderPoseStrip(exercise, activePhase) {
 
 function renderPrescription(ex) {
   const p = activeDose(ex);
+  const repetitions = p.repetitionLabel ?? p.reps;
+  const setUnit = Number(p.sets) === 1 ? "set" : "sets";
   if (profile.carePath === "clinician" && !p.id) {
     prescEl.textContent = "This movement is not in your active prescription";
     if (repTargetEl) repTargetEl.textContent = "—";
   } else if (profile.carePath === "clinician") {
     prescEl.textContent =
-      `${p.sets} sets × ${p.reps} reps` +
+      `${p.sets} ${setUnit} × ${repetitions} reps` +
       (p.holdSeconds ? ` · hold ${p.holdSeconds}s` : "") +
       ` · ${p.daysPerWeek} days/week` +
       (p.clinicianName ? ` · prescribed by ${p.clinicianName}` : "");
     if (repTargetEl) repTargetEl.textContent = p.reps;
+  } else if (
+    practiceDecision.reason === "wellness_plan"
+    && p.mode !== "wellness_plan"
+  ) {
+    prescEl.textContent = "This movement is not in your accepted AI plan";
+    if (repTargetEl) repTargetEl.textContent = "—";
   } else if (p.mode === "clinician_plan") {
     prescEl.textContent = "A clinician prescription is required";
     if (repTargetEl) repTargetEl.textContent = "—";
   } else {
     prescEl.textContent =
-      `${p.sets} sets × ${p.reps} reps` +
+      `${p.sets} ${setUnit} × ${repetitions} reps` +
       (p.holdSeconds ? ` · hold ${p.holdSeconds}s` : "") +
       ` · ${p.daysPerWeek} days/week`;
     if (repTargetEl) repTargetEl.textContent = p.reps;
@@ -3632,7 +3742,11 @@ function setFeedbackBanner(state, cue = "") {
   } else if (state === "good") {
     symbol.textContent = "✓";
     title.textContent = "Movement looks good";
-    detail.textContent = "Keep this pace and breathe naturally";
+    detail.textContent = cue || "Keep this pace and breathe naturally";
+  } else if (state === "ready") {
+    symbol.textContent = "→";
+    title.textContent = "Start your movement";
+    detail.textContent = cue || "Begin now and follow the movement prompt";
   } else if (state === "tracking") {
     symbol.textContent = "?";
     title.textContent = "Tracking uncertain";
@@ -3679,6 +3793,17 @@ function hasPathwayAccess() {
     );
     return false;
   }
+  if (
+    practiceDecision.reason === "wellness_plan"
+    && activeDose(engine.exercise).mode !== "wellness_plan"
+  ) {
+    statusEl.textContent = "This exercise is not in your accepted AI plan";
+    setFeedbackBanner(
+      "tracking",
+      "Choose one of the movements in your accepted AI wellness plan"
+    );
+    return false;
+  }
   if (engine.exercise.requiresClinicianPlan && !usesClinicianPath) {
     statusEl.textContent = "This exercise requires a clinician-approved care plan";
     setFeedbackBanner(
@@ -3694,13 +3819,17 @@ function announceExerciseInstruction(prefix = "", { onEnd = null } = {}) {
   const clinicianNote = activeDose(engine.exercise).notes;
   const spokenInstruction = [
     prefix,
-    exerciseSpokenInstruction(engine.exercise),
+    exerciseStartGuidance(engine.exercise),
     clinicianNote ? `Your clinician's instruction is: ${clinicianNote}` : "",
     handsFreeVoiceEnabled
-      ? "The AI guide is active. Say Hey Guide whenever you have a question."
+      ? "After this instruction, say Hey Guide followed by your question whenever you need help."
       : "",
   ].filter(Boolean).join(" ");
-  const spoken = voiceGuidance.speak(spokenInstruction, {
+  setMovementAiStatus(
+    "coaching",
+    "Listen to the complete start instruction. Hey Guide will be ready afterward."
+  );
+  const spoken = speakMovementGuide(spokenInstruction, {
     key: `instruction:${engine.exercise.id}`,
     cooldownMs: 3000,
     interrupt: true,
@@ -4074,9 +4203,9 @@ const recordedPainValueEl = document.getElementById("recordedPainValue");
 let painCheckinState = null;
 let painSafetyRestTimer = null;
 let painVoiceFallbackNeeded = false;
-const PAIN_PROMPT_VOICE_GROUP = "pain-checkin";
-const PAIN_PROMPT_RATE = 0.98;
-const PAIN_PROMPT_PITCH = 1.04;
+const PAIN_PROMPT_VOICE_GROUP = MOVEMENT_GUIDE_VOICE_GROUP;
+const PAIN_PROMPT_RATE = MOVEMENT_GUIDE_RATE;
+const PAIN_PROMPT_PITCH = MOVEMENT_GUIDE_PITCH;
 
 function painQuestion(context) {
   return context === "before"
@@ -4275,7 +4404,7 @@ function cancelCameraSetupCountdown({ announce = true } = {}) {
   setFeedbackBanner("ready", "Camera setup cancelled. Start again when you are ready.");
   renderPrimaryCameraAction();
   if (announce) {
-    voiceGuidance.speak("Camera setup cancelled. Start again when you are ready.", {
+    speakMovementGuide("Camera setup cancelled. Start again when you are ready.", {
       key: "camera-setup:countdown:cancelled",
       interrupt: true,
     });
@@ -4312,36 +4441,43 @@ function continueAfterPainCheckin(completed) {
     "Pain level confirmed. Step back so your full body is visible."
   );
   renderPrimaryCameraAction();
-  voiceGuidance.speak(
+  const beginVisibleCountdown = () => {
+    if (!cameraSetupCountdown || cameraSetupCountdown.timer) return;
+    cameraSetupCountdown.timer = window.setInterval(() => {
+      if (!cameraSetupCountdown) return;
+      cameraSetupCountdown.secondsRemaining -= 1;
+      if (cameraSetupCountdown.secondsRemaining > 0) {
+        cameraSetupStatus.textContent =
+          `Camera setup will begin automatically in ${cameraSetupCountdown.secondsRemaining} seconds. You can cancel below.`;
+        renderPrimaryCameraAction();
+        return;
+      }
+      const pending = cameraSetupCountdown.completed;
+      window.clearInterval(cameraSetupCountdown.timer);
+      cameraSetupCountdown = null;
+      cameraSetupStatus.hidden = true;
+      cameraSetupStatus.textContent = "";
+      renderPrimaryCameraAction();
+      startCameraSetupAfterCountdown(pending);
+    }, 1000);
+  };
+  const spoken = speakMovementGuide(
     "Pain level confirmed. Camera setup will begin in three seconds. Step back so your full body is visible.",
     {
       key: `camera-setup:countdown:${completed.context}`,
       interrupt: true,
       // This acknowledgement must be immediate; waiting for generated speech
       // makes the confirmed answer feel like a stalled conversation.
-      preferImmediate: true,
       voiceGroup: PAIN_PROMPT_VOICE_GROUP,
       rate: PAIN_PROMPT_RATE,
       pitch: PAIN_PROMPT_PITCH,
+      onEnd: beginVisibleCountdown,
     }
   );
-  cameraSetupCountdown.timer = window.setInterval(() => {
-    if (!cameraSetupCountdown) return;
-    cameraSetupCountdown.secondsRemaining -= 1;
-    if (cameraSetupCountdown.secondsRemaining > 0) {
-      cameraSetupStatus.textContent =
-        `Camera setup will begin automatically in ${cameraSetupCountdown.secondsRemaining} seconds. You can cancel below.`;
-      renderPrimaryCameraAction();
-      return;
-    }
-    const pending = cameraSetupCountdown.completed;
-    window.clearInterval(cameraSetupCountdown.timer);
-    cameraSetupCountdown = null;
-    cameraSetupStatus.hidden = true;
-    cameraSetupStatus.textContent = "";
-    renderPrimaryCameraAction();
-    startCameraSetupAfterCountdown(pending);
-  }, 1000);
+  if (!spoken) beginVisibleCountdown();
+  // Safari can occasionally omit SpeechSynthesis's end event. Preserve a
+  // bounded fallback without cutting off a normally playing sentence.
+  window.setTimeout(beginVisibleCountdown, 12000);
 }
 
 function renderRecordedPain({ painLevel, context }) {
@@ -4371,7 +4507,7 @@ function acknowledgeRecordedPain(completed) {
   const level = completed.painLevel;
   const acknowledgement =
     `Thank you. I have recorded your pain level as ${level} out of 10.`;
-  voiceGuidance.speak(acknowledgement, {
+  speakMovementGuide(acknowledgement, {
     key: `checkin:${completed.context}:recorded:${level}`,
     interrupt: true,
   });
@@ -4513,11 +4649,10 @@ function speakPainPrompt(
       startPainVoiceListening({ expectedStage });
     }
   };
-  const spoken = voiceGuidance.speak(question, {
+  const spoken = speakMovementGuide(question, {
     key,
     interrupt: true,
     // Safety questions must begin without waiting for a network voice request.
-    preferImmediate: true,
     // Keep the initial question and every follow-up on the same exact voice.
     voiceGroup: PAIN_PROMPT_VOICE_GROUP,
     rate: Number.isFinite(rate) ? rate : PAIN_PROMPT_RATE,
@@ -4773,7 +4908,7 @@ function beginPainSafetyRestPause() {
   voiceCheckinStatusEl.textContent =
     `I’ll ask how the pain is changing in ${secondsRemaining} seconds.`;
   updatePainCheckinPresentation();
-  voiceGuidance.speak(
+  speakMovementGuide(
     "Please stay resting for five seconds. I will then ask how the pain is changing.",
     {
       key: `checkin:${painCheckinState.context}:safety:rest-pause`,
@@ -5056,7 +5191,7 @@ function renderPainSafetyOutcome(forcedOutcome = "") {
     ? "Saving this safety check. The camera remains paused."
     : "The camera remains paused. Choose an option below when you are ready.";
   updatePainCheckinPresentation();
-  voiceGuidance.speak(`${heading}. ${message} ${completeHelp}`, {
+  speakMovementGuide(`${heading}. ${message} ${completeHelp}`, {
     key: `checkin:${painCheckinState.context}:safety-outcome:${outcome}`,
     interrupt: true,
   });
@@ -5172,7 +5307,7 @@ function finishPainSafetyInterview({ reportForPhysiotherapist = false } = {}) {
   const savedMessage = effectiveReport
     ? "Your pain and safety answers are being saved and flagged for your physiotherapist to review. This does not confirm that they have seen it, so do not wait for a reply if you need urgent help."
     : "Your pain and safety answers are being recorded. The camera remains paused.";
-  voiceGuidance.speak(savedMessage, {
+  speakMovementGuide(savedMessage, {
     key: `checkin:${completed.context}:safety-saved:${effectiveReport}`,
     interrupt: true,
   });

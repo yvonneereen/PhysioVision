@@ -30,6 +30,23 @@ def preferences(**overrides):
 
 
 class WellnessAgentGuardrailTests(unittest.TestCase):
+    def test_deployment_deadlines_leave_room_for_two_provider_attempts(self):
+        project_root = Path(__file__).resolve().parents[1]
+        render_config = (project_root / "render.yaml").read_text()
+        backend_settings = (project_root / "backend/settings.py").read_text()
+        planner_source = (
+            project_root / "api/core/wellness_agent.py"
+        ).read_text()
+
+        self.assertIn("--timeout 120", render_config)
+        self.assertIn("--threads 4", render_config)
+        self.assertIn('value: "50000"', render_config)
+        self.assertIn("default=50000", backend_settings)
+        self.assertIn(
+            "timeout=settings.GEMINI_PLANNER_TIMEOUT_MS",
+            planner_source,
+        )
+
     def test_normalizes_a_reviewed_three_day_plan(self):
         plan = normalize_wellness_plan(
             {

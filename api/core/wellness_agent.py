@@ -352,6 +352,7 @@ def generate_wellness_plan(user, preferences, *, previous_plan=None, revision=""
         raise RuntimeError("GEMINI_API_KEY is not configured.")
 
     from google import genai
+    from google.genai import types
 
     system_instruction = """
 You are the PhysioVision general-wellness planning agent for an older adult.
@@ -387,7 +388,15 @@ Do not include markdown, medical claims, new exercises, dosage fields,
 diagnoses, or anything outside the JSON object.
 """.strip()
 
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    # Bound each provider attempt below the web-worker deadline. The planner
+    # may make a second attempt when Gemini returns malformed or unsafe JSON,
+    # so two 50-second calls still fit inside Gunicorn's 120-second timeout.
+    client = genai.Client(
+        api_key=settings.GEMINI_API_KEY,
+        http_options=types.HttpOptions(
+            timeout=settings.GEMINI_PLANNER_TIMEOUT_MS,
+        ),
+    )
     prompt = _planner_prompt(user, preferences, previous_plan, revision)
     validation_feedback = ""
     last_error = None

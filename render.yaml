@@ -4,7 +4,10 @@ services:
     runtime: python
     plan: free
     buildCommand: bash build.sh
-    startCommand: gunicorn backend.wsgi:application
+    # Gemini planning can take longer than Gunicorn's 30-second default. Keep
+    # the worker alive long enough for two bounded provider attempts, and use
+    # threads so health checks and ordinary API traffic remain responsive.
+    startCommand: gunicorn backend.wsgi:application --timeout 120 --workers 1 --threads 4
     healthCheckPath: /api/health/
     autoDeployTrigger: commit
     envVars:
@@ -54,6 +57,8 @@ services:
         sync: false
       - key: GEMINI_MODEL
         value: gemini-3.6-flash
+      - key: GEMINI_PLANNER_TIMEOUT_MS
+        value: "50000"
       - key: GEMINI_TTS_MODEL
         value: gemini-3.1-flash-tts-preview
       - key: GEMINI_TTS_VOICE

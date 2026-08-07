@@ -34,6 +34,10 @@ if RENDER_EXTERNAL_HOSTNAME and RENDER_EXTERNAL_HOSTNAME not in ALLOWED_HOSTS:
 
 GEMINI_API_KEY = env('GEMINI_API_KEY', default='')
 GEMINI_MODEL = env('GEMINI_MODEL', default='gemini-3.6-flash')
+GEMINI_PLANNER_TIMEOUT_MS = env.int(
+    'GEMINI_PLANNER_TIMEOUT_MS',
+    default=50000,
+)
 GEMINI_TTS_MODEL = env(
     'GEMINI_TTS_MODEL',
     default='gemini-3.1-flash-tts-preview',

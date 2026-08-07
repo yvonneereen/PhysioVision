@@ -96,6 +96,24 @@ class ClinicianAssistantWebsiteTests(APITestCase):
         self.assertEqual(response.data["command"], "pain")
         self.assertIn("in your roster", response.data["reply"])
 
+    @patch("api.core.views.generate_agent_reply", return_value="Natural-language reply")
+    def test_condition_name_containing_pain_is_not_misread_as_lookup(self, generate_reply):
+        message = (
+            "Rosanne Lee is the patient; Patellofemoral Pain Syndrome is the condition."
+        )
+
+        response = self.ask(message)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("command", response.data)
+        self.assertEqual(response.data["reply"], "Natural-language reply")
+        generate_reply.assert_called_once_with(
+            self.user,
+            message,
+            movement_context={},
+            history=[],
+        )
+
     def test_assign_creates_prescription_for_own_patient(self):
         response = self.ask("assign Assistant Half Squats to Sarah")
 

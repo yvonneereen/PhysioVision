@@ -1042,6 +1042,7 @@ class AgentChatView(APIView):
 
     def post(self, request):
         message = str(request.data.get('message', '')).strip()
+        raw_history = request.data.get('history', [])
 
         if not message:
             return Response(
@@ -1060,6 +1061,15 @@ class AgentChatView(APIView):
             if request.user.role == UserRole.PATIENT
             else {}
         )
+        history = []
+        if isinstance(raw_history, list):
+            for item in raw_history[-8:]:
+                if not isinstance(item, dict):
+                    continue
+                role = item.get('role')
+                content = str(item.get('content', '')).strip()[:2000]
+                if role in {'user', 'assistant'} and content:
+                    history.append({'role': role, 'content': content})
 
         try:
             command_result = (
@@ -1074,6 +1084,7 @@ class AgentChatView(APIView):
                     request.user,
                     message,
                     movement_context=movement_context,
+                    history=history,
                 )
             )
         except Exception:

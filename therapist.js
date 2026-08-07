@@ -945,6 +945,10 @@ async function handleClinicalAssistantMessage(event) {
   const status = document.getElementById("clinical-ai-status");
   const message = input.value.trim();
   if (!message) return;
+  const history = aiConversationMessages
+    .filter(item => ["user", "assistant"].includes(item.sender))
+    .slice(-8)
+    .map(item => ({ role: item.sender === "user" ? "user" : "assistant", content: item.body }));
   aiConversationMessages.push({ sender: "user", body: message });
   input.value = "";
   button.disabled = true;
@@ -955,7 +959,7 @@ async function handleClinicalAssistantMessage(event) {
     thread.scrollTop = thread.scrollHeight;
   }
   try {
-    const result = await sendAgentMessage(message);
+    const result = await sendAgentMessage(message, {}, history);
     aiConversationMessages.push({
       sender: "assistant",
       body: result.reply,

@@ -148,16 +148,16 @@ def dispatch_clinician_command(user, message):
     if text in {"help", "commands", "what can you do", "what can you do?"}:
         return response(HELP_TEXT, "help")
 
-    if "my patients" in text or "my roster" in text:
+    if text in {"my patients", "my roster", "show my patients", "show my roster"}:
         return response(_plain_blocks(services.build_roster_summary_blocks(clinician)), "roster")
 
-    if "needs review" in text or "who needs" in text:
+    if text in {"needs review", "who needs review", "show needs review"}:
         return response(_plain_blocks(services.build_needs_review_blocks(clinician)), "needs_review")
 
     if text == "today" or "today's overview" in text:
         return response(_plain_blocks(services.build_today_blocks(clinician)), "today")
 
-    if re.search(r"\bresolve\b", text):
+    if re.match(r"^resolve(?:\s|$)", text):
         name = _name_after(text, "resolve")
         patient, count, error = services.resolve_patient_escalations(clinician, name or "")
         if error:
@@ -173,13 +173,13 @@ def dispatch_clinician_command(user, message):
         ("adherence", services.build_adherence_blocks),
         ("sessions", services.build_sessions_blocks),
     ):
-        if re.search(rf"\b{keyword}\b", text):
+        if re.match(rf"^{keyword}(?:\s|$)", text):
             patient, error = _patient_or_reply(services, clinician, _name_after(text, keyword))
             if error:
                 return response(error, keyword)
             return response(_plain_blocks(builder(patient)), keyword)
 
-    if "send" in text and "message" in text:
+    if re.match(r"^send\s+message(?:\s|$)", text):
         name = _name_after(text, r"send\s+message")
         patient, body, error = services.send_patient_message(clinician, name or "")
         if error:
@@ -190,7 +190,7 @@ def dispatch_clinician_command(user, message):
             changed=True,
         )
 
-    if re.search(r"\bconfirm\b", text):
+    if re.match(r"^confirm(?:\s|$)", text):
         name = _name_after(text, "confirm")
         consultation, error = services.confirm_consultation(clinician, name or "")
         if error:
@@ -202,7 +202,7 @@ def dispatch_clinician_command(user, message):
             changed=True,
         )
 
-    if re.search(r"\bassign\b", text):
+    if re.match(r"^assign(?:\s|$)", text):
         match = re.search(r"assign\s+(.+?)\s+to\s+([a-z0-9][a-z0-9 .'-]*)$", text)
         if not match:
             return response("Use: assign [exercise] to [patient]", "assign")
@@ -219,7 +219,7 @@ def dispatch_clinician_command(user, message):
             changed=True,
         )
 
-    if "accept" in text and "plan" in text:
+    if re.match(r"^accept\s+plan(?:\s|$)", text):
         name = _name_after(text, r"accept\s+plan")
         patient, created, error = services.accept_plan_draft(clinician, name or "")
         if error:
@@ -230,7 +230,7 @@ def dispatch_clinician_command(user, message):
             changed=bool(created),
         )
 
-    if re.search(r"\b(build|create|draft|generate)\b.*\bplan\b", text):
+    if re.match(r"^(build|create|draft|generate)(?:\s+a)?\s+plan(?:\s|$)", text):
         name_match = re.search(
             r"(?:build|create|draft|generate)(?:\s+a)?\s+plan\s+(?:for\s+)?(.+?)"
             r"(?=\s+[234]\s*days?\b|\s+(?:with\s+(?:a\s+)?band|no\s+equipment|no\s+kit)\b|$)",
@@ -258,7 +258,7 @@ def dispatch_clinician_command(user, message):
             data=_plan_payload(draft),
         )
 
-    if re.search(r"\brevise\b", text):
+    if re.match(r"^revise(?:\s|$)", text):
         match = re.search(r"revise\s+([a-z][a-z'-]*)\s+(.+)", text)
         if not match:
             return response("Use: revise [patient] [what to change]", "revise_plan")
@@ -274,7 +274,7 @@ def dispatch_clinician_command(user, message):
             data=_plan_payload(draft),
         )
 
-    if "draft note" in text or ("note" in text and "draft" in text):
+    if re.match(r"^draft\s+note(?:\s|$)", text):
         name = _general_name(text) or _name_after(text, r"draft\s+note")
         patient, error = _patient_or_reply(services, clinician, name)
         if error:
@@ -284,14 +284,14 @@ def dispatch_clinician_command(user, message):
             return response(f"No sessions found for {patient.user.first_name}.", "draft_note")
         return response(services.generate_clinical_note(session), "draft_note")
 
-    if "draft message" in text:
+    if re.match(r"^draft\s+message(?:\s|$)", text):
         name = _general_name(text) or _name_after(text, r"draft\s+message")
         patient, error = _patient_or_reply(services, clinician, name)
         if error:
             return response(error, "draft_message")
         return response(services.generate_patient_message(patient), "draft_message")
 
-    if re.search(r"\b(book|schedule)\b", text):
+    if re.match(r"^(book|schedule)(?:\s|$)", text):
         name = _general_name(text)
         patient, error = _patient_or_reply(services, clinician, name)
         if error:
@@ -307,7 +307,7 @@ def dispatch_clinician_command(user, message):
             changed=True,
         )
 
-    if "progress" in text or text.startswith("show "):
+    if re.match(r"^show\s+.+\s+progress$", text):
         match = re.search(r"show\s+(.+?)\s+progress", text)
         name = match.group(1).strip() if match else _general_name(text)
         patient, error = _patient_or_reply(services, clinician, name)

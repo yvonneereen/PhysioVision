@@ -7,7 +7,7 @@ import {
   measureHandExerciseFrame,
   measurePoseExerciseFrame,
 } from "./exercise-tracking.js?v=2";
-import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=43";
+import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=44";
 import { POSES } from "./poses.js";
 import {
   calibrationFrameMatchesPhase,
@@ -2455,8 +2455,8 @@ function movementTrackingGuidance(feedback) {
       : "I cannot measure a complete leg angle. ";
     return (
       measurement
-      + "Step farther back or turn slightly until one complete shoulder, hip, "
-      + "knee, and ankle line is visible. Keep the chair beside you, not in "
+      + "Step farther back or turn slightly until one complete hip, knee, and "
+      + "ankle line is visible. Keep the chair beside you, not in "
       + "front of the visible leg."
     );
   }
@@ -2885,7 +2885,7 @@ function calibrationVisibilityGuidance({ missingMeasurements, weakPoints }) {
     if (engine.exercise.id === "half-squats") {
       return (
         "I cannot measure a complete knee angle. Step farther back or turn "
-        + "slightly until one shoulder, hip, knee, and ankle line is visible. "
+        + "slightly until one hip, knee, and ankle line is visible. "
         + "Keep the chair beside you, not in front of the visible leg."
       );
     }
@@ -2954,7 +2954,7 @@ function calibrationPhaseGuidance(type) {
   if (type === "target" && capturesLegAngles) {
     return (
       `I can see the required joints, but I have not detected the ${phase.replaceAll("_", " ")} position. `
-      + "Move only as far as is comfortable, then hold still so I can record your knee and hip angles."
+      + "Move only as far as is comfortable, then hold still so I can record your knee angle."
     );
   }
   return (

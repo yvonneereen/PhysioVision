@@ -33,7 +33,7 @@ const halfSquat = EXERCISE_MAP["half-squats"];
     weakPoints: ["rightHip", "rightKnee", "rightAnkle"],
   };
   const inspection = inspectCalibrationFrame(halfSquat, angles, "right");
-  assert.deepEqual(inspection.frame, { knee: 120, hip: 125 });
+  assert.deepEqual(inspection.frame, { knee: 120 });
   assert.deepEqual(inspection.missingMeasurements, []);
   assert.equal(inspection.trackingSide, "left");
 
@@ -121,8 +121,8 @@ const targetCaptures = [
     },
   });
   const tamperedSquat = tampered.phases.find((phase) => phase.name === "squat");
-  assert.deepEqual(tamperedSquat.knee, [90, 145]);
-  assert.deepEqual(tamperedSquat.hip, [90, 150]);
+  assert.deepEqual(tamperedSquat.knee, [90, 155]);
+  assert.deepEqual(tamperedSquat.hip, [90, 135]);
 }
 
 {
@@ -137,7 +137,7 @@ const targetCaptures = [
   });
   const squat = legacy.phases.find((phase) => phase.name === "squat");
   assert.deepEqual(squat.knee, [118, 142]);
-  assert.deepEqual(squat.hip, [122, 146]);
+  assert.deepEqual(squat.hip, [90, 135]);
 }
 
 {
@@ -160,6 +160,17 @@ const targetCaptures = [
   );
   assert.equal(
     calibrationFrameMatchesPhase(halfSquat, squatFrame, "target"),
+    true
+  );
+}
+
+{
+  assert.equal(
+    calibrationFrameMatchesPhase(
+      halfSquat,
+      { knee: 152, hip: 158 },
+      "target"
+    ),
     true
   );
 }

@@ -108,7 +108,7 @@ export const EXERCISES = [
     prescription: { sets: 3, reps: 10, holdSeconds: 5, daysPerWeek: "4–5" },
     camera: "front", // required for bilateral symmetry and facing-direction checks
     trackingWarning:
-      "Face the camera and keep one complete shoulder, hip, knee, and ankle line visible. Keep both legs visible when possible for symmetry feedback.",
+      "Face the camera and keep one complete hip, knee, and ankle line visible. Keep both shoulders and legs visible when possible for posture and symmetry feedback.",
     trackedAngles: {
       leftKnee:  { points: ["leftHip",  "leftKnee",  "leftAnkle"]  },
       rightKnee: { points: ["rightHip", "rightKnee", "rightAnkle"] },
@@ -128,35 +128,51 @@ export const EXERCISES = [
     // complete kinetic chain is enough to recognize the movement; the second
     // leg remains useful for optional symmetry coaching.
     allowOppositeSideFallback: true,
-    trackingVisibilityThreshold: 0.35,
+    trackingVisibilityThreshold: 0.3,
     matchThreshold: 0.85,
-    // Require a position to remain stable before advancing the rep state.
+    // A knee angle only needs the hip, knee and ankle landmarks. Treating the
+    // shoulder-dependent hip angle as mandatory made otherwise visible squats
+    // fail, especially when an older adult was close to the camera.
+    trackingRequiredMeasurements: ["knee"],
+    // Recognize a comfortable change from the person's own standing angle, so
+    // a safe shallow squat is not rejected by a one-size-fits-all depth.
+    adaptivePhaseTracking: {
+      measurement: "knee",
+      fromPhase: "standing",
+      targetPhase: "squat",
+      minimumChange: 10,
+      targetRange: [90, 155],
+      returnTolerance: 8,
+    },
+    preferExpectedPhase: true,
+    // Brief landmark flicker is common while knees bend. Preserve a nearly
+    // confirmed phase across a few missed frames, but reset after sustained
+    // tracking loss so stale poses cannot earn a repetition.
     phaseConfirmationMs: 400,
+    phaseInterruptionGraceMs: 250,
+    trackingLossGraceMs: 450,
     maxCues: 1,
     calibration: {
       startPhase: "standing",
       targetPhase: "squat",
-      captureKeys: ["knee", "hip"],
+      captureKeys: ["knee"],
       // Knee-forward depth is retained as an optional coaching measurement,
       // but it must not block calibration or repetition recognition. Its
       // camera-depth estimate is unreliable from a front-facing camera.
-      personalizedKeys: ["knee", "hip"],
+      personalizedKeys: ["knee"],
       toleranceDegrees: 12,
       safeRanges: {
         start: {
           knee: [145, 180],
-          hip: [145, 180],
         },
         target: {
           // A shallower comfortable squat can be calibrated, while 90° remains
           // the deepest permitted knee angle in this prototype.
-          knee: [90, 145],
-          hip: [90, 150],
+          knee: [90, 155],
         },
       },
       captureErrors: {
         knee: "Use a comfortable half-squat depth and do not bend past 90°.",
-        hip: "Use a smaller, comfortable movement for this calibration.",
       },
     },
     phases: [

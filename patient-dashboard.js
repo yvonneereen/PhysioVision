@@ -25,9 +25,9 @@ import {
   shouldShowPhysiotherapistRequest,
 } from "./patient-dashboard-state.js?v=6";
 import { saveProfile } from "./personalization.js?v=13";
-import { getLocale, translateText } from "./i18n.js?v=16";
+import { getLocale, translateText } from "./i18n.js?v=17";
 import { voiceGuidance } from "./voice-guidance.js?v=26";
-import { EXERCISE_MAP } from "./exercises/registry.js?v=54";
+import { EXERCISE_MAP } from "./exercises/registry.js?v=55";
 
 const WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions";
 

@@ -181,12 +181,22 @@ const halfSquatBottom = (overrides = {}) =>
 
 {
   const engine = new FeedbackEngine("half-squats", "right");
-  const noCompleteLeg = halfSquatPose({
+  const oneMeasurableKnee = halfSquatPose({
     leftKnee: hidden,
     rightHip: hidden,
   });
-  const result = engine.update(noCompleteLeg);
+  const result = engine.update(oneMeasurableKnee);
 
+  assert.equal(result.trackingReady, true);
+  assert.equal(result.trackingSide, "right");
+}
+
+{
+  const engine = new FeedbackEngine("half-squats", "right");
+  const result = engine.update(halfSquatPose({
+    leftKnee: hidden,
+    rightKnee: hidden,
+  }));
   assert.equal(result.trackingReady, false);
   assert.equal(result.progress, 0);
   assert.ok(result.missingMeasurements.length > 0);
@@ -204,6 +214,80 @@ const halfSquatBottom = (overrides = {}) =>
   assert.equal(engine.update(shallowSquat, 900).phase, "squat");
   engine.update(halfSquatPose(), 1000);
   assert.equal(engine.update(halfSquatPose(), 1400).repCount, 1);
+}
+
+{
+  const engine = new FeedbackEngine("half-squats", "right");
+  const shallowSquat = halfSquatPose({
+    rightKnee: visible(152),
+    rightHip: hidden,
+  });
+  const standingWithHiddenHip = halfSquatPose({ rightHip: hidden });
+
+  engine.update(standingWithHiddenHip, 0);
+  engine.update(standingWithHiddenHip, 400);
+  engine.update(shallowSquat, 500);
+  engine.update(shallowSquat, 900);
+  engine.update(standingWithHiddenHip, 1000);
+  const completed = engine.update(standingWithHiddenHip, 1400);
+
+  assert.equal(completed.repCount, 1);
+  assert.equal(completed.trackingReady, true);
+}
+
+{
+  const engine = new FeedbackEngine("half-squats", "right");
+  const smallStandingSway = halfSquatPose({ rightKnee: visible(162) });
+
+  engine.update(halfSquatPose(), 0);
+  engine.update(halfSquatPose(), 400);
+  engine.update(smallStandingSway, 500);
+  engine.update(smallStandingSway, 1000);
+  engine.update(halfSquatPose(), 1100);
+  const result = engine.update(halfSquatPose(), 1600);
+
+  assert.equal(result.repCount, 0);
+  assert.equal(result.phase, "standing");
+}
+
+{
+  const engine = new FeedbackEngine("half-squats", "right");
+  const rightOnlyStanding = halfSquatPose({ leftKnee: hidden });
+  const leftOnlySquat = halfSquatPose({
+    leftKnee: visible(150),
+    rightKnee: hidden,
+  });
+
+  engine.update(rightOnlyStanding, 0);
+  engine.update(rightOnlyStanding, 400);
+  engine.update(leftOnlySquat, 500);
+  engine.update(leftOnlySquat, 900);
+  engine.update(rightOnlyStanding, 1000);
+  const completed = engine.update(rightOnlyStanding, 1400);
+
+  assert.equal(completed.repCount, 1);
+}
+
+{
+  const engine = new FeedbackEngine("half-squats", "right");
+  const squat = halfSquatBottom();
+  const noKnees = halfSquatPose({ leftKnee: hidden, rightKnee: hidden });
+
+  engine.update(halfSquatPose(), 0);
+  engine.update(halfSquatPose(), 200);
+  engine.update(noKnees, 260);
+  engine.update(halfSquatPose(), 400);
+  engine.update(squat, 500);
+  engine.update(squat, 700);
+  engine.update(noKnees, 760);
+  engine.update(squat, 900);
+  engine.update(halfSquatPose(), 1000);
+  engine.update(halfSquatPose(), 1200);
+  engine.update(noKnees, 1260);
+  const completed = engine.update(halfSquatPose(), 1400);
+
+  assert.equal(completed.startConfirmed, true);
+  assert.equal(completed.repCount, 1);
 }
 
 {

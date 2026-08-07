@@ -23,7 +23,7 @@ assert.ok(
 );
 assert.deepEqual(
   [...new Set(i18nCacheVersions)],
-  ["16"],
+  ["17"],
   "all browser entry points must use one i18n URL so only one DOM observer is created"
 );
 
@@ -141,14 +141,14 @@ const liveGuideSources = [
   "Your camera feed is processed for movement guidance and is not recorded in this prototype.",
   "Local possible-fall check available",
   "The camera check is available. Verify an emergency contact in My profile before automatic alerts can be sent.",
-  "Face the camera and keep one complete shoulder, hip, knee, and ankle line visible. Keep both legs visible when possible for symmetry feedback.",
+  "Face the camera and keep one complete hip, knee, and ankle line visible. Keep both shoulders and legs visible when possible for posture and symmetry feedback.",
   "Tracking reps from your right side",
   "Rep tracking is working from your left side. Keep both legs visible when possible for symmetry feedback.",
-  "I cannot measure your right knee and right hip angles. Step farther back or turn slightly until one complete shoulder, hip, knee, and ankle line is visible. Keep the chair beside you, not in front of the visible leg.",
-  "I cannot measure a complete leg angle. Step farther back or turn slightly until one complete shoulder, hip, knee, and ankle line is visible. Keep the chair beside you, not in front of the visible leg.",
+  "I cannot measure your right knee angle. Step farther back or turn slightly until one complete hip, knee, and ankle line is visible. Keep the chair beside you, not in front of the visible leg.",
+  "I cannot measure a complete leg angle. Step farther back or turn slightly until one complete hip, knee, and ankle line is visible. Keep the chair beside you, not in front of the visible leg.",
   "Bend the visible knee and hip a little more, only as far as is comfortable, then hold briefly.",
   "Stand tall and straighten the visible knee and hip, then hold briefly.",
-  "I cannot measure a complete knee angle. Step farther back or turn slightly until one shoulder, hip, knee, and ankle line is visible. Keep the chair beside you, not in front of the visible leg.",
+  "I cannot measure a complete knee angle. Step farther back or turn slightly until one hip, knee, and ankle line is visible. Keep the chair beside you, not in front of the visible leg.",
   "I cannot measure a complete hip angle. Reposition until one shoulder, hip, knee, and ankle line is visible from head to foot.",
   "Keep every required joint visible so I can guide you safely.",
   "Hold reset — keep the required joints visible to restart",
@@ -216,10 +216,10 @@ for (const locale of ["zh-SG", "ms-SG", "ta-SG"]) {
 
 assert.equal(
   translateText(
-    "Face the camera and keep one complete shoulder, hip, knee, and ankle line visible. Keep both legs visible when possible for symmetry feedback.",
+    "Face the camera and keep one complete hip, knee, and ankle line visible. Keep both shoulders and legs visible when possible for posture and symmetry feedback.",
     "zh-SG"
   ),
-  "面向摄像头，并确保一侧肩膀、髋部、膝盖和脚踝的完整轮廓可见。在可能的情况下，请保持双腿可见，以获得对称性反馈。"
+  "面向摄像头，并确保一侧髋部、膝盖和脚踝的完整轮廓可见。在可能的情况下，请保持双肩和双腿可见，以获得姿势和对称性反馈。"
 );
 assert.equal(
   translateText("Hand and wrist tracking", "zh-SG"),
@@ -310,10 +310,10 @@ assert.equal(
 );
 assert.equal(
   translateText(
-    "I cannot measure your right knee and right hip angles. Step farther back or turn slightly until one complete shoulder, hip, knee, and ankle line is visible. Keep the chair beside you, not in front of the visible leg.",
+    "I cannot measure your right knee angle. Step farther back or turn slightly until one complete hip, knee, and ankle line is visible. Keep the chair beside you, not in front of the visible leg.",
     "zh-SG"
   ),
-  "我无法测量您的右膝和右髋角度。请向后退或稍微转身，直到一侧肩膀、髋部、膝盖和脚踝的完整轮廓可见。请将椅子放在身旁，不要挡住可见的腿。"
+  "我无法测量您的右膝角度。请向后退或稍微转身，直到一侧髋部、膝盖和脚踝的完整轮廓可见。请将椅子放在身旁，不要挡住可见的腿。"
 );
 assert.equal(
   translateText("2 sets × 10 reps · 3 days/week", "zh-SG"),

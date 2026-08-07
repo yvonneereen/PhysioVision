@@ -1,4 +1,4 @@
-import { EXERCISES, EXERCISE_MAP } from "../exercises/registry.js?v=54";
+import { EXERCISES, EXERCISE_MAP } from "../exercises/registry.js?v=55";
 import { applyCalibration } from "../personalization.js";
 
 export { EXERCISES };
@@ -31,6 +31,9 @@ export class FeedbackEngine {
     this.inHold = false; // true while user is holding a stretch position
     this.phaseCandidate = null;
     this.phaseCandidateSince = 0;
+    this.phaseCandidateInterruptedAt = null;
+    this.trackingLostSince = null;
+    this.adaptiveBaselines = {};
     this.startConfirmed = !this.exercise.phaseConfirmationMs;
   }
 
@@ -45,19 +48,31 @@ export class FeedbackEngine {
     let canAdvance = tracking.ready;
 
     if (!tracking.ready) {
-      this._resetPhaseCandidate();
-      this.startConfirmed = !this.exercise.phaseConfirmationMs;
+      if (this.trackingLostSince === null) {
+        this.trackingLostSince = timestampMs;
+      }
+      this._interruptPhaseCandidate(timestampMs);
+      const trackingLossGraceMs = this.exercise.trackingLossGraceMs ?? 0;
+      if (timestampMs - this.trackingLostSince >= trackingLossGraceMs) {
+        this._resetPhaseCandidate();
+        this.startConfirmed = !this.exercise.phaseConfirmationMs;
+        this.adaptiveBaselines = {};
+      }
     } else if (!this.startConfirmed) {
+      this.trackingLostSince = null;
       canAdvance = false;
       if (
         detected === this.stages[0] &&
         this._phaseConfirmed(`start:${detected}`, timestampMs)
       ) {
         this.startConfirmed = true;
+        this._captureAdaptiveBaseline(angles);
         this._resetPhaseCandidate();
       } else if (detected !== this.stages[0]) {
-        this._resetPhaseCandidate();
+        this._interruptPhaseCandidate(timestampMs);
       }
+    } else {
+      this.trackingLostSince = null;
     }
 
     if (!canAdvance) {
@@ -74,13 +89,13 @@ export class FeedbackEngine {
       const nextStage = this.stages[this.stageIdx + 1];
       if (detected === nextStage) {
         if (this._phaseConfirmed(detected, timestampMs)) {
-          this._advanceToPhase(detected);
+          this._advanceToPhase(detected, angles);
         }
       } else {
-        this._resetPhaseCandidate();
+        this._interruptPhaseCandidate(timestampMs);
       }
     } else {
-      this._resetPhaseCandidate();
+      this._interruptPhaseCandidate(timestampMs);
     }
 
     const expectedNextPhase = this.stages[this.stageIdx + 1] ?? this.stages[0];
@@ -129,13 +144,32 @@ export class FeedbackEngine {
   // ── Private ──────────────────────────────────────────────────────────────
 
   _detectPhase(angles) {
-    for (const phase of this.exercise.phases) {
+    const current = this.stages[this.stageIdx];
+    const expected = this.stages[this.stageIdx + 1] ?? this.stages[0];
+    const preferredNames = this.exercise.preferExpectedPhase
+      ? this.startConfirmed
+        ? [expected, current]
+        : [this.stages[0]]
+      : [];
+    const orderedPhases = [
+      ...preferredNames
+        .map((name) => this.exercise.phases.find((phase) => phase.name === name))
+        .filter(Boolean),
+      ...this.exercise.phases,
+    ].filter((phase, index, phases) =>
+      phases.findIndex((candidate) => candidate.name === phase.name) === index
+    );
+
+    for (const phase of orderedPhases) {
       if (this._phaseMatches(phase, angles)) return phase.name;
     }
     return null;
   }
 
   _phaseMatches(phase, angles) {
+    const adaptiveMatch = this._adaptivePhaseMatches(phase, angles);
+    if (adaptiveMatch !== null) return adaptiveMatch;
+
     // Phase ranges stay strict unless an individual exercise explicitly opts
     // into tolerant matching. A global tolerance makes transition positions
     // look like completed phases and can count false repetitions.
@@ -157,10 +191,13 @@ export class FeedbackEngine {
   }
 
   _trackingStatus(angles) {
+    const configuredRequiredKeys = this.exercise.trackingRequiredMeasurements;
     const requiredKeys = new Set(
-      this.exercise.phases.flatMap((phase) =>
-        Object.keys(phase).filter((key) => key !== "name")
-      )
+      configuredRequiredKeys?.length
+        ? configuredRequiredKeys
+        : this.exercise.phases.flatMap((phase) =>
+            Object.keys(phase).filter((key) => key !== "name")
+          )
     );
     const oppositeSide = this.side === "left" ? "right" : "left";
     const candidateSides = this.exercise.allowOppositeSideFallback
@@ -239,21 +276,43 @@ export class FeedbackEngine {
     const confirmationMs = this.exercise.phaseConfirmationMs ?? 0;
     if (confirmationMs <= 0) return true;
 
-    if (this.phaseCandidate !== phase) {
+    const interruptionGraceMs = this.exercise.phaseInterruptionGraceMs ?? 0;
+    const interruptedTooLong = this.phaseCandidateInterruptedAt !== null
+      && timestampMs - this.phaseCandidateInterruptedAt > interruptionGraceMs;
+    if (this.phaseCandidate !== phase || interruptedTooLong) {
       this.phaseCandidate = phase;
       this.phaseCandidateSince = timestampMs;
+      this.phaseCandidateInterruptedAt = null;
       return false;
     }
 
+    this.phaseCandidateInterruptedAt = null;
     return timestampMs - this.phaseCandidateSince >= confirmationMs;
+  }
+
+  _interruptPhaseCandidate(timestampMs) {
+    if (!this.phaseCandidate) return;
+    const interruptionGraceMs = this.exercise.phaseInterruptionGraceMs ?? 0;
+    if (interruptionGraceMs <= 0) {
+      this._resetPhaseCandidate();
+      return;
+    }
+    if (this.phaseCandidateInterruptedAt === null) {
+      this.phaseCandidateInterruptedAt = timestampMs;
+      return;
+    }
+    if (timestampMs - this.phaseCandidateInterruptedAt > interruptionGraceMs) {
+      this._resetPhaseCandidate();
+    }
   }
 
   _resetPhaseCandidate() {
     this.phaseCandidate = null;
     this.phaseCandidateSince = 0;
+    this.phaseCandidateInterruptedAt = null;
   }
 
-  _advanceToPhase(phase) {
+  _advanceToPhase(phase, angles) {
     this._resetPhaseCandidate();
     this.stageIdx++;
     this.currentPhase = phase;
@@ -267,7 +326,79 @@ export class FeedbackEngine {
       this.repCount++;
       this.stageIdx = 0;
       this.currentPhase = this.stages[0];
+      this._captureAdaptiveBaseline(angles);
     }
+  }
+
+  _adaptivePhaseMatches(phase, angles) {
+    const config = this.exercise.adaptivePhaseTracking;
+    if (!config || !config.measurement) return null;
+
+    const measurement = this._resolve(config.measurement, angles);
+    if (
+      !measurement
+      || measurement.lowConfidence
+      || !Number.isFinite(measurement.value)
+    ) {
+      return false;
+    }
+
+    const baseline = this._adaptiveBaseline(config.measurement);
+    if (phase.name === config.fromPhase) {
+      if (
+        this.startConfirmed
+        && this.stageIdx > 0
+        && Number.isFinite(baseline)
+      ) {
+        return measurement.value >= baseline - (config.returnTolerance ?? 6);
+      }
+      const condition = phase[config.measurement];
+      return condition
+        ? _conditionCloseness(measurement.value, condition)
+          >= (this.exercise.matchThreshold ?? 1)
+        : null;
+    }
+
+    if (phase.name !== config.targetPhase || !Number.isFinite(baseline)) {
+      return null;
+    }
+    const targetRange = config.targetRange ?? phase[config.measurement];
+    return baseline - measurement.value >= (config.minimumChange ?? 0)
+      && _conditionMatches(measurement.value, targetRange);
+  }
+
+  _captureAdaptiveBaseline(angles) {
+    const config = this.exercise.adaptivePhaseTracking;
+    if (!config?.measurement) return;
+
+    for (const side of ["left", "right"]) {
+      const measurement = this._resolve(config.measurement, angles, side);
+      if (
+        !measurement
+        || measurement.lowConfidence
+        || !Number.isFinite(measurement.value)
+      ) {
+        continue;
+      }
+      const key = `${side}:${config.measurement}`;
+      this.adaptiveBaselines[key] = Number.isFinite(this.adaptiveBaselines[key])
+        ? Math.max(this.adaptiveBaselines[key], measurement.value)
+        : measurement.value;
+    }
+  }
+
+  _adaptiveBaseline(measurementName) {
+    const direct = this.adaptiveBaselines[
+      `${this.frameTrackingSide}:${measurementName}`
+    ];
+    if (Number.isFinite(direct)) return direct;
+
+    const available = Object.entries(this.adaptiveBaselines)
+      .filter(([key, value]) =>
+        key.endsWith(`:${measurementName}`) && Number.isFinite(value)
+      )
+      .map(([, value]) => value);
+    return available.length ? Math.max(...available) : null;
   }
 
   // scoring from 0 - 1, base on how well the stage is done, if 1 then can move on to the next stage
@@ -277,6 +408,8 @@ export class FeedbackEngine {
     const nextName = this.stages[this.stageIdx + 1];
     const nextPhase = this.exercise.phases.find((p) => p.name === nextName);
     if (!nextPhase) return 0;
+    const adaptiveProgress = this._adaptiveProgress(nextName, angles);
+    if (adaptiveProgress !== null) return adaptiveProgress;
     // Use the weakest (minimum) condition, not the average — a phase only
     // matches when EVERY condition is inside range, so an averaged bar can sit
     // near 100% while one out-of-range angle blocks the rep from counting.
@@ -291,6 +424,27 @@ export class FeedbackEngine {
       weakest = Math.min(weakest, closeness);
     }
     return total === 0 ? 0 : weakest;
+  }
+
+  _adaptiveProgress(nextName, angles) {
+    const config = this.exercise.adaptivePhaseTracking;
+    if (!config || nextName !== config.targetPhase) return null;
+    const measurement = this._resolve(config.measurement, angles);
+    const baseline = this._adaptiveBaseline(config.measurement);
+    if (
+      !measurement
+      || measurement.lowConfidence
+      || !Number.isFinite(measurement.value)
+      || !Number.isFinite(baseline)
+    ) {
+      return 0;
+    }
+    const targetRange = config.targetRange;
+    const rangeChange = Array.isArray(targetRange)
+      ? Math.max(0, baseline - targetRange[1])
+      : 0;
+    const minimumChange = Math.max(1, config.minimumChange ?? 1, rangeChange);
+    return Math.min(1, Math.max(0, (baseline - measurement.value) / minimumChange));
   }
 
   _evaluateCues(angles) {

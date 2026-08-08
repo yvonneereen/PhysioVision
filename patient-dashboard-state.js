@@ -18,6 +18,15 @@ export function isClinicianGuidedProfile(profile = {}) {
   );
 }
 
+export function effectivePatientPathway(profile = {}) {
+  const pathwayChoice =
+    profile.pathway_choice ?? profile.pathwayChoice ?? "unselected";
+  if (pathwayChoice !== "unselected") return pathwayChoice;
+  return isClinicianGuidedProfile(profile)
+    ? "physiotherapist"
+    : "unselected";
+}
+
 export function isPhysiotherapistRequestPending(profile = {}) {
   const requestedAt =
     profile.physiotherapist_requested_at

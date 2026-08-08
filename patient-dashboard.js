@@ -17,6 +17,7 @@ import {
 } from "./api.js?v=32";
 import {
   analysePatientTrend,
+  effectivePatientPathway,
   findUpcomingConsultation,
   isClinicianGuidedProfile,
   isCurrentPrescription,
@@ -24,7 +25,7 @@ import {
   mergeConsultationTranscript,
   shouldShowPhysiotherapistRequest,
   walkingConfidencePlanNeedsRefresh,
-} from "./patient-dashboard-state.js?v=12";
+} from "./patient-dashboard-state.js?v=13";
 import { saveProfile } from "./personalization.js?v=13";
 import { getLocale, translateText } from "./i18n.js?v=31";
 import { voiceGuidance } from "./voice-guidance.js?v=40";
@@ -147,6 +148,8 @@ let toastTimer = null;
 let bookingEditVersion = 0;
 let bookingDraftRequestId = 0;
 let bookingVoiceActive = false;
+let dashboardActivationPromise = null;
+let dashboardActivationUserId = null;
 
 function results(data) {
   return data?.results ?? data ?? [];
@@ -193,11 +196,36 @@ function setView(mode) {
   }
 }
 
-function showDashboard() {
-  if (currentUser?.role !== "patient") return;
-  setView("dashboard");
-  window.scrollTo({ top: 0, behavior: "smooth" });
-  dashboard.focus({ preventScroll: true });
+async function showDashboard(requestedUser = null) {
+  const requestedPatient = requestedUser?.role === "patient"
+    ? requestedUser
+    : null;
+  const publishedPatient = window.physioVisionAuthState?.role === "patient"
+    ? window.physioVisionAuthState.user
+    : null;
+  const knownPatient = requestedPatient ?? currentUser ?? publishedPatient;
+  if (knownPatient?.role === "patient") {
+    if (knownPatient !== currentUser) {
+      await activatePatientDashboard(knownPatient);
+      return true;
+    }
+    setView("dashboard");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    dashboard.focus({ preventScroll: true });
+    return true;
+  }
+  if (!isLoggedIn()) return false;
+
+  try {
+    const user = await getMe();
+    if (user?.role !== "patient") return false;
+    await activatePatientDashboard(user);
+    return true;
+  } catch (_) {
+    // Keep the authenticated navigation intact and let a later My home click
+    // retry the private profile request instead of changing account state.
+    return false;
+  }
 }
 
 function openPlanModal() {
@@ -860,30 +888,53 @@ async function loadDashboardData() {
 }
 
 async function activatePatientDashboard(user) {
-  if (user?.role !== "patient") return;
-  currentUser = user;
-  saveProfile({
-    ...browserProfileFromApi(user.profile ?? {}),
-    name: user.first_name ?? "",
-  }, {
-    syncBackend: false,
-    syncScreening: false,
-  });
-  patientName.textContent = user.first_name || "there";
-  setView("dashboard");
-  const choice =
-    user.profile?.pathway_choice ??
-    user.profile?.pathwayChoice ??
-    "unselected";
-  if (choice === "unselected") {
-    intro.textContent =
-      "Choose your exercise pathway to open the correct patient functions.";
-    showPathwayChoice();
-    return;
+  if (user?.role !== "patient") return false;
+  const userId = String(user.id ?? user.email ?? "patient");
+  if (
+    dashboardActivationPromise
+    && dashboardActivationUserId === userId
+  ) {
+    return dashboardActivationPromise;
   }
-  hidePathwayChoice();
-  updateDashboardIntro(choice);
-  await loadDashboardData();
+
+  currentUser = user;
+  patientName.textContent = user.first_name || "there";
+  // Route first. Failure of the optional browser cache must never leave an
+  // authenticated patient looking at the public landing page.
+  setView("dashboard");
+  dashboardActivationUserId = userId;
+  dashboardActivationPromise = (async () => {
+    try {
+      saveProfile({
+        ...browserProfileFromApi(user.profile ?? {}),
+        name: user.first_name ?? "",
+      }, {
+        syncBackend: false,
+        syncScreening: false,
+      });
+    } catch (_) {
+      // Session storage is only a cache. The backend profile remains the
+      // source of truth for authentication and clinician linkage.
+    }
+
+    const choice = effectivePatientPathway(user.profile ?? {});
+    if (choice === "unselected") {
+      intro.textContent =
+        "Choose your exercise pathway to open the correct patient functions.";
+      showPathwayChoice();
+      return true;
+    }
+    hidePathwayChoice();
+    updateDashboardIntro(choice);
+    await loadDashboardData();
+    return true;
+  })().finally(() => {
+    if (dashboardActivationUserId === userId) {
+      dashboardActivationPromise = null;
+      dashboardActivationUserId = null;
+    }
+  });
+  return dashboardActivationPromise;
 }
 
 function updateDashboardIntro(choice) {
@@ -1326,7 +1377,9 @@ trendRequestButton?.addEventListener("click", () => {
 
 document
   .querySelectorAll("[data-patient-dashboard]")
-  .forEach((button) => button.addEventListener("click", showDashboard));
+  .forEach((button) => button.addEventListener("click", () => {
+    void showDashboard();
+  }));
 document
   .querySelectorAll("[data-patient-start]")
   .forEach((button) => button.addEventListener("click", () => (
@@ -1461,7 +1514,7 @@ referPhysioButton?.addEventListener("click", async () => {
 window.addEventListener("physiovision:auth-role", (event) => {
   const user = event.detail?.user;
   if (event.detail?.role === "patient") {
-    activatePatientDashboard(user);
+    void activatePatientDashboard(user);
   } else {
     currentUser = null;
     dashboard.hidden = true;
@@ -1471,6 +1524,13 @@ window.addEventListener("physiovision:auth-role", (event) => {
       "patient-practice-active",
     );
   }
+});
+
+// auth.js can finish before this module has registered its role listener.
+// This explicit request provides a lossless handoff instead of optional,
+// timing-dependent access to a global function.
+window.addEventListener("physiovision:patient-dashboard-requested", (event) => {
+  void showDashboard(event.detail?.user ?? null);
 });
 
 window.addEventListener("physiovision:profile-updated", (event) => {
@@ -1521,15 +1581,13 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden) refreshPendingPhysiotherapistRequest();
 });
 
-window.pvShowPatientDashboard = showDashboard;
+window.pvShowPatientDashboard = (user = null) => showDashboard(user);
 window.pvStartPatientExercise = startExercise;
 
-if (isLoggedIn()) {
-  getMe()
-    .then((user) => {
-      if (user.role === "patient" && !currentUser) {
-        activatePatientDashboard(user);
-      }
-    })
-    .catch(() => {});
+const initialAuthState = window.physioVisionAuthState ?? null;
+if (initialAuthState?.role === "patient" && initialAuthState.user) {
+  void activatePatientDashboard(initialAuthState.user);
+} else if (isLoggedIn()) {
+  // Handles refreshes where auth.js and this module finish in either order.
+  void showDashboard();
 }

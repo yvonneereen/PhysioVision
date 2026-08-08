@@ -172,7 +172,14 @@ function routeAfterAuthentication(user) {
         ?.click();
       return;
     }
-    window.pvShowPatientDashboard?.();
+    if (typeof window.pvShowPatientDashboard === "function") {
+      void window.pvShowPatientDashboard(user);
+      return;
+    }
+    window.dispatchEvent(new CustomEvent(
+      "physiovision:patient-dashboard-requested",
+      { detail: { user } },
+    ));
   }, 0);
 }
 

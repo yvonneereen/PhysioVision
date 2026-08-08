@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   analysePatientTrend,
+  effectivePatientPathway,
   findUpcomingConsultation,
   isClinicianGuidedProfile,
   isCurrentPrescription,
@@ -10,6 +11,22 @@ import {
   shouldShowPhysiotherapistRequest,
   walkingConfidencePlanNeedsRefresh,
 } from "../patient-dashboard-state.js";
+
+assert.equal(
+  effectivePatientPathway({
+    pathway_choice: "unselected",
+    care_path: "clinician",
+    primary_clinician: "clinician-1",
+  }),
+  "physiotherapist",
+  "an existing clinician link must override a stale unselected pathway",
+);
+
+assert.equal(
+  effectivePatientPathway({ pathway_choice: "unselected" }),
+  "unselected",
+  "an unlinked patient should still be asked to choose a pathway",
+);
 
 const dates = [
   "2026-07-27T08:00:00Z",

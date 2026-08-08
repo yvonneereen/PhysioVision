@@ -365,8 +365,8 @@ assert.equal(
 );
 assert.equal(
   microphoneReleaseDelay,
-  400,
-  "the first prompt should wait for Safari to release microphone audio mode"
+  200,
+  "the first prompt should briefly settle after Safari releases microphone audio mode"
 );
 assert.equal(
   safariAudioSession.type,
@@ -661,6 +661,8 @@ assert.equal(recognitionAtDelivery, null);
 assert.equal(spoken.at(-1).text, "Where are you feeling the pain?");
 
 const safariListeningDelays = [];
+const safariListeningTimers = new Map();
+let safariListeningTimerId = 0;
 const safariListeningSession = { type: "play-and-record" };
 const safariListeningGuidance = new VoiceGuidance({
   ...listeningWindow,
@@ -671,9 +673,15 @@ const safariListeningGuidance = new VoiceGuidance({
   },
   setTimeout: (callback, delay) => {
     safariListeningDelays.push(delay);
-    callback();
-    return safariListeningDelays.length;
+    safariListeningTimerId += 1;
+    if (delay >= 1000) {
+      safariListeningTimers.set(safariListeningTimerId, callback);
+    } else {
+      callback();
+    }
+    return safariListeningTimerId;
   },
+  clearTimeout: (timerId) => safariListeningTimers.delete(timerId),
 });
 let safariDeliveredTranscript = "";
 safariListeningGuidance.listen({
@@ -683,14 +691,26 @@ safariListeningGuidance.listen({
 });
 activeRecognitionInstance.emitResult("five");
 assert.equal(
+  activeRecognitionInstance.abortCalled,
+  true,
+  "Safari should abort recognition after capturing the final answer so the microphone releases promptly"
+);
+assert.equal(
   safariDeliveredTranscript,
   "",
   "Safari should not deliver a result while its output can still be ducked"
 );
+activeRecognitionInstance.emitAudioEnd();
 await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
 assert.equal(safariDeliveredTranscript, "five");
 assert.equal(safariListeningSession.type, "playback");
-assert.ok(safariListeningDelays.includes(400));
+assert.ok(safariListeningDelays.includes(1800));
+assert.ok(safariListeningDelays.includes(200));
+assert.equal(
+  safariListeningTimers.size,
+  0,
+  "the release timeout should be cancelled when Safari emits audioend"
+);
 
 let interimTranscript = "";
 listeningGuidance.listen({

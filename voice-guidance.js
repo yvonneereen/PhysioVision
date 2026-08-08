@@ -7,7 +7,8 @@ import { generateGuidanceSpeech } from "./api.js?v=31";
 const VOICE_PREFERENCE_KEY = "physiovision.voice.enabled.v1";
 const VOICE_RATE_PREFERENCE_KEY = "physiovision.voice.rate.v1";
 const DEFAULT_SPEECH_VOLUME = 1;
-const MICROPHONE_RELEASE_SETTLE_MS = 400;
+const MICROPHONE_RELEASE_SETTLE_MS = 200;
+const MICROPHONE_RELEASE_TIMEOUT_MS = 1800;
 const NEURAL_SPEECH_MIN_LENGTH = 18;
 const NEURAL_SPEECH_CACHE_LIMIT = 24;
 const NEURAL_TARGET_RMS = 0.16;
@@ -690,6 +691,7 @@ export class VoiceGuidance {
     this.rateControls = new Set();
     this.lastSpoken = new Map();
     this.activeRecognition = null;
+    this.pendingMicrophoneRelease = null;
     this.listeningGeneration = 0;
     this.preferredVoice = null;
     this.voiceSelectionLocked = false;
@@ -784,6 +786,7 @@ export class VoiceGuidance {
     this.cancelSpokenOutput();
 
     const recognition = new this.Recognition();
+    const markMicrophoneReleased = this.beginMicrophoneSession();
     recognition.lang = getSpeechLocale();
     recognition.interimResults = false;
     recognition.continuous = false;
@@ -843,10 +846,12 @@ export class VoiceGuidance {
         }
       });
       recognition.addEventListener("audioend", () => {
+        markMicrophoneReleased();
         if (microphoneStarted) succeed();
       });
       recognition.addEventListener("error", (event) => {
         if (releaseRequested && event?.error === "aborted") return;
+        markMicrophoneReleased();
         const errorName = event?.error === "not-allowed"
           ? "NotAllowedError"
           : event?.error === "audio-capture"
@@ -860,6 +865,7 @@ export class VoiceGuidance {
         );
       });
       recognition.addEventListener("end", () => {
+        markMicrophoneReleased();
         if (microphoneStarted) {
           succeed();
           return;
@@ -932,12 +938,62 @@ export class VoiceGuidance {
     }
   }
 
+  beginMicrophoneSession() {
+    let released = false;
+    let resolveRelease;
+    const releasePromise = new Promise((resolve) => {
+      resolveRelease = resolve;
+    });
+    this.pendingMicrophoneRelease = releasePromise;
+    return () => {
+      if (released) return;
+      released = true;
+      resolveRelease();
+      if (this.pendingMicrophoneRelease === releasePromise) {
+        this.pendingMicrophoneRelease = null;
+      }
+    };
+  }
+
+  waitForMicrophoneRelease({
+    timeoutMs = MICROPHONE_RELEASE_TIMEOUT_MS,
+  } = {}) {
+    const pendingRelease = this.pendingMicrophoneRelease;
+    if (!pendingRelease) return Promise.resolve(true);
+    const schedule = this.window?.setTimeout?.bind(this.window)
+      ?? globalThis.setTimeout;
+    const unschedule = this.window?.clearTimeout?.bind(this.window)
+      ?? globalThis.clearTimeout;
+    const safeTimeoutMs = Math.max(0, Number(timeoutMs) || 0);
+    return new Promise((resolve) => {
+      let settled = false;
+      let timeout = null;
+      const finish = (released) => {
+        if (settled) return;
+        settled = true;
+        if (timeout !== null) unschedule(timeout);
+        resolve(released);
+      };
+      pendingRelease.then(
+        () => finish(true),
+        () => finish(false)
+      );
+      timeout = schedule(() => finish(false), safeTimeoutMs);
+    });
+  }
+
   async prepareSpeechAfterMicrophoneRelease({
     settleMs = MICROPHONE_RELEASE_SETTLE_MS,
   } = {}) {
     const schedule = this.window?.setTimeout?.bind(this.window)
       ?? globalThis.setTimeout;
     const safeSettleMs = Math.max(0, Number(settleMs) || 0);
+    // SpeechRecognition can return a transcript before Safari has emitted
+    // `audioend`. A fixed delay therefore lets the next sentence begin in the
+    // quiet recording session and jump louder halfway through. Wait for the
+    // actual release signal first; use a bounded timeout only for browsers
+    // that omit it entirely.
+    await this.waitForMicrophoneRelease();
     this.usePlaybackAudioSession();
     const [voice] = await Promise.all([
       this.preparePreferredVoice(),
@@ -1304,6 +1360,7 @@ export class VoiceGuidance {
       if (!isCurrentSession()) return;
 
       const recognition = new this.Recognition();
+      const markMicrophoneReleased = this.beginMicrophoneSession();
       recognition.lang = recognitionLanguage;
       recognition.interimResults = true;
       recognition.maxAlternatives = 3;
@@ -1437,11 +1494,12 @@ export class VoiceGuidance {
               if (!isCurrentSession() || !pendingTranscript) return;
               recognizerStoppedForResult = true;
               try {
-                recognition.stop();
+                if (this.singleVoiceEngine) recognition.abort();
+                else recognition.stop();
               } catch (_) {
                 deliverRecognizedResult();
               }
-              schedule(deliverRecognizedResult, 200);
+              deliverRecognizedResult();
             }, silenceMs);
           }
           return;
@@ -1450,12 +1508,17 @@ export class VoiceGuidance {
         clearInterimTimer();
         recognizerStoppedForResult = true;
         try {
-          recognition.stop();
+          if (this.singleVoiceEngine) recognition.abort();
+          else recognition.stop();
         } catch (_) {
           deliverRecognizedResult();
         }
-        // Safari may not always dispatch `end` promptly after a final result.
-        schedule(deliverRecognizedResult, 200);
+        // Deliver immediately. Safari's path now waits on the recognizer's
+        // real `audioend`/`end` signal before it lets the next prompt speak.
+        deliverRecognizedResult();
+      });
+      recognition.addEventListener("audioend", () => {
+        markMicrophoneReleased();
       });
       recognition.addEventListener("nomatch", () => {
         retryOrFail(
@@ -1470,6 +1533,7 @@ export class VoiceGuidance {
         ) {
           return;
         }
+        markMicrophoneReleased();
         clearInterimTimer();
         if (event.error === "no-speech") {
           retryOrFail(
@@ -1490,6 +1554,7 @@ export class VoiceGuidance {
         onError?.(message, event.error || "unknown");
       });
       recognition.addEventListener("end", () => {
+        markMicrophoneReleased();
         if (this.listeningGeneration !== listeningGeneration) return;
         if (this.activeRecognition === recognition) {
           this.activeRecognition = null;

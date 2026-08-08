@@ -896,6 +896,17 @@ function renderMessagingList(threads) {
 }
 
 function aiMessageRows() {
+  const assistantText = (value) => {
+    const escaped = escapeHtml(value || "");
+    return escaped.replace(
+      /(https:\/\/[^\s<]+)/g,
+      rawUrl => {
+        const trailing = rawUrl.match(/[),.;:]+$/)?.[0] || "";
+        const url = trailing ? rawUrl.slice(0, -trailing.length) : rawUrl;
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>${trailing}`;
+      },
+    );
+  };
   const helpContent = `
     <div class="clinical-ai-help">
       <section><h4>Your roster</h4>
@@ -963,7 +974,7 @@ function aiMessageRows() {
         ? helpContent
         : ["build_plan", "revise_plan"].includes(message.command) && message.data
           ? planContent(message.data)
-          : `<p>${escapeHtml(message.body)}</p>`}
+          : `<p>${message.sender === "assistant" ? assistantText(message.body) : escapeHtml(message.body)}</p>`}
     </div>`).join("");
 }
 

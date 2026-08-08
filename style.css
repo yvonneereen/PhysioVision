@@ -6810,6 +6810,8 @@ details.metrics summary {
   line-height: 1.5;
   white-space: pre-wrap;
 }
+.clinical-ai-message-assistant p { white-space: pre-wrap; }
+.clinical-ai-message-assistant p a { color: var(--green); overflow-wrap: anywhere; }
 .clinical-ai-message-user { align-self: flex-end; }
 .clinical-ai-message-user p { color: var(--white); background: var(--green); }
 .clinical-ai-message-error p { color: var(--coral-dark); background: color-mix(in srgb, var(--coral) 12%, var(--white)); }

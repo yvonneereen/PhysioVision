@@ -1245,4 +1245,30 @@ assert.match(
   "the manual voice fallback should reappear if hands-free recognition fails"
 );
 
+assert.match(
+  source,
+  /sessionCoachingQuality\.observe\([\s\S]*?deliverPendingQualityReminder\([\s\S]*?Try this for the next two repetitions/,
+  "stable movement issues should enter a visible two-repetition coaching window",
+);
+assert.match(
+  source,
+  /markDisplayed\(reminder\.id\)[\s\S]*?onEnd:[\s\S]*?confirmDelivery\(reminder\.id/,
+  "voice-mode quality coaching must be displayed and finish speaking before it is scoreable",
+);
+assert.doesNotMatch(
+  source,
+  /sessionCueCounts|sessionSymmetryRepEvents/,
+  "raw cue frames and a duplicate symmetry path must not lower the new score",
+);
+assert.match(
+  source,
+  /How coaching affected your score[\s\S]*?No deduction:/,
+  "the session summary should explain why a reminder caused no deduction",
+);
+assert.match(
+  source,
+  /−\$\{Math\.round\(Number\(record\.deduction\)\)\} points:[\s\S]*?The same stable issue continued/,
+  "the session summary should explain every persisted-issue deduction",
+);
+
 console.log("exercise session control tests passed");

@@ -7,7 +7,7 @@ import {
   measureHandExerciseFrame,
   measurePoseExerciseFrame,
 } from "./exercise-tracking.js?v=2";
-import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=49";
+import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=50";
 import { POSES } from "./poses.js";
 import {
   calibrationFrameMatchesPhase,
@@ -24,7 +24,10 @@ import {
   buildCalibrationSafetyContext,
   evaluateCalibrationReuse,
 } from "./calibration-policy.js?v=2";
-import { calculateMovementQuality } from "./movement-quality.js?v=1";
+import {
+  calculateMovementQuality,
+  CoachingQualitySession,
+} from "./movement-quality.js?v=2";
 import {
   createEmergencyAlert,
   getPainCheckins,
@@ -38,7 +41,7 @@ import {
   sendAgentMessage,
   updatePainCheckin,
 } from "./api.js?v=32";
-import { analysePatientTrend } from "./patient-dashboard-state.js?v=10";
+import { analysePatientTrend } from "./patient-dashboard-state.js?v=11";
 import { DRAFT_EXERCISES } from "./exercises/catalog.js?v=3";
 import {
   parseConfirmationResponse,
@@ -1269,10 +1272,7 @@ function renderCameraRepProgress(
 }
 
 // Accumulated per-session stats (reset on each camera start)
-const sessionCueCounts = {};
-let sessionSymmetryWarnings = 0;
-const sessionCueRepEvents = new Set();
-const sessionSymmetryRepEvents = new Set();
+const sessionCoachingQuality = new CoachingQualitySession();
 const sessionAngleStats = {}; // {angleName: {min, max, sum, count}}
 let spokenCoachingCandidate = null;
 let spokenRepCount = 0;
@@ -1623,6 +1623,8 @@ function speakCameraCoaching(message, options = {}) {
   }
   const speechOptions = { ...options };
   delete speechOptions.priority;
+  const onUnavailable = speechOptions.onUnavailable;
+  delete speechOptions.onUnavailable;
   const generation = movementAiGeneration;
   const coachingGeneration = ++movementCoachingGeneration;
   const resumeWakeListener = ["wake", "coaching"].includes(movementAiState)
@@ -1658,7 +1660,10 @@ function speakCameraCoaching(message, options = {}) {
       ...speechOptions,
       onEnd: finish,
     });
-    if (!spoken && resumeWakeListener) resumeMovementAiAfterSpeech(generation);
+    if (!spoken) {
+      onUnavailable?.();
+      if (resumeWakeListener) resumeMovementAiAfterSpeech(generation);
+    }
   };
   if (resumeWakeListener) {
     // The wake listener places Safari in a quieter play-and-record session.
@@ -1769,6 +1774,59 @@ function queueSpokenMovementCue(state, cue, timestampMs) {
     key: `movement:${engine.exercise.id}:${identity}`,
     cooldownMs: repeatAfterMs,
   });
+}
+
+function currentCoachingRepetitionNumber(feedback = lastFeedbackResult) {
+  const currentSetReps = Number(feedback?.repCount ?? engine?.repCount ?? 0);
+  return Math.max(
+    1,
+    completedSessionReps + (Number.isFinite(currentSetReps) ? currentSetReps : 0) + 1,
+  );
+}
+
+function deliverPendingQualityReminder(spokenText, feedback) {
+  const reminder = sessionCoachingQuality.pending;
+  if (!reminder) return false;
+  sessionCoachingQuality.markDisplayed(reminder.id);
+
+  const repetitionNumber = currentCoachingRepetitionNumber(feedback);
+  const voiceRequired = handsFreeVoiceEnabled && voiceGuidance.enabled;
+  if (!voiceRequired) {
+    sessionCoachingQuality.confirmDelivery(reminder.id, {
+      repetitionNumber,
+      spoken: false,
+      voiceRequired: false,
+    });
+    return true;
+  }
+
+  // Keep the reminder pending while a rep count, user question, or another
+  // sentence owns the audio channel. It cannot affect the score until the
+  // reminder has actually finished speaking.
+  if (
+    repAnnouncementActive
+    || pendingRepAnnouncements.length
+    || movementAiConversationActive()
+    || movementAiState === "coaching"
+  ) {
+    return false;
+  }
+  if (!sessionCoachingQuality.markSpeechQueued(reminder.id)) return false;
+
+  const spoken = speakCameraCoaching(spokenText || reminder.cue_text, {
+    key: `quality-reminder:${engine.exercise.id}:${reminder.id}`,
+    cooldownMs: 0,
+    onEnd: () => {
+      sessionCoachingQuality.confirmDelivery(reminder.id, {
+        repetitionNumber: currentCoachingRepetitionNumber(),
+        spoken: true,
+        voiceRequired: true,
+      });
+    },
+    onUnavailable: () => sessionCoachingQuality.releaseSpeech(reminder.id),
+  });
+  if (!spoken) sessionCoachingQuality.releaseSpeech(reminder.id);
+  return spoken;
 }
 
 function currentPlannedSessionExerciseIds(exerciseId = engine?.exercise?.id) {
@@ -2011,6 +2069,11 @@ function processPendingRepAnnouncements() {
     return;
   }
   const announcement = pendingRepAnnouncements[0];
+  // A rep number has priority. If it interrupts a queued form reminder, return
+  // that reminder to the queue; its grace window still has not started.
+  if (sessionCoachingQuality.pending?.speech_queued) {
+    sessionCoachingQuality.releaseSpeech(sessionCoachingQuality.pending.id);
+  }
   const spoken = speakCameraCoaching(
     repAnnouncementMessage(announcement),
     {
@@ -3137,30 +3200,9 @@ function updateFeedbackPanel(angles, timestampMs) {
     ?? activeDose(fb.exercise).holdSeconds
     ?? 3;
 
-  // Accumulate correction events for the backend once per repetition. The
-  // previous implementation incremented these counters on every video frame,
-  // so one persistent cue could appear hundreds of times and force the final
-  // quality score to zero.
-  const configuredTarget = Number(activeDose(fb.exercise).reps);
-  const targetRepetitions = Number.isFinite(configuredTarget)
-    && configuredTarget > 0
-    ? Math.round(configuredTarget)
-    : Math.max(1, Number(fb.repCount ?? 0) + 1);
-  const repetitionNumber = Math.max(
-    1,
-    Math.min(targetRepetitions, Number(fb.repCount ?? 0) + 1),
-  );
-  const correctionBucket = `${completedSetCount + 1}:${repetitionNumber}`;
-  fb.cues.forEach((cue) => {
-    const eventKey = `${correctionBucket}:${cue}`;
-    if (sessionCueRepEvents.has(eventKey)) return;
-    sessionCueRepEvents.add(eventKey);
-    sessionCueCounts[cue] = (sessionCueCounts[cue] ?? 0) + 1;
-  });
-  if (fb.symmetryWarning && !sessionSymmetryRepEvents.has(correctionBucket)) {
-    sessionSymmetryRepEvents.add(correctionBucket);
-    sessionSymmetryWarnings += 1;
-  }
+  // Quality is assessed later from the patient's response to a delivered
+  // coaching reminder. Raw frame cues and symmetry warnings never lower the
+  // score here, which prevents silent, unreliable, and duplicate deductions.
   Object.entries(angles).forEach(([key, a]) => {
     if (a.lowConfidence || !Number.isFinite(a.value)) return;
     const s = sessionAngleStats[key] ?? (sessionAngleStats[key] = { min: Infinity, max: -Infinity, sum: 0, count: 0 });
@@ -3231,8 +3273,28 @@ function updateFeedbackPanel(angles, timestampMs) {
         : `Moving to ${nextPhase}… ${pct}%`;
   }
 
-  // Coaching cues
-  const personalizedCues = fb.cues.map(personalizeCue);
+  // Coaching-first quality: wait for one reliable issue to remain stable before
+  // showing it as a scored correction. The two-repetition response window only
+  // starts after the reminder is actually delivered below.
+  const primaryCueDetail = fb.cueDetails?.[0]
+    ?? (fb.cues[0]
+      ? { id: fb.cues[0], message: fb.cues[0], qualityReliable: true }
+      : null);
+  const personalizedCueDetail = primaryCueDetail
+    ? { ...primaryCueDetail, message: personalizeCue(primaryCueDetail.message) }
+    : null;
+  const qualityObservation = sessionCoachingQuality.observe({
+    cue: personalizedCueDetail,
+    timestampMs,
+    repetitionNumber: currentCoachingRepetitionNumber(fb),
+  });
+  const primaryCueIsScoreable = personalizedCueDetail?.qualityReliable !== false;
+  const visiblePrimaryCue = personalizedCueDetail && (
+    !primaryCueIsScoreable || qualityObservation.stable
+  )
+    ? personalizedCueDetail.message
+    : null;
+  const personalizedCues = visiblePrimaryCue ? [visiblePrimaryCue] : [];
   cueListEl.innerHTML = personalizedCues
     .map((c) => `<li>${escapeHtml(c)}</li>`)
     .join("");
@@ -3281,8 +3343,30 @@ function updateFeedbackPanel(angles, timestampMs) {
       ? `${movementPhaseGuidance(fb)} ${personalizedCues[0]}`
       : personalizedCues[0] ?? "";
   }
+  if (
+    (qualityObservation.reminder || qualityObservation.adjusting)
+    && bannerState === "adjust"
+  ) {
+    bannerCue = `${bannerCue} Try this for the next two repetitions; no points are deducted yet.`;
+  }
   setFeedbackBanner(bannerState, bannerCue);
-  queueSpokenMovementCue(bannerState, bannerCue, timestampMs);
+  const qualityReminderHandled = Boolean(
+    primaryCueIsScoreable && qualityObservation.handled
+  );
+  if (qualityObservation.reminder) {
+    deliverPendingQualityReminder(
+      `${qualityObservation.reminder.cue_text}. Try this for the next two repetitions.`,
+      fb,
+    );
+  } else if (sessionCoachingQuality.pending && qualityReminderHandled) {
+    deliverPendingQualityReminder(
+      `${sessionCoachingQuality.pending.cue_text}. Try this for the next two repetitions.`,
+      fb,
+    );
+  }
+  if (!qualityReminderHandled) {
+    queueSpokenMovementCue(bannerState, bannerCue, timestampMs);
+  }
 
   // Symmetry warning
   if (fb.symmetryWarning && fb.exercise.id !== "half-squats") {
@@ -4717,11 +4801,8 @@ window.addEventListener("pageshow", (event) => {
 });
 
 function clearSessionMeasurements() {
-  Object.keys(sessionCueCounts).forEach(k => delete sessionCueCounts[k]);
   Object.keys(sessionAngleStats).forEach(k => delete sessionAngleStats[k]);
-  sessionCueRepEvents.clear();
-  sessionSymmetryRepEvents.clear();
-  sessionSymmetryWarnings = 0;
+  sessionCoachingQuality.reset();
 }
 
 function resetSetProgress() {
@@ -4807,9 +4888,8 @@ function completeExerciseSession() {
   const endedAt = new Date().toISOString();
   const ex = engine.exercise;
   const dose = activeDose(ex);
-  const cuesTriggered = Object.entries(sessionCueCounts).map(
-    ([cue_text, trigger_count]) => ({ cue_text, trigger_count })
-  );
+  sessionCoachingQuality.finish(totalRepsCompleted);
+  const cuesTriggered = sessionCoachingQuality.cuesForPersistence();
   const angleSummaries = {};
   Object.entries(sessionAngleStats).forEach(([key, s]) => {
     if (s.count > 0) {
@@ -4832,11 +4912,13 @@ function completeExerciseSession() {
     sets_target:             dose.sets ?? 1,
     affected_side:           sideSelect.value || profile.focusSide || "right",
     cues_triggered:          cuesTriggered,
-    symmetry_warnings_count: sessionSymmetryWarnings,
+    // Symmetry is coached through the same reminder flow when it is reliable;
+    // it is not a second, hidden deduction path.
+    symmetry_warnings_count: 0,
     angle_summaries:         angleSummaries,
     quality_score:           calculateMovementQuality({
       cuesTriggered,
-      symmetryWarnings: sessionSymmetryWarnings,
+      symmetryWarnings: 0,
       repetitions: totalRepsCompleted,
     }),
   };
@@ -5597,6 +5679,49 @@ function mostFrequentSessionCue(snapshot = {}) {
     .sort((a, b) => Number(b.trigger_count) - Number(a.trigger_count))[0] ?? null;
 }
 
+function renderCoachingScoreExplanation(snapshot = {}) {
+  const records = (snapshot.cues_triggered ?? []).filter(
+    (cue) => cue?.kind === "coaching_reminder" && cue?.delivered,
+  );
+  if (!records.length) {
+    sessionSummaryCueEl.innerHTML = snapshot.reps_completed > 0
+      ? "<strong>How coaching affected your score</strong><p>No stable, reliable movement correction required a reminder. No points were deducted.</p>"
+      : "<strong>How coaching affected your score</strong><p>No repetitions were measured. Check your camera position before trying again.</p>";
+    return;
+  }
+
+  const items = records.map((record) => {
+    const cue = escapeHtml(record.cue_text || "Movement correction");
+    const reminderRep = Math.max(1, Math.round(Number(record.reminder_rep) || 1));
+    const grace = Math.max(1, Math.round(Number(record.adjustment_reps) || 2));
+    const finalGraceRep = reminderRep + grace;
+    const delivery = record.delivery_mode === "shown_and_spoken"
+      ? "shown and spoken"
+      : "shown on screen";
+    if (record.outcome === "persisted" && Number(record.deduction) > 0) {
+      return (
+        `<li><strong>−${Math.round(Number(record.deduction))} points:</strong> `
+        + `“${cue}” was ${delivery} at repetition ${reminderRep}. `
+        + `The same stable issue continued through repetitions ${reminderRep + 1}–${finalGraceRep}.</li>`
+      );
+    }
+    if (record.outcome === "improved") {
+      return (
+        `<li><strong>No deduction:</strong> “${cue}” was ${delivery} at repetition ${reminderRep}, `
+        + `and the same issue did not persist through both adjustment repetitions.</li>`
+      );
+    }
+    return (
+      `<li><strong>No deduction:</strong> “${cue}” was ${delivery} at repetition ${reminderRep}, `
+      + "but there were not enough later repetitions to assess your response.</li>"
+    );
+  });
+  sessionSummaryCueEl.innerHTML = (
+    "<strong>How coaching affected your score</strong>"
+    + `<ul>${items.join("")}</ul>`
+  );
+}
+
 async function finalizeSessionSummary(completed, beforePain, painSavePromise) {
   const session = await (completedExerciseSessionPromise ?? Promise.resolve(null));
   const savedAfterCheckin = await painSavePromise;
@@ -5622,12 +5747,19 @@ async function finalizeSessionSummary(completed, beforePain, painSavePromise) {
   }
 
   const snapshot = completedExerciseSessionSnapshot ?? {};
-  const cue = mostFrequentSessionCue(snapshot);
-  sessionSummaryCueEl.textContent = cue
-    ? `Most frequent correction: ${cue.cue_text} (${cue.trigger_count} times).`
-    : snapshot.reps_completed > 0
-      ? "No repeated movement correction was measured in this session."
-      : "No repetitions were measured. Check your camera position before trying again.";
+  const usesCoachingFirstScore = (snapshot.cues_triggered ?? []).some(
+    (cue) => Number(cue?.scoring_version) === 2,
+  );
+  if (usesCoachingFirstScore) {
+    renderCoachingScoreExplanation(snapshot);
+  } else {
+    const cue = mostFrequentSessionCue(snapshot);
+    sessionSummaryCueEl.textContent = cue
+      ? `Most frequent correction: ${cue.cue_text} (${cue.trigger_count} times).`
+      : snapshot.reps_completed > 0
+        ? "No repeated movement correction was measured in this session."
+        : "No repetitions were measured. Check your camera position before trying again.";
+  }
 
   if (trend) {
     sessionSummaryTrendEl.textContent = `${trend.title}. ${trend.message}`;

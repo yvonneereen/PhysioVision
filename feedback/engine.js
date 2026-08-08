@@ -1,4 +1,4 @@
-import { EXERCISES, EXERCISE_MAP } from "../exercises/registry.js?v=60";
+import { EXERCISES, EXERCISE_MAP } from "../exercises/registry.js?v=61";
 import { applyCalibration } from "../personalization.js";
 
 export { EXERCISES };
@@ -101,6 +101,7 @@ export class FeedbackEngine {
     }
 
     const expectedNextPhase = this.stages[this.stageIdx + 1] ?? this.stages[0];
+    const cueDetails = tracking.ready ? this._evaluateCueDetails(angles) : [];
     return {
       exercise: this.exercise,
       stages: this.stages,
@@ -124,7 +125,8 @@ export class FeedbackEngine {
       symmetryAvailable: tracking.symmetryAvailable,
       startConfirmed: this.startConfirmed,
       progress: tracking.ready ? this._progressToNext(angles) : 0,
-      cues: tracking.ready ? this._evaluateCues(angles) : [],
+      cues: cueDetails.map((cue) => cue.message),
+      cueDetails,
       symmetryWarning: tracking.ready ? this._checkSymmetry(angles) : null,
     };
   }
@@ -544,16 +546,25 @@ export class FeedbackEngine {
     return Math.min(1, Math.max(0, (baseline - measurement.value) / minimumChange));
   }
 
-  _evaluateCues(angles) {
+  _evaluateCueDetails(angles) {
     if (!this.exercise.cues) return [];
-    const cues = [
-      ...new Set(
-        Object.entries(this.exercise.cues)
-          .filter(([cond]) => this._evalCondition(cond, angles))
-          .map(([, msg]) => msg)
-      ),
-    ];
-    return cues.slice(0, this.exercise.maxCues ?? cues.length);
+    const details = [];
+    Object.entries(this.exercise.cues)
+      .filter(([condition]) => this._evalCondition(condition, angles))
+      .forEach(([condition, configuredCue]) => {
+        const cue = typeof configuredCue === "string"
+          ? { message: configuredCue }
+          : configuredCue;
+        const message = String(cue?.message ?? "").trim();
+        if (!message || details.some((item) => item.message === message)) return;
+        details.push({
+          id: message,
+          condition,
+          message,
+          qualityReliable: cue?.qualityReliable !== false,
+        });
+      });
+    return details.slice(0, this.exercise.maxCues ?? details.length);
   }
 
   _evalCondition(cond, angles) {

@@ -4234,6 +4234,19 @@ details.metrics summary {
   background: #fff4d9;
 }
 
+.session-summary-cue p {
+  margin: 6px 0 0;
+}
+
+.session-summary-cue ul {
+  margin: 8px 0 0;
+  padding-left: 1.4rem;
+}
+
+.session-summary-cue li + li {
+  margin-top: 8px;
+}
+
 .session-summary-note {
   margin-top: 16px;
   color: var(--muted);

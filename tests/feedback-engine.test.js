@@ -428,10 +428,20 @@ assert.equal(
       "Make the squat a little shallower. Keep your whole foot flat and move your hips back as if sitting"
     )
   );
+  assert.equal(
+    kneeForward.cueDetails[0].qualityReliable,
+    false,
+    "front-camera knee-forward depth can guide but must not lower quality",
+  );
   assert.ok(
     torsoLean.cues.includes(
       "Move your hips back and bring your chest comfortably upright"
     )
+  );
+  assert.equal(
+    torsoLean.cueDetails[0].qualityReliable,
+    true,
+    "a reliable torso correction can enter the coaching response flow",
   );
   assert.equal(multipleProblems.cues.length, 1);
 }

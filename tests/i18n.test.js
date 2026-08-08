@@ -23,7 +23,7 @@ assert.ok(
 );
 assert.deepEqual(
   [...new Set(i18nCacheVersions)],
-  ["25"],
+  ["26"],
   "all browser entry points must use one i18n URL so only one DOM observer is created"
 );
 

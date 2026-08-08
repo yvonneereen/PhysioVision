@@ -896,6 +896,11 @@ assert.doesNotMatch(
   "the guide must not ask the patient to step back before camera permission"
 );
 assert.match(
+  functionSource("renderTrackingWarning", "cameraSetupTip"),
+  /video\.srcObject[\s\S]*?After camera access is allowed/,
+  "pre-camera framing text should make clear that stepping back happens after permission"
+);
+assert.match(
   countdownSource,
   /speakMovementGuide\([\s\S]*?voiceGroup:\s*PAIN_PROMPT_VOICE_GROUP/,
   "the post-confirmation handoff should speak immediately in the same voice"

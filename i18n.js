@@ -990,6 +990,7 @@ function translateTemplate(text, locale) {
 
   const templates = {
     "zh-SG": [
+      [/^After camera access is allowed: (.+)$/, (_, instruction) => `允许摄像头访问后：${TRANSLATIONS[locale]?.get(instruction) ?? instruction}`],
       [/^(\d+) min$/, (_, minutes) => `${minutes}分钟`],
       [/^Session (\d+)$/, (_, session) => `第${session}次训练`],
       [/^(.+) session complete$/, (_, exercise) => `${translateFragment(exercise)}训练已完成`],
@@ -1057,6 +1058,7 @@ function translateTemplate(text, locale) {
       [/^(.+)\. Move slowly, then use the guide to check your position again\.$/, (_, cue) => `${translateFragment(cue)}。请缓慢移动，然后再次使用指导检查姿势。`],
     ],
     "ms-SG": [
+      [/^After camera access is allowed: (.+)$/, (_, instruction) => `Selepas akses kamera dibenarkan: ${TRANSLATIONS[locale]?.get(instruction) ?? instruction}`],
       [/^(\d+) min$/, (_, minutes) => `${minutes} minit`],
       [/^Session (\d+)$/, (_, session) => `Sesi ${session}`],
       [/^(.+) session complete$/, (_, exercise) => `Sesi ${translateFragment(exercise)} selesai`],
@@ -1124,6 +1126,7 @@ function translateTemplate(text, locale) {
       [/^(.+)\. Move slowly, then use the guide to check your position again\.$/, (_, cue) => `${translateFragment(cue)}. Bergerak perlahan, kemudian gunakan panduan untuk memeriksa posisi anda sekali lagi.`],
     ],
     "ta-SG": [
+      [/^After camera access is allowed: (.+)$/, (_, instruction) => `கேமரா அணுகல் அனுமதிக்கப்பட்ட பிறகு: ${TRANSLATIONS[locale]?.get(instruction) ?? instruction}`],
       [/^(\d+) min$/, (_, minutes) => `${minutes} நிமிடம்`],
       [/^Session (\d+)$/, (_, session) => `அமர்வு ${session}`],
       [/^(.+) session complete$/, (_, exercise) => `${translateFragment(exercise)} அமர்வு முடிந்தது`],

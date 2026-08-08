@@ -3910,10 +3910,15 @@ function renderPrescription(ex) {
 function renderTrackingWarning(ex) {
   const clinicianNote = activeDose(ex).notes;
   if (ex.safetyNote || ex.trackingWarning || clinicianNote) {
+    const trackingInstruction = ex.trackingWarning
+      ? video.srcObject
+        ? ex.trackingWarning
+        : `After camera access is allowed: ${ex.trackingWarning}`
+      : "";
     trackWarnEl.textContent = [
       ex.safetyNote ? `⚠ Safety: ${ex.safetyNote}` : "",
       clinicianNote ? `Clinician instruction: ${clinicianNote}` : "",
-      ex.trackingWarning ?? "",
+      trackingInstruction,
     ].filter(Boolean).join(" ");
     trackWarnEl.classList.remove("hidden");
   } else {
@@ -4113,6 +4118,7 @@ async function activateCameraGuide({ announceInstruction = true } = {}) {
     handTrackingToggle.disabled = true;
     statusEl.textContent = "Starting camera…";
     await startCamera();
+    renderTrackingWarning(engine.exercise);
     running = true;
     lastVideoTime = -1;
     combinedPoseHistory = [];
@@ -4188,6 +4194,7 @@ function deactivateCameraGuide({
     clearHoldTimer(activeDose(engine.exercise).holdSeconds);
   }
   stopCamera();
+  renderTrackingWarning(engine.exercise);
   combinedPoseHistory = [];
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   cameraStage?.classList.remove("camera-active");

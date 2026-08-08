@@ -187,10 +187,19 @@ assert.match(
   /\(\?:guide\|guy\|guys\)/,
   "the wake phrase should tolerate common speech-recognition variants of Guide"
 );
+const feedbackPanelSource = functionSource(
+  "updateFeedbackPanel",
+  "updateDebugPanel"
+);
 assert.match(
-  source,
-  /function updateFeedbackPanel\([\s\S]*?movementAiConversationActive\(\)[\s\S]*?return lastFeedbackResult/,
-  "repetition and phase progression should freeze while an AI question is active"
+  feedbackPanelSource,
+  /const fb = engine\.update\(angles, timestampMs\)/,
+  "camera measurements should continue advancing the movement engine"
+);
+assert.doesNotMatch(
+  feedbackPanelSource,
+  /movementAiConversationActive\(\)/,
+  "asking Hey Guide must not freeze repetition or phase progression"
 );
 const resumeMovementAiSource = functionSource(
   "resumeMovementAiAfterSpeech",
@@ -203,8 +212,18 @@ assert.match(
 );
 assert.doesNotMatch(
   resumeMovementAiSource,
-  /resetSpokenCoaching\(\)|spokenRepCount\s*=\s*0/,
-  "resuming the wake listener must preserve the last announced rep"
+  /resetSpokenCoaching\(\)|spokenRepCount\s*=\s*0|combinedPoseHistory\s*=|smoother\.state\s*=/,
+  "resuming the wake listener must preserve rep and continuous tracking state"
+);
+assert.doesNotMatch(
+  functionSource("beginMovementAiQuestion", "answerMovementAiQuestion"),
+  /clearHoldTimer\(/,
+  "asking the AI must not stop a valid tracked hold"
+);
+assert.doesNotMatch(
+  functionSource("renderFrame", "plannedSetCount"),
+  /pendingSetStartCheck\)[\s\S]{0,120}!movementAiConversationActive\(\)/,
+  "next-set position tracking should continue during an AI conversation"
 );
 assert.match(
   source,
@@ -225,6 +244,11 @@ assert.match(
   source,
   /function queueRepAnnouncements[\s\S]*?while \(queuedSpokenRepCount < detectedReps\)[\s\S]*?pendingRepAnnouncements\.push/,
   "every detected repetition should be queued instead of being discarded while another sentence is speaking"
+);
+assert.match(
+  functionSource("queueRepAnnouncements", "startHoldTimer"),
+  /movementAiConversationActive\(\)[\s\S]*?pendingRepAnnouncements\.length = 0[\s\S]*?queuedSpokenRepCount = Math\.max[\s\S]*?spokenRepCount = Math\.max/,
+  "reps detected during AI speech should count without creating an announcement backlog"
 );
 assert.match(
   source,

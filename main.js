@@ -1350,11 +1350,9 @@ function scheduleMovementAiWakeListening(
 
 function resumeMovementAiAfterSpeech(generation) {
   if (!movementAiCanListen(generation)) return;
-  combinedPoseHistory = [];
-  smoother.state = {};
   // Resuming wake-phrase listening must not erase the last announced rep.
-  // Otherwise the unchanged rep count in the next camera frame is treated as
-  // new and spoken repeatedly (for example, "Rep 2" in a loop).
+  // Pose history and smoothing also remain intact because camera tracking
+  // continues while the user asks a question and hears the answer.
   spokenCoachingCandidate = null;
   scheduleMovementAiWakeListening(100, generation);
 }
@@ -1412,9 +1410,6 @@ function captureMovementAiQuestion(generation) {
 
 function beginMovementAiQuestion(question, generation) {
   if (!movementAiCanListen(generation)) return;
-  if (holdInterval) {
-    clearHoldTimer(activeDose(engine.exercise).holdSeconds);
-  }
   movementAiState = "question";
   if (question) {
     void answerMovementAiQuestion(question, generation);
@@ -1728,12 +1723,36 @@ function processPendingRepAnnouncements() {
 
 function queueRepAnnouncements(feedback, metric) {
   const detectedReps = Number(feedback?.repCount ?? 0);
-  if (!Number.isFinite(detectedReps) || detectedReps <= queuedSpokenRepCount) {
+  if (!Number.isFinite(detectedReps) || detectedReps < 0) return;
+  const setNumber = completedSetCount + 1;
+  const plannedSets = plannedSetCount(feedback.exercise);
+
+  if (movementAiConversationActive()) {
+    // Keep the visual/session count current without speaking over the user's
+    // question or replaying every missed number after the AI answer.
+    pendingRepAnnouncements.length = 0;
+    queuedSpokenRepCount = Math.max(queuedSpokenRepCount, detectedReps);
+    spokenRepCount = Math.max(spokenRepCount, detectedReps);
+    const measured = metric.isHold
+      ? detectedReps * metric.perHold
+      : detectedReps;
+    if (metric.goal !== null && measured >= metric.goal) {
+      pendingRepAnnouncements.push({
+        exerciseId: feedback.exercise.id,
+        repNumber: detectedReps,
+        setNumber,
+        setGoal: metric.goal,
+        isHold: metric.isHold,
+        isLastPlannedSet: setNumber >= plannedSets,
+      });
+    }
+    return;
+  }
+
+  if (detectedReps <= queuedSpokenRepCount) {
     processPendingRepAnnouncements();
     return;
   }
-  const setNumber = completedSetCount + 1;
-  const plannedSets = plannedSetCount(feedback.exercise);
   while (queuedSpokenRepCount < detectedReps) {
     queuedSpokenRepCount += 1;
     const measured = metric.isHold
@@ -2394,9 +2413,7 @@ function renderFrame() {
           updateCalibrationCapture(measurements, frameTimestamp);
           statusEl.textContent = "Personal calibration in progress";
         } else if (pendingSetStartCheck) {
-          if (!movementAiConversationActive()) {
-            updateSetStartingPositionCheck(measurements, frameTimestamp);
-          }
+          updateSetStartingPositionCheck(measurements, frameTimestamp);
         } else {
           const feedback = updateFeedbackPanel(measurements, frameTimestamp);
           statusEl.textContent = feedback.trackingReady
@@ -2426,9 +2443,7 @@ function renderFrame() {
           updateCalibrationCapture(measurements, frameTimestamp);
           statusEl.textContent = "Personal calibration in progress";
         } else if (pendingSetStartCheck) {
-          if (!movementAiConversationActive()) {
-            updateSetStartingPositionCheck(measurements, frameTimestamp);
-          }
+          updateSetStartingPositionCheck(measurements, frameTimestamp);
         } else {
           const feedback = updateFeedbackPanel(measurements, frameTimestamp);
           statusEl.textContent = feedback.trackingReady
@@ -2463,9 +2478,7 @@ function renderFrame() {
             updateCalibrationCapture(angles, frameTimestamp);
             statusEl.textContent = "Personal calibration in progress";
           } else if (pendingSetStartCheck) {
-            if (!movementAiConversationActive()) {
-              updateSetStartingPositionCheck(angles, frameTimestamp);
-            }
+            updateSetStartingPositionCheck(angles, frameTimestamp);
             processFallMonitoring(landmarks, frameTimestamp);
           } else {
             const feedback = updateFeedbackPanel(angles, frameTimestamp);
@@ -2624,18 +2637,6 @@ function handleCompletedSet(feedback) {
 }
 
 function updateFeedbackPanel(angles, timestampMs) {
-  if (movementAiConversationActive()) {
-    return lastFeedbackResult ?? {
-      exercise: engine.exercise,
-      trackingReady: false,
-      limitedTracking: false,
-      trackingSide: sideSelect.value,
-      missingMeasurements: [],
-      phase: engine.phase ?? "",
-      repCount: Number(engine.repCount ?? 0),
-      cues: [],
-    };
-  }
   if (sessionAllSetsComplete && lastFeedbackResult) {
     processPendingRepAnnouncements();
     return lastFeedbackResult;

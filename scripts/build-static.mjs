@@ -1,4 +1,4 @@
-import { cp, mkdir, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -17,6 +17,7 @@ const frontendEntries = [
   "auth.js",
   "calibration-policy.js",
   "care-workflow.js",
+  "clinical-ai-format.js",
   "exercise-library.js",
   "exercise-tracking.js",
   "fall-monitoring.js",
@@ -52,6 +53,33 @@ for (const entry of frontendEntries) {
     { recursive: true }
   );
 }
+
+async function verifyLocalModuleImports(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  for (const entry of entries) {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      await verifyLocalModuleImports(entryPath);
+      continue;
+    }
+    if (!entry.name.endsWith(".js")) continue;
+    const source = await readFile(entryPath, "utf8");
+    const imports = source.matchAll(/(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?["'](\.[^"']+)["']/g);
+    for (const match of imports) {
+      const importPath = match[1].split("?")[0].split("#")[0];
+      const resolvedPath = path.resolve(path.dirname(entryPath), importPath);
+      try {
+        await access(resolvedPath);
+      } catch {
+        throw new Error(
+          `Static build is missing module ${importPath} imported by ${path.relative(outputDirectory, entryPath)}`
+        );
+      }
+    }
+  }
+}
+
+await verifyLocalModuleImports(outputDirectory);
 
 const configuredApiBase = process.env.PHYSIOVISION_API_BASE?.trim();
 

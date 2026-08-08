@@ -8,6 +8,7 @@ import {
   getTriageQueue, claimTriagePatient, declineTriagePatient,
 } from "./api.js?v=32";
 import { excludeRosterPatientsFromTriage } from "./therapist-triage-state.js?v=1";
+import { formatClinicalAssistantText } from "./clinical-ai-format.js?v=1";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = ["January", "February", "March", "April", "May", "June",
@@ -896,17 +897,6 @@ function renderMessagingList(threads) {
 }
 
 function aiMessageRows() {
-  const assistantText = (value) => {
-    const escaped = escapeHtml(value || "");
-    return escaped.replace(
-      /(https:\/\/[^\s<]+)/g,
-      rawUrl => {
-        const trailing = rawUrl.match(/[),.;:]+$/)?.[0] || "";
-        const url = trailing ? rawUrl.slice(0, -trailing.length) : rawUrl;
-        return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>${trailing}`;
-      },
-    );
-  };
   const helpContent = `
     <div class="clinical-ai-help">
       <section><h4>Your roster</h4>
@@ -974,7 +964,9 @@ function aiMessageRows() {
         ? helpContent
         : ["build_plan", "revise_plan"].includes(message.command) && message.data
           ? planContent(message.data)
-          : `<p>${message.sender === "assistant" ? assistantText(message.body) : escapeHtml(message.body)}</p>`}
+          : message.sender === "assistant"
+            ? formatClinicalAssistantText(message.body)
+            : `<p>${escapeHtml(message.body)}</p>`}
     </div>`).join("");
 }
 

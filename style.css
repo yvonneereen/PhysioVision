@@ -6790,8 +6790,9 @@ details.metrics summary {
   flex-direction: column;
   gap: 12px;
   min-height: 250px;
-  max-height: 420px;
+  max-height: min(62vh, 680px);
   margin-bottom: 12px;
+  padding-right: 5px;
   overflow-y: auto;
 }
 .clinical-ai-message { max-width: 82%; }
@@ -6812,6 +6813,170 @@ details.metrics summary {
 }
 .clinical-ai-message-assistant p { white-space: pre-wrap; }
 .clinical-ai-message-assistant p a { color: var(--green); overflow-wrap: anywhere; }
+.clinical-ai-message:has(.clinical-ai-richtext) { width: 100%; max-width: 100%; }
+.clinical-ai-richtext {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--green) 20%, var(--line));
+  border-radius: 15px;
+  color: var(--ink);
+  background: var(--white);
+  box-shadow: 0 8px 24px rgba(22, 61, 57, .06);
+}
+.clinical-ai-richtext > h3 {
+  margin: 0;
+  padding: 17px 19px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-deep);
+  background: linear-gradient(135deg, var(--green-light), var(--white));
+  font-size: 1.08rem;
+  line-height: 1.35;
+}
+.clinical-ai-richtext > h4,
+.clinical-ai-richtext > h5 {
+  margin: 22px 19px 10px;
+  color: var(--ink-deep);
+  font-size: 1rem;
+  line-height: 1.4;
+}
+.clinical-ai-richtext > h4 {
+  padding: 9px 11px;
+  border-left: 4px solid var(--green);
+  border-radius: 0 9px 9px 0;
+  background: var(--green-light);
+}
+.clinical-ai-richtext > h5 { font-size: .92rem; }
+.clinical-ai-richtext > p {
+  margin: 13px 19px;
+  padding: 0;
+  border-radius: 0;
+  color: var(--ink);
+  background: transparent;
+  font-size: .93rem;
+  line-height: 1.65;
+  white-space: normal;
+}
+.clinical-ai-richtext > .clinical-ai-lead {
+  margin: 0;
+  padding: 16px 19px;
+  color: var(--ink);
+  background: var(--paper);
+}
+.clinical-ai-richtext strong { color: var(--ink); font-weight: 750; }
+.clinical-ai-richtext em { color: var(--muted); }
+.clinical-ai-richtext a { color: var(--green); font-weight: 650; overflow-wrap: anywhere; }
+.clinical-ai-richtext code {
+  padding: 2px 5px;
+  border-radius: 5px;
+  color: var(--green);
+  background: var(--green-light);
+  font-size: .86em;
+}
+.clinical-ai-richtext hr {
+  height: 1px;
+  margin: 0 19px;
+  border: 0;
+  background: var(--line);
+}
+.clinical-ai-caution {
+  margin: 14px 19px;
+  padding: 11px 13px;
+  border-left: 4px solid var(--coral);
+  border-radius: 8px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--coral) 7%, var(--white));
+  font-size: .86rem;
+  line-height: 1.55;
+}
+.clinical-ai-caution em { color: inherit; font-style: normal; }
+.clinical-ai-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 9px;
+  margin: 15px 19px;
+}
+.clinical-ai-facts > div {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+}
+.clinical-ai-facts dt {
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-size: .71rem;
+  font-weight: 750;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+.clinical-ai-facts dd { margin: 0; font-size: .88rem; line-height: 1.45; }
+.clinical-ai-exercise-list {
+  display: grid;
+  gap: 10px;
+  margin: 10px 19px 20px;
+  padding: 0;
+  list-style: none;
+  counter-reset: clinical-exercise;
+}
+.clinical-ai-exercise-list > li {
+  position: relative;
+  padding: 13px 14px 13px 49px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--white);
+  counter-increment: clinical-exercise;
+}
+.clinical-ai-exercise-list > li::before {
+  content: counter(clinical-exercise);
+  position: absolute;
+  top: 12px;
+  left: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  color: var(--white);
+  background: var(--green);
+  font-size: .76rem;
+  font-weight: 800;
+}
+.clinical-ai-exercise-title { color: var(--ink); font-size: .94rem; line-height: 1.45; }
+.clinical-ai-exercise-list > li > p {
+  margin: 6px 0 0;
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  font-size: .84rem;
+  line-height: 1.5;
+  white-space: normal;
+}
+.clinical-ai-detail-list {
+  display: grid;
+  gap: 6px;
+  margin: 9px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.clinical-ai-detail-list li {
+  padding: 7px 9px;
+  border-radius: 7px;
+  color: var(--muted);
+  background: var(--paper);
+  font-size: .82rem;
+  line-height: 1.45;
+}
+.clinical-ai-detail-list strong { color: var(--green); }
+.clinical-ai-bullet-list {
+  display: grid;
+  gap: 7px;
+  margin: 12px 19px 18px;
+  padding-left: 21px;
+  color: var(--ink);
+  font-size: .88rem;
+  line-height: 1.5;
+}
+.clinical-ai-empty { color: var(--muted) !important; }
 .clinical-ai-message-user { align-self: flex-end; }
 .clinical-ai-message-user p { color: var(--white); background: var(--green); }
 .clinical-ai-message-error p { color: var(--coral-dark); background: color-mix(in srgb, var(--coral) 12%, var(--white)); }
@@ -6951,6 +7116,17 @@ details.metrics summary {
 
 @media (max-width: 780px) {
   .clinical-ai-help { grid-template-columns: 1fr; }
+  .clinical-ai-richtext > h3 { padding: 15px; }
+  .clinical-ai-richtext > h4,
+  .clinical-ai-richtext > h5,
+  .clinical-ai-richtext > p,
+  .clinical-ai-caution,
+  .clinical-ai-facts,
+  .clinical-ai-exercise-list,
+  .clinical-ai-bullet-list { margin-right: 14px; margin-left: 14px; }
+  .clinical-ai-richtext > .clinical-ai-lead { margin: 0; padding: 14px 15px; }
+  .clinical-ai-facts { grid-template-columns: 1fr; }
+  .clinical-ai-exercise-list > li { padding-left: 45px; }
   .triage-intro, .triage-card { align-items: stretch; flex-direction: column; }
   .triage-card-actions { align-items: flex-start; }
   .triage-action-buttons { justify-content: flex-start; }

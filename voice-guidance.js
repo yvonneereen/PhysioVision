@@ -7,7 +7,11 @@ import { generateGuidanceSpeech } from "./api.js?v=31";
 const VOICE_PREFERENCE_KEY = "physiovision.voice.enabled.v1";
 const VOICE_RATE_PREFERENCE_KEY = "physiovision.voice.rate.v1";
 const DEFAULT_SPEECH_VOLUME = 1;
-const MICROPHONE_RELEASE_SETTLE_MS = 200;
+// Safari's `audioend` fires before its speaker has always finished recovering
+// from the quiet play-and-record route. The supplied recordings show the
+// recovery completing roughly one second later, so no utterance may begin
+// until this post-release stabilization window has elapsed.
+const MICROPHONE_RELEASE_SETTLE_MS = 1300;
 const MICROPHONE_RELEASE_TIMEOUT_MS = 1800;
 const NEURAL_SPEECH_MIN_LENGTH = 18;
 const NEURAL_SPEECH_CACHE_LIMIT = 24;

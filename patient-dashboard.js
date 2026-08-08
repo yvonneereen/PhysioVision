@@ -27,7 +27,7 @@ import {
 } from "./patient-dashboard-state.js?v=7";
 import { saveProfile } from "./personalization.js?v=13";
 import { getLocale, translateText } from "./i18n.js?v=22";
-import { voiceGuidance } from "./voice-guidance.js?v=31";
+import { voiceGuidance } from "./voice-guidance.js?v=32";
 import { EXERCISE_MAP } from "./exercises/registry.js?v=58";
 
 const WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions";

@@ -365,8 +365,8 @@ assert.equal(
 );
 assert.equal(
   microphoneReleaseDelay,
-  200,
-  "the first prompt should briefly settle after Safari releases microphone audio mode"
+  1300,
+  "the first prompt should wait until Safari's speaker level stabilizes after microphone release"
 );
 assert.equal(
   safariAudioSession.type,
@@ -674,7 +674,7 @@ const safariListeningGuidance = new VoiceGuidance({
   setTimeout: (callback, delay) => {
     safariListeningDelays.push(delay);
     safariListeningTimerId += 1;
-    if (delay >= 1000) {
+    if (delay === 1800) {
       safariListeningTimers.set(safariListeningTimerId, callback);
     } else {
       callback();
@@ -705,7 +705,7 @@ await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
 assert.equal(safariDeliveredTranscript, "five");
 assert.equal(safariListeningSession.type, "playback");
 assert.ok(safariListeningDelays.includes(1800));
-assert.ok(safariListeningDelays.includes(200));
+assert.ok(safariListeningDelays.includes(1300));
 assert.equal(
   safariListeningTimers.size,
   0,

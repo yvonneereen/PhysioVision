@@ -48,7 +48,7 @@ import {
   isSafariBrowser,
   readMicrophonePermissionState,
   voiceGuidance,
-} from "./voice-guidance.js?v=33";
+} from "./voice-guidance.js?v=34";
 import {
   PRACTICE_VIEWS,
   acceptedWellnessPlan,

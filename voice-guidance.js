@@ -13,10 +13,6 @@ const DEFAULT_SPEECH_VOLUME = 1;
 // may begin until this longer post-release stabilization window has elapsed.
 const MICROPHONE_RELEASE_SETTLE_MS = 2000;
 const MICROPHONE_RELEASE_TIMEOUT_MS = 1800;
-// WebKit can fade in the first spoken word while it changes from microphone
-// capture to playback. A punctuation-only pre-roll gives that audio route time
-// to settle without adding another audible prompt or changing voice engines.
-const SINGLE_ENGINE_SPEECH_PREROLL = "… ";
 const NEURAL_SPEECH_MIN_LENGTH = 18;
 const NEURAL_SPEECH_CACHE_LIMIT = 24;
 const NEURAL_TARGET_RMS = 0.16;
@@ -1153,11 +1149,7 @@ export class VoiceGuidance {
     volume = DEFAULT_SPEECH_VOLUME,
     voiceGroup = "",
   } = {}) {
-    const utterance = new this.window.SpeechSynthesisUtterance(
-      this.singleVoiceEngine
-        ? `${SINGLE_ENGINE_SPEECH_PREROLL}${message}`
-        : message
-    );
+    const utterance = new this.window.SpeechSynthesisUtterance(message);
     const normalizedVoiceGroup = String(voiceGroup ?? "").trim();
     const hasGroupedVoice = Boolean(
       normalizedVoiceGroup

@@ -527,8 +527,8 @@ assert.equal(spoken.length, safariSpokenBefore + 1);
 assert.equal(spoken.at(-1).volume, 1);
 assert.equal(
   spoken.at(-1).text,
-  "… This longer guidance sentence must stay on one steady Safari output path.",
-  "Safari speech should use a silent punctuation pre-roll so its first word is not faded in"
+  "This longer guidance sentence must stay on one steady Safari output path.",
+  "Safari speech should begin directly with the guidance and no spoken pre-roll"
 );
 
 neuralRequest = null;

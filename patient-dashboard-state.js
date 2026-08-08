@@ -1,3 +1,5 @@
+import { movementQualityFromSession } from "./movement-quality.js?v=1";
+
 export const PROVISIONAL_TREND_THRESHOLDS = Object.freeze({
   qualityDeclinePoints: 8,
   painIncreasePoints: 2,
@@ -139,7 +141,7 @@ export function analysePatientTrend({
     comparableSessions.map((session) => recordId(session.id)).filter(Boolean),
   );
   const qualityValues = recentSessions
-    .map((session) => number(session.quality_score))
+    .map((session) => movementQualityFromSession(session))
     .filter((value) => value !== null);
   const sessionPainPairs = recentSessions.map((session) => {
     const checkins = sessionPainCheckins(session, painCheckins);

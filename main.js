@@ -24,6 +24,7 @@ import {
   buildCalibrationSafetyContext,
   evaluateCalibrationReuse,
 } from "./calibration-policy.js?v=2";
+import { calculateMovementQuality } from "./movement-quality.js?v=1";
 import {
   createEmergencyAlert,
   getPainCheckins,
@@ -37,7 +38,7 @@ import {
   sendAgentMessage,
   updatePainCheckin,
 } from "./api.js?v=32";
-import { analysePatientTrend } from "./patient-dashboard-state.js?v=9";
+import { analysePatientTrend } from "./patient-dashboard-state.js?v=10";
 import { DRAFT_EXERCISES } from "./exercises/catalog.js?v=3";
 import {
   parseConfirmationResponse,
@@ -1263,6 +1264,8 @@ function renderCameraRepProgress(
 // Accumulated per-session stats (reset on each camera start)
 const sessionCueCounts = {};
 let sessionSymmetryWarnings = 0;
+const sessionCueRepEvents = new Set();
+const sessionSymmetryRepEvents = new Set();
 const sessionAngleStats = {}; // {angleName: {min, max, sum, count}}
 let spokenCoachingCandidate = null;
 let spokenRepCount = 0;
@@ -3088,9 +3091,30 @@ function updateFeedbackPanel(angles, timestampMs) {
     ?? activeDose(fb.exercise).holdSeconds
     ?? 3;
 
-  // Accumulate session stats for backend POST
-  fb.cues.forEach(cue => { sessionCueCounts[cue] = (sessionCueCounts[cue] ?? 0) + 1; });
-  if (fb.symmetryWarning) sessionSymmetryWarnings++;
+  // Accumulate correction events for the backend once per repetition. The
+  // previous implementation incremented these counters on every video frame,
+  // so one persistent cue could appear hundreds of times and force the final
+  // quality score to zero.
+  const configuredTarget = Number(activeDose(fb.exercise).reps);
+  const targetRepetitions = Number.isFinite(configuredTarget)
+    && configuredTarget > 0
+    ? Math.round(configuredTarget)
+    : Math.max(1, Number(fb.repCount ?? 0) + 1);
+  const repetitionNumber = Math.max(
+    1,
+    Math.min(targetRepetitions, Number(fb.repCount ?? 0) + 1),
+  );
+  const correctionBucket = `${completedSetCount + 1}:${repetitionNumber}`;
+  fb.cues.forEach((cue) => {
+    const eventKey = `${correctionBucket}:${cue}`;
+    if (sessionCueRepEvents.has(eventKey)) return;
+    sessionCueRepEvents.add(eventKey);
+    sessionCueCounts[cue] = (sessionCueCounts[cue] ?? 0) + 1;
+  });
+  if (fb.symmetryWarning && !sessionSymmetryRepEvents.has(correctionBucket)) {
+    sessionSymmetryRepEvents.add(correctionBucket);
+    sessionSymmetryWarnings += 1;
+  }
   Object.entries(angles).forEach(([key, a]) => {
     if (a.lowConfidence || !Number.isFinite(a.value)) return;
     const s = sessionAngleStats[key] ?? (sessionAngleStats[key] = { min: Infinity, max: -Infinity, sum: 0, count: 0 });
@@ -4632,19 +4656,11 @@ window.addEventListener("pageshow", (event) => {
   if (event.persisted) resetVoiceModeChoice();
 });
 
-// Derive a 0–100 movement-quality score from how often form cues fired and
-// symmetry warnings triggered, relative to the reps performed. A clean session
-// (no faults) scores 100; each fault-per-rep costs up to 50 points.
-function movementQualityScore(cuesTriggered, symmetryWarnings, reps) {
-  if (!reps) return null;
-  const cueFaults = cuesTriggered.reduce((sum, c) => sum + (c.trigger_count || 0), 0);
-  const faultRate = (cueFaults + (symmetryWarnings || 0)) / reps;
-  return Math.max(0, Math.min(100, Math.round(100 - faultRate * 50)));
-}
-
 function clearSessionMeasurements() {
   Object.keys(sessionCueCounts).forEach(k => delete sessionCueCounts[k]);
   Object.keys(sessionAngleStats).forEach(k => delete sessionAngleStats[k]);
+  sessionCueRepEvents.clear();
+  sessionSymmetryRepEvents.clear();
   sessionSymmetryWarnings = 0;
 }
 
@@ -4757,7 +4773,11 @@ function completeExerciseSession() {
     cues_triggered:          cuesTriggered,
     symmetry_warnings_count: sessionSymmetryWarnings,
     angle_summaries:         angleSummaries,
-    quality_score:           movementQualityScore(cuesTriggered, sessionSymmetryWarnings, totalRepsCompleted),
+    quality_score:           calculateMovementQuality({
+      cuesTriggered,
+      symmetryWarnings: sessionSymmetryWarnings,
+      repetitions: totalRepsCompleted,
+    }),
   };
   completedExerciseSessionSnapshot = {
     ...sessionPayload,

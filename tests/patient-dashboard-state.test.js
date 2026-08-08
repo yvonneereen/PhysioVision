@@ -188,6 +188,21 @@ assert.equal(
   "Your first linked session check-in is recorded",
 );
 
+const legacyFrameCountedQuality = analysePatientTrend({
+  sessions: [session(0, {
+    reps_completed: 12,
+    quality_score: 0,
+    cues_triggered: [{
+      cue_text: "Make the squat a little shallower",
+      trigger_count: 207,
+    }],
+    symmetry_warnings_count: 0,
+  })],
+});
+
+assert.equal(legacyFrameCountedQuality.averageQuality, 75);
+assert.deepEqual(legacyFrameCountedQuality.qualitySeries, [75]);
+
 assert.equal(
   isCurrentPrescription(
     {

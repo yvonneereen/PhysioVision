@@ -24,10 +24,10 @@ import {
   mergeConsultationTranscript,
   shouldShowPhysiotherapistRequest,
   walkingConfidencePlanNeedsRefresh,
-} from "./patient-dashboard-state.js?v=8";
+} from "./patient-dashboard-state.js?v=9";
 import { saveProfile } from "./personalization.js?v=13";
-import { getLocale, translateText } from "./i18n.js?v=27";
-import { voiceGuidance } from "./voice-guidance.js?v=36";
+import { getLocale, translateText } from "./i18n.js?v=28";
+import { voiceGuidance } from "./voice-guidance.js?v=37";
 import { EXERCISE_MAP } from "./exercises/registry.js?v=58";
 
 const WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions";
@@ -112,6 +112,8 @@ const toastMessage = document.getElementById("toastMessage");
 
 const TREND_STATUS_LABELS = Object.freeze({
   building_baseline: "Building baseline",
+  first_measurement: "First measurement",
+  preliminary: "Preliminary",
   stable: "Steady",
   improving: "Improving",
   review_suggested: "Review suggested",
@@ -633,8 +635,11 @@ function renderTrend(data) {
   if (trend.focusExercise) {
     const exerciseName = trend.focusExerciseName || trend.focusExercise;
     const side = trend.focusSide ? `${trend.focusSide} side` : "selected side";
+    const measurementLabel = trend.movementMeasurementCount === 1
+      ? "1 real camera measurement"
+      : `${trend.movementMeasurementCount} real camera measurements`;
     trendScope.textContent =
-      `Comparing ${exerciseName} on the ${side} only · ${trend.comparableSessionCount} recorded sessions`;
+      `Comparing ${exerciseName} on the ${side} only · ${measurementLabel}`;
     trendScope.hidden = false;
   } else {
     trendScope.textContent = "";

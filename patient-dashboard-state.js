@@ -55,6 +55,7 @@ export function walkingConfidencePlanNeedsRefresh(plan = {}) {
 }
 
 function number(value) {
+  if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -75,6 +76,12 @@ function differenceNewestToOldest(values) {
   const numeric = values.map(number).filter((value) => value !== null);
   if (numeric.length < PROVISIONAL_TREND_THRESHOLDS.minimumReadings) return null;
   return numeric[0] - numeric[numeric.length - 1];
+}
+
+function differenceNewestToPrevious(values) {
+  const numeric = values.map(number).filter((value) => value !== null);
+  if (numeric.length < 2) return null;
+  return numeric[0] - numeric[1];
 }
 
 function recordId(value) {
@@ -157,8 +164,20 @@ export function analysePatientTrend({
   const recoveryCheckins = sessionPainPairs
     .map(({ after }) => after)
     .filter((checkin) => checkin?.recovery_status);
+  const movementMeasurementCount = qualityValues.length;
+  const trendReadingCount = Math.max(
+    movementMeasurementCount,
+    painValues.length,
+    recoveryCheckins.length,
+  );
   const qualityDelta = differenceNewestToOldest(qualityValues.slice(0, 3));
   const painDelta = differenceNewestToOldest(painValues.slice(0, 3));
+  const preliminaryQualityDelta = differenceNewestToPrevious(
+    qualityValues.slice(0, 2),
+  );
+  const preliminaryPainDelta = differenceNewestToPrevious(
+    painValues.slice(0, 2),
+  );
   const openEscalation = newestFirst(escalations, "created_at").find((item) => (
     item.status === "open"
     && (!recordId(item.session) || comparableSessionIds.has(recordId(item.session)))
@@ -185,6 +204,7 @@ export function analysePatientTrend({
   let message =
     "Complete a few guided sessions and pain check-ins to make this trend more meaningful.";
   let reason = null;
+  let preliminaryDirection = null;
 
   if (openEscalation) {
     status = "review_suggested";
@@ -203,6 +223,41 @@ export function analysePatientTrend({
         "Your recent measured movement-quality scores have decreased across several sessions.";
       reason = "quality_decline";
     }
+  } else if (trendReadingCount === 1) {
+    status = "first_measurement";
+    if (movementMeasurementCount === 1) {
+      title = "Your first real movement measurement is recorded";
+      message =
+        "This camera-measured result is shown now. Repeat the same exercise on the same side to begin comparing change.";
+    } else {
+      title = "Your first linked session check-in is recorded";
+      message =
+        "Pain and recovery were saved, but movement quality was not measured. Keep the required joints visible so the next session can add a camera-measured result.";
+    }
+  } else if (trendReadingCount === 2) {
+    status = "preliminary";
+    const improving = (
+      preliminaryQualityDelta > 0
+      || preliminaryPainDelta < 0
+      || recoveryCheckins[0]?.recovery_status === "better"
+    );
+    const lower = (
+      preliminaryQualityDelta < 0
+      || preliminaryPainDelta > 0
+      || recoveryCheckins[0]?.recovery_status === "worse"
+    );
+    preliminaryDirection = improving && !lower
+      ? "improving"
+      : lower && !improving
+        ? "lower"
+        : "steady";
+    title = {
+      improving: "Your preliminary direction is improving",
+      lower: "Your preliminary direction is lower",
+      steady: "Your preliminary direction is steady",
+    }[preliminaryDirection];
+    message =
+      "This comparison uses two real sessions. Complete the same exercise on the same side once more to establish the three-session trend.";
   } else if (
     qualityValues.length >= PROVISIONAL_TREND_THRESHOLDS.minimumReadings ||
     painValues.length >= PROVISIONAL_TREND_THRESHOLDS.minimumReadings ||
@@ -235,6 +290,11 @@ export function analysePatientTrend({
     latestRecovery: recoveryCheckins[0]?.recovery_status ?? "",
     painResponseSeries: [...painResponseValues].reverse(),
     qualitySeries: [...qualityValues].reverse(),
+    movementMeasurementCount,
+    trendReadingCount,
+    preliminaryDirection,
+    fullTrendEstablished:
+      trendReadingCount >= PROVISIONAL_TREND_THRESHOLDS.minimumReadings,
     comparableSessionCount: comparableSessions.length,
     focusExercise: selectedExercise || null,
     focusExerciseName: referenceSession?.exercise_name ?? "",

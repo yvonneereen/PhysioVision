@@ -141,6 +141,53 @@ const unlinkedPainIsExcluded = analysePatientTrend({
 assert.equal(unlinkedPainIsExcluded.latestPain, null);
 assert.equal(unlinkedPainIsExcluded.reason, null);
 
+const firstRealMeasurement = analysePatientTrend({
+  sessions: [session(0, { quality_score: 82 })],
+});
+
+assert.equal(firstRealMeasurement.status, "first_measurement");
+assert.equal(firstRealMeasurement.movementMeasurementCount, 1);
+assert.equal(firstRealMeasurement.trendReadingCount, 1);
+assert.equal(firstRealMeasurement.fullTrendEstablished, false);
+assert.equal(
+  firstRealMeasurement.title,
+  "Your first real movement measurement is recorded",
+);
+
+const twoSessionPreliminaryTrend = analysePatientTrend({
+  sessions: [
+    session(0, { quality_score: 82 }),
+    session(1, { quality_score: 70 }),
+  ],
+});
+
+assert.equal(twoSessionPreliminaryTrend.status, "preliminary");
+assert.equal(twoSessionPreliminaryTrend.preliminaryDirection, "improving");
+assert.equal(twoSessionPreliminaryTrend.movementMeasurementCount, 2);
+assert.equal(twoSessionPreliminaryTrend.fullTrendEstablished, false);
+assert.equal(
+  twoSessionPreliminaryTrend.title,
+  "Your preliminary direction is improving",
+);
+
+const savedWithoutMeasuredMovement = analysePatientTrend({
+  sessions: [session(0, { quality_score: null })],
+  painCheckins: [{
+    session: "session-0",
+    timing: "after",
+    checked_at: dates[0],
+    pain_level: 4,
+    recovery_status: "same",
+  }],
+});
+
+assert.equal(savedWithoutMeasuredMovement.status, "first_measurement");
+assert.equal(savedWithoutMeasuredMovement.movementMeasurementCount, 0);
+assert.equal(
+  savedWithoutMeasuredMovement.title,
+  "Your first linked session check-in is recorded",
+);
+
 assert.equal(
   isCurrentPrescription(
     {

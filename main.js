@@ -37,7 +37,7 @@ import {
   sendAgentMessage,
   updatePainCheckin,
 } from "./api.js?v=32";
-import { analysePatientTrend } from "./patient-dashboard-state.js?v=8";
+import { analysePatientTrend } from "./patient-dashboard-state.js?v=9";
 import { DRAFT_EXERCISES } from "./exercises/catalog.js?v=3";
 import {
   parseConfirmationResponse,
@@ -48,7 +48,7 @@ import {
   isSafariBrowser,
   readMicrophonePermissionState,
   voiceGuidance,
-} from "./voice-guidance.js?v=36";
+} from "./voice-guidance.js?v=37";
 import {
   PRACTICE_VIEWS,
   acceptedWellnessPlan,
@@ -5315,18 +5315,13 @@ async function finalizeSessionSummary(completed, beforePain, painSavePromise) {
       : "No repetitions were measured. Check your camera position before trying again.";
 
   if (trend) {
-    const sessionsNeeded = Math.max(0, 3 - trend.comparableSessionCount);
-    sessionSummaryTrendEl.textContent = trend.comparableSessionCount < 3
-      ? (
-        `Baseline ${trend.comparableSessionCount} of 3: complete ${sessionsNeeded} more `
-        + `${snapshot.exercise_name ?? "exercise"} session${sessionsNeeded === 1 ? "" : "s"} `
-        + "on this side to establish a trend."
-      )
-      : `${trend.title}. ${trend.message}`;
+    sessionSummaryTrendEl.textContent = `${trend.title}. ${trend.message}`;
     sessionSummaryStatusEl.textContent = {
       review_suggested: "Review suggested",
       improving: "Improving",
       stable: "Steady",
+      preliminary: "Preliminary",
+      first_measurement: "First measurement",
       building_baseline: "Building baseline",
     }[trend.status] ?? "Building baseline";
     if (checkinSaveIncomplete) {

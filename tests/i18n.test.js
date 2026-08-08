@@ -23,7 +23,7 @@ assert.ok(
 );
 assert.deepEqual(
   [...new Set(i18nCacheVersions)],
-  ["27"],
+  ["28"],
   "all browser entry points must use one i18n URL so only one DOM observer is created"
 );
 
@@ -73,7 +73,7 @@ const voiceCacheVersions = voiceConsumerSources.flatMap((source) =>
 );
 assert.deepEqual(
   [...new Set(voiceCacheVersions)],
-  ["36"],
+  ["37"],
   "all voice consumers must share one voice-guidance module instance"
 );
 
@@ -154,6 +154,28 @@ for (const locale of ["zh-SG", "ms-SG", "ta-SG"]) {
 }
 assert.equal(translateText("Better shoulder movement"), "改善肩部活动");
 assert.equal(translateText("Shoulder pendulum"), "肩部钟摆运动");
+assert.equal(translateText("First measurement"), "首次测量");
+assert.equal(
+  translateText(
+    "Comparing Half Squats on the right side only · 2 real camera measurements"
+  ),
+  "仅比较半蹲的右侧 · 2次真实摄像头测量"
+);
+for (const locale of ["zh-SG", "ms-SG", "ta-SG"]) {
+  for (const source of [
+    "Your first real movement measurement is recorded",
+    "This camera-measured result is shown now. Repeat the same exercise on the same side to begin comparing change.",
+    "Your preliminary direction is improving",
+    "This comparison uses two real sessions. Complete the same exercise on the same side once more to establish the three-session trend.",
+    "Comparing Half Squats on the right side only · 2 real camera measurements",
+  ]) {
+    assert.notEqual(
+      translateText(source, locale),
+      source,
+      `${locale} should translate real-session trend copy`,
+    );
+  }
+}
 for (const locale of ["zh-SG", "ms-SG", "ta-SG"]) {
   for (const source of [
     "Better shoulder movement",

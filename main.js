@@ -7,7 +7,7 @@ import {
   measureHandExerciseFrame,
   measurePoseExerciseFrame,
 } from "./exercise-tracking.js?v=2";
-import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=47";
+import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=48";
 import { POSES } from "./poses.js";
 import {
   calibrationFrameMatchesPhase,
@@ -48,7 +48,7 @@ import {
   isSafariBrowser,
   readMicrophonePermissionState,
   voiceGuidance,
-} from "./voice-guidance.js?v=38";
+} from "./voice-guidance.js?v=39";
 import {
   PRACTICE_VIEWS,
   acceptedWellnessPlan,
@@ -1276,6 +1276,8 @@ let sessionAllSetsComplete = false;
 let lastFeedbackResult = null;
 let exerciseCompletionConfirmationActive = false;
 let exerciseCompletionConfirmationGeneration = 0;
+let finalRepReturnPromptedSetKey = "";
+let finalRepReturnPendingSetKey = "";
 
 const MOVEMENT_AI_TRANSIENT_LISTENING_ERRORS = new Set([
   "no-match",
@@ -2093,6 +2095,49 @@ function queueRepAnnouncements(feedback, metric) {
     pendingRepAnnouncements.push(latestAnnouncement);
   }
   processPendingRepAnnouncements();
+}
+
+function promptForFinalHalfSquatReturn(feedback, metric) {
+  const setNumber = completedSetCount + 1;
+  const setKey = `${feedback?.exercise?.id}:${setNumber}`;
+  const reachedFinalSquatPosition = Boolean(
+    feedback?.exercise?.id === "half-squats"
+    && !metric.isHold
+    && metric.goal !== null
+    && feedback.repCount === metric.goal - 1
+    && feedback.phase === feedback.exercise.adaptivePhaseTracking?.targetPhase
+    && feedback.expectedNextPhase
+      === feedback.exercise.adaptivePhaseTracking?.fromPhase
+  );
+  if (reachedFinalSquatPosition) finalRepReturnPendingSetKey = setKey;
+
+  if (
+    feedback?.exercise?.id !== "half-squats"
+    || metric.isHold
+    || metric.goal === null
+    || feedback.repCount !== metric.goal - 1
+    || finalRepReturnPendingSetKey !== setKey
+  ) {
+    return false;
+  }
+
+  const message =
+    "Final repetition. Stand tall and hold still until I say the exercise is complete.";
+  if (finalRepReturnPromptedSetKey !== setKey) {
+    statusEl.textContent = "Final repetition — stand tall and hold still";
+    cameraSessionHintEl.textContent = message;
+    const spoken = speakCameraCoaching(message, {
+      key: `final-return:${setKey}`,
+      interrupt: true,
+    });
+    // A previous rep announcement or AI answer may still be speaking when the
+    // final squat is recognized. Keep this cue pending and retry after that
+    // speech ends instead of silently losing the reminder.
+    if (spoken || !voiceGuidance.enabled) {
+      finalRepReturnPromptedSetKey = setKey;
+    }
+  }
+  return true;
 }
 
 // ── Hold timer state ──────────────────────────────────────────────────────────
@@ -3066,6 +3111,7 @@ function updateFeedbackPanel(angles, timestampMs) {
   if (repLabelEl) repLabelEl.textContent = metric.unit;
   if (setCompleteBadgeEl) setCompleteBadgeEl.classList.toggle("hidden", !setComplete);
   queueRepAnnouncements(fb, metric);
+  const awaitingFinalHalfSquatReturn = promptForFinalHalfSquatReturn(fb, metric);
 
   // Highlight active pose card without re-rendering the whole strip
   poseStripEl.querySelectorAll(".pose-card").forEach((card, i) => {
@@ -3122,7 +3168,11 @@ function updateFeedbackPanel(angles, timestampMs) {
     .join("");
   let bannerState;
   let bannerCue;
-  if (fb.inHold && !fb.holdPositionMaintained) {
+  if (awaitingFinalHalfSquatReturn && fb.trackingReady) {
+    bannerState = "position";
+    bannerCue =
+      "Final repetition: stand tall, stay fully visible, and hold still until it is counted.";
+  } else if (fb.inHold && !fb.holdPositionMaintained) {
     bannerState = fb.trackingReady ? "adjust" : "tracking";
     bannerCue = "Hold reset — return to the target position to restart";
   } else if (!fb.trackingReady) {
@@ -4604,6 +4654,8 @@ function resetSetProgress() {
   pendingSetStartCheck = null;
   sessionAllSetsComplete = false;
   lastFeedbackResult = null;
+  finalRepReturnPromptedSetKey = "";
+  finalRepReturnPendingSetKey = "";
 }
 
 function resetExerciseProgressForNewSession() {

@@ -23,7 +23,7 @@ assert.ok(
 );
 assert.deepEqual(
   [...new Set(i18nCacheVersions)],
-  ["29"],
+  ["30"],
   "all browser entry points must use one i18n URL so only one DOM observer is created"
 );
 
@@ -73,7 +73,7 @@ const voiceCacheVersions = voiceConsumerSources.flatMap((source) =>
 );
 assert.deepEqual(
   [...new Set(voiceCacheVersions)],
-  ["38"],
+  ["39"],
   "all voice consumers must share one voice-guidance module instance"
 );
 
@@ -125,6 +125,9 @@ for (const locale of ["zh-SG", "ms-SG", "ta-SG"]) {
     "7 of 10 repetitions",
     "Your target is 10 repetitions. I will say when all 10 have been counted. Keep your full body visible until then.",
     "Your target is 30 seconds of tracked hold time. I will say when the target has been counted. Keep every required joint visible until then.",
+    "Final repetition. Stand tall and hold still until I say the exercise is complete.",
+    "Final repetition — stand tall and hold still",
+    "Final repetition: stand tall, stay fully visible, and hold still until it is counted.",
     "I counted 9 of 10 repetitions. The exercise is paused and has not been marked finished. Keep your full body visible and resume for any repetitions that were not counted.",
     "Exercise target reached",
     "Would you like me to finish this exercise and start your check-in? Say yes or no.",

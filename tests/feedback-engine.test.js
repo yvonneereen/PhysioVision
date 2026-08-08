@@ -170,6 +170,51 @@ const halfSquatBottom = (overrides = {}) =>
 
 {
   const engine = new FeedbackEngine("half-squats", "right");
+  engine.update(halfSquatPose(), 0);
+  engine.update(halfSquatPose(), 400);
+  engine.update(halfSquatBottom(), 500);
+  engine.update(halfSquatBottom(), 900);
+
+  assert.equal(engine.update(halfSquatPose(), 1000).repCount, 0);
+  assert.equal(
+    engine.update(halfSquatPose(), 1180).repCount,
+    1,
+    "a visible standing return should count without a second 400 ms hold"
+  );
+}
+
+{
+  const engine = new FeedbackEngine("half-squats", "right");
+  engine.update(halfSquatPose(), 0);
+  engine.update(halfSquatPose(), 400);
+  engine.update(halfSquatBottom(), 500);
+  engine.update(halfSquatBottom(), 900);
+  engine.update(halfSquatPose(), 1000);
+
+  assert.equal(
+    engine.update(halfSquatBottom(), 1100).repCount,
+    0,
+    "a single fleeting standing frame must not complete a repetition"
+  );
+}
+
+{
+  const engine = new FeedbackEngine("half-squats", "right");
+  let timestamp = 0;
+  engine.update(halfSquatPose(), timestamp);
+  engine.update(halfSquatPose(), timestamp += 400);
+  for (let repetition = 1; repetition <= 10; repetition += 1) {
+    engine.update(halfSquatBottom(), timestamp += 100);
+    engine.update(halfSquatBottom(), timestamp += 400);
+    engine.update(halfSquatPose(), timestamp += 100);
+    const result = engine.update(halfSquatPose(), timestamp += 180);
+    assert.equal(result.repCount, repetition);
+  }
+  assert.equal(engine.repCount, 10, "the target repetition must be recorded");
+}
+
+{
+  const engine = new FeedbackEngine("half-squats", "right");
   engine.update(halfSquatBottom(), 0);
   engine.update(halfSquatBottom(), 500);
   engine.update(halfSquatPose(), 600);

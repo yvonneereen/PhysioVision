@@ -1,4 +1,4 @@
-import { EXERCISES, EXERCISE_MAP } from "../exercises/registry.js?v=58";
+import { EXERCISES, EXERCISE_MAP } from "../exercises/registry.js?v=59";
 import { applyCalibration } from "../personalization.js";
 
 export { EXERCISES };
@@ -273,7 +273,22 @@ export class FeedbackEngine {
   }
 
   _phaseConfirmed(phase, timestampMs) {
-    const confirmationMs = this.exercise.phaseConfirmationMs ?? 0;
+    const adaptiveTracking = this.exercise.adaptivePhaseTracking;
+    const isAdaptiveReturn = Boolean(
+      adaptiveTracking
+      && this.startConfirmed
+      && this.stageIdx > 0
+      && phase === adaptiveTracking.fromPhase
+    );
+    // A rep is still required to reach and hold its target phase for the full
+    // confirmation period. The return only needs a few consecutive visible
+    // frames: requiring another long hold after standing made the last rep
+    // disappear when someone naturally started walking back to the laptop.
+    const confirmationMs = isAdaptiveReturn
+      ? this.exercise.returnPhaseConfirmationMs
+        ?? this.exercise.phaseConfirmationMs
+        ?? 0
+      : this.exercise.phaseConfirmationMs ?? 0;
     if (confirmationMs <= 0) return true;
 
     const interruptionGraceMs = this.exercise.phaseInterruptionGraceMs ?? 0;

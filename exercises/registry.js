@@ -149,6 +149,10 @@ export const EXERCISES = [
     // confirmed phase across a few missed frames, but reset after sustained
     // tracking loss so stale poses cannot earn a repetition.
     phaseConfirmationMs: 400,
+    // Once the squat itself has been held and recognized, a short run of
+    // standing frames completes the rep. This gives the guide time to count
+    // the final return before the user walks back toward their device.
+    returnPhaseConfirmationMs: 180,
     phaseInterruptionGraceMs: 250,
     trackingLossGraceMs: 450,
     maxCues: 1,

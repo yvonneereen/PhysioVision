@@ -360,6 +360,21 @@ assert.match(
   /renderCameraRepProgress\(fb\.exercise, shown, \{ complete: setComplete \}\)/,
   "every recognized repetition should update the camera overlay"
 );
+assert.match(
+  functionSource("promptForFinalHalfSquatReturn", "startHoldTimer"),
+  /feedback\.repCount === metric\.goal - 1[\s\S]*?finalRepReturnPendingSetKey = setKey[\s\S]*?Final repetition\. Stand tall and hold still[\s\S]*?interrupt: true/,
+  "the tenth squat attempt should tell a distant user to remain visible until its return is counted"
+);
+assert.match(
+  functionSource("promptForFinalHalfSquatReturn", "startHoldTimer"),
+  /if \(spoken \|\| !voiceGuidance\.enabled\)[\s\S]*?finalRepReturnPromptedSetKey = setKey/,
+  "a final-repetition cue blocked by older speech should remain pending and retry"
+);
+assert.match(
+  functionSource("updateFeedbackPanel", "renderPoseStrip"),
+  /promptForFinalHalfSquatReturn\(fb, metric\)[\s\S]*?Final repetition: stand tall, stay fully visible/,
+  "the final-return instruction should remain visible while the tracker waits"
+);
 assert.doesNotMatch(
   source,
   /Move your (?:left|right) knee back so it stays over your foot/,

@@ -1405,6 +1405,29 @@
             </dl>
           </section>
 
+          <div
+            id="exerciseCompletionPrompt"
+            class="exercise-completion-prompt hidden"
+            role="group"
+            aria-labelledby="exerciseCompletionPromptTitle"
+          >
+            <strong id="exerciseCompletionPromptTitle">Exercise target reached</strong>
+            <p id="exerciseCompletionPromptText">
+              Would you like me to finish this exercise and start your check-in?
+            </p>
+            <div class="exercise-completion-choices">
+              <button
+                id="exerciseCompletionConfirm"
+                class="button button-coral"
+                type="button"
+              >Yes, finish and check in</button>
+              <button
+                id="exerciseCompletionNotYet"
+                class="button exercise-completion-not-yet"
+                type="button"
+              >Not yet</button>
+            </div>
+          </div>
           <div class="camera-session-actions">
             <button
               id="toggle"
@@ -2858,14 +2881,14 @@
   <script src="runtime-config.js"></script>
   <p id="textSizeStatus" class="sr-only" role="status" aria-live="polite"></p>
   <script type="module" src="text-size.js?v=1"></script>
-  <script type="module" src="i18n.js?v=28"></script>
+  <script type="module" src="i18n.js?v=29"></script>
   <script type="module" src="auth.js?v=32"></script>
-  <script type="module" src="ui.js?v=31"></script>
-  <script type="module" src="patient-dashboard.js?v=49"></script>
+  <script type="module" src="ui.js?v=32"></script>
+  <script type="module" src="patient-dashboard.js?v=50"></script>
   <script type="module" src="therapist.js?v=41"></script>
   <script type="module" src="exercise-library.js?v=17"></script>
-  <script type="module" src="main.js?v=128"></script>
-  <script type="module" src="agent-chat.js?v=37"></script>
+  <script type="module" src="main.js?v=129"></script>
+  <script type="module" src="agent-chat.js?v=38"></script>
   <script type="module" src="care-workflow.js?v=19"></script>
 </body>
 </html>

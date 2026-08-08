@@ -75,6 +75,16 @@ assert.match(
   "the camera count should be an always-visible overlay with a clear completed state"
 );
 assert.match(
+  markup,
+  /id="exerciseCompletionPrompt"[\s\S]*?id="exerciseCompletionConfirm"[\s\S]*?Yes, finish and check in[\s\S]*?id="exerciseCompletionNotYet"[\s\S]*?Not yet/,
+  "a recognized target should offer explicit finish and not-yet choices"
+);
+assert.match(
+  styles,
+  /\.exercise-completion-prompt\s*\{[\s\S]*?\.exercise-completion-choices\s*\{[\s\S]*?grid-template-columns/,
+  "the completion question should remain prominent and provide large choices"
+);
+assert.match(
   styles,
   /@media \(max-width: 900px\)[\s\S]*?\.patient-practice-workspace \.camera-column\s*\{[\s\S]*?min-height: 0;[\s\S]*?overflow: visible;[\s\S]*?\.patient-practice-workspace \.stage\s*\{[\s\S]*?flex: 0 0 auto;[\s\S]*?min-height: 680px;[\s\S]*?\.patient-practice-workspace \.camera-placeholder\s*\{[\s\S]*?overflow-y: auto;/,
   "the mobile camera stage should expand and remain scrollable instead of clipping its primary action"
@@ -247,13 +257,13 @@ assert.match(
 );
 assert.match(
   source,
-  /function exerciseStartGuidance[\s\S]*?[Ss]tand behind a stable chair[\s\S]*?feet about hip-width apart[\s\S]*?Keep your knees[\s\S]*?same direction as your toes/,
+  /function exerciseStartGuidance[\s\S]*?Keep both feet flat[\s\S]*?keep the chair[\s\S]*?Bend both knees and hips slowly[\s\S]*?only as far as comfortable/,
   "the automatic squat guide should use clear chair, foot, and knee instructions before movement"
 );
 assert.match(
   functionSource("exerciseStartGuidance", "resetSpokenCoaching"),
-  /stay standing while I explain[\s\S]*?When I stop speaking, begin your first squat/,
-  "the squat instruction should clearly delay movement until its final words"
+  /Keep both feet flat[\s\S]*?stand tall to complete one repetition\. Begin now\./,
+  "the concise squat instruction should end with the signal to begin moving"
 );
 assert.match(
   functionSource("exerciseTargetGuidance", "resetSpokenCoaching"),
@@ -262,13 +272,28 @@ assert.match(
 );
 assert.match(
   functionSource("announceExerciseInstruction", "setIntegratedCameraGuideActive"),
-  /exerciseTargetGuidance\(engine\.exercise\)[\s\S]*?movementTrackingPausedForInstruction = true[\s\S]*?movementTrackingPausedForInstruction = false/,
-  "rep tracking should remain paused for the complete start instruction"
+  /exerciseTargetGuidance\(engine\.exercise\)[\s\S]*?exerciseStartGuidance\(engine\.exercise\)[\s\S]*?movementTrackingPausedForInstruction = true[\s\S]*?movementTrackingPausedForInstruction = false/,
+  "the concise movement cue should finish the complete startup instruction before rep tracking begins"
 );
 assert.match(
   functionSource("renderFrame", "plannedSetCount"),
-  /movementTrackingPausedForInstruction[\s\S]*?presentInstructionTrackingPause\(\)[\s\S]*?updateFeedbackPanel/,
-  "camera frames may remain visible while the start instruction prevents false repetitions"
+  /movementTrackingPausedForInstruction[\s\S]*?presentInstructionTrackingPause\((?:measurements|angles), frameTimestamp\)[\s\S]*?updateFeedbackPanel/,
+  "camera frames should prepare the starting baseline while the start instruction prevents false repetitions"
+);
+assert.match(
+  functionSource("presentInstructionTrackingPause", "renderFrame"),
+  /!engine\.startConfirmed[\s\S]*?engine\.update\(measurements, timestampMs\)/,
+  "the standing baseline should be ready before the first instructed repetition begins"
+);
+assert.match(
+  feedbackPanelSource,
+  /bannerState = "good";[\s\S]*?bannerCue = "Starting position confirmed\. Begin when you are comfortable\."/,
+  "the first-rep reminder should remain short and on-screen instead of repeating spoken instructions"
+);
+assert.doesNotMatch(
+  feedbackPanelSource,
+  /bannerCue = exerciseStartGuidance/,
+  "live coaching must not repeat the full startup instruction"
 );
 assert.match(
   source,
@@ -312,8 +337,23 @@ assert.match(
 );
 assert.match(
   functionSource("handleCompletedSet", "updateFeedbackPanel"),
-  /renderCameraRepProgress\(feedback\.exercise, feedback\.repCount[\s\S]*?stopMovementAiGuide\(\)[\s\S]*?speakMovementGuide\([\s\S]*?repAnnouncementMessage[\s\S]*?interrupt: true/,
-  "the recognized target should immediately interrupt routine coaching with completion guidance"
+  /renderCameraRepProgress\(feedback\.exercise, feedback\.repCount[\s\S]*?stopMovementAiGuide\(\)[\s\S]*?beginExerciseCompletionConfirmation\(feedback, completion\)/,
+  "the recognized target should immediately open the completion confirmation"
+);
+assert.doesNotMatch(
+  functionSource("handleCompletedSet", "updateFeedbackPanel"),
+  /completeExerciseSession\(\)|showPainCheckin\("after"\)/,
+  "reaching the target must not finish the session without the user's consent"
+);
+assert.match(
+  functionSource("beginExerciseCompletionConfirmation", "processPendingRepAnnouncements"),
+  /Would you like me to finish this exercise[\s\S]*?listenForExerciseCompletionConfirmation[\s\S]*?repAnnouncementMessage[\s\S]*?speakMovementGuide\(completionAnnouncement[\s\S]*?interrupt: true[\s\S]*?onEnd: askQuestion/,
+  "completion speech should interrupt coaching, ask permission, and then listen"
+);
+assert.match(
+  functionSource("listenForExerciseCompletionConfirmation", "beginExerciseCompletionConfirmation"),
+  /parseConfirmationResponse\(transcript\)[\s\S]*?response === "confirm"[\s\S]*?finishExerciseAndCheckIn\(\{ source: "voice" \}\)[\s\S]*?response === "change"[\s\S]*?declineExerciseCompletionConfirmation/,
+  "yes should finish and open check-in while no should leave the session open"
 );
 assert.match(
   functionSource("updateFeedbackPanel", "renderPoseStrip"),
@@ -352,31 +392,34 @@ assert.match(
   "the paused state should report the recognized count and clearly say the exercise is unfinished"
 );
 
-const finishHandlerStart = source.indexOf(
-  'finishExerciseBtn.addEventListener("click"'
+const finishActionStart = source.indexOf("function finishExerciseAndCheckIn(");
+const finishActionEnd = source.indexOf(
+  'toggleBtn.addEventListener("click"',
+  finishActionStart
 );
-const finishHandlerEnd = source.indexOf(
-  'handTrackingToggle.addEventListener("click"',
-  finishHandlerStart
-);
-assert.notEqual(finishHandlerStart, -1, "explicit finish handler should exist");
-assert.notEqual(finishHandlerEnd, -1, "finish handler should have an end");
-const finishHandlerSource = source.slice(finishHandlerStart, finishHandlerEnd);
+assert.notEqual(finishActionStart, -1, "confirmed finish action should exist");
+assert.notEqual(finishActionEnd, -1, "confirmed finish action should have an end");
+const finishActionSource = source.slice(finishActionStart, finishActionEnd);
 
 assert.match(
-  finishHandlerSource,
+  finishActionSource,
   /completeExerciseSession\(\)/,
-  "only the explicit finish action should complete the exercise session"
+  "a confirmed finish should complete the exercise session"
 );
 assert.match(
-  finishHandlerSource,
+  finishActionSource,
   /showPainCheckin\("after"\)/,
-  "the after-exercise check-in should follow explicit completion"
+  "the after-exercise check-in should follow confirmed completion"
 );
 assert.doesNotMatch(
-  finishHandlerSource,
+  finishActionSource,
   /confirmedPreExercisePain = null/,
   "the pre-exercise score must remain available for the after-exercise confirmation"
+);
+assert.match(
+  source,
+  /finishExerciseBtn\.addEventListener\("click",[\s\S]*?finishExerciseAndCheckIn\(\)[\s\S]*?exerciseCompletionConfirmBtn\?\.addEventListener\("click",[\s\S]*?finishExerciseAndCheckIn\(\)/,
+  "both the existing finish button and the completion yes button should use the same finish path"
 );
 
 const voiceChoiceStart = source.indexOf(

@@ -3106,6 +3106,51 @@ body.fall-safety-open {
   cursor: not-allowed;
 }
 
+.exercise-completion-prompt {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 16px;
+  border: 2px solid rgba(59, 157, 105, 0.48);
+  border-radius: 14px;
+  color: var(--ink);
+  background: #e8f6ee;
+  box-shadow: 0 12px 28px rgba(25, 56, 58, 0.1);
+}
+
+.exercise-completion-prompt.hidden {
+  display: none;
+}
+
+.exercise-completion-prompt strong {
+  font-size: 1.125rem;
+}
+
+.exercise-completion-prompt p {
+  margin: 0;
+  color: #3d6d53;
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+.exercise-completion-choices {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(100px, 0.8fr);
+  gap: 8px;
+}
+
+.exercise-completion-choices .button {
+  min-height: 48px;
+  padding: 10px 12px;
+  font-size: 1rem;
+}
+
+.exercise-completion-not-yet {
+  border: 1px solid rgba(25, 56, 58, 0.28);
+  color: var(--ink);
+  background: #fff;
+}
+
 .camera-session-hint {
   margin: 9px 2px 12px;
   color: var(--muted);

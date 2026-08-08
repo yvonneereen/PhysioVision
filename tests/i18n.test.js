@@ -23,7 +23,7 @@ assert.ok(
 );
 assert.deepEqual(
   [...new Set(i18nCacheVersions)],
-  ["28"],
+  ["29"],
   "all browser entry points must use one i18n URL so only one DOM observer is created"
 );
 
@@ -73,7 +73,7 @@ const voiceCacheVersions = voiceConsumerSources.flatMap((source) =>
 );
 assert.deepEqual(
   [...new Set(voiceCacheVersions)],
-  ["37"],
+  ["38"],
   "all voice consumers must share one voice-guidance module instance"
 );
 
@@ -107,6 +107,12 @@ assert.equal(translateText("Start camera guide"), "开始摄像头指导");
 assert.equal(translateText("Guide speed"), "指导语速");
 assert.equal(translateText("Slower"), "较慢");
 assert.equal(translateText("Rep 3."), "第3次。");
+assert.equal(
+  translateText(
+    "Rep 10. You’re done with Half Squats. Your next exercise is Calf Raises."
+  ),
+  "第10次。您已完成半蹲。下一个运动是提踵。"
+);
 assert.equal(translateText("7 of 10 repetitions"), "完成7次，共10次");
 assert.equal(
   translateText(
@@ -120,6 +126,14 @@ for (const locale of ["zh-SG", "ms-SG", "ta-SG"]) {
     "Your target is 10 repetitions. I will say when all 10 have been counted. Keep your full body visible until then.",
     "Your target is 30 seconds of tracked hold time. I will say when the target has been counted. Keep every required joint visible until then.",
     "I counted 9 of 10 repetitions. The exercise is paused and has not been marked finished. Keep your full body visible and resume for any repetitions that were not counted.",
+    "Exercise target reached",
+    "Would you like me to finish this exercise and start your check-in? Say yes or no.",
+    "Yes, finish and check in",
+    "Not yet",
+    "Waiting for your answer. Say yes or no, or use a button.",
+    "Okay. I will leave the exercise open. Choose Finish exercise and check in when you are ready.",
+    "You said yes. The exercise is marked finished and your check-in is ready.",
+    "Rep 10. You’re done with Half Squats. Your next exercise is Calf Raises.",
   ]) {
     assert.notEqual(
       translateText(source, locale),
@@ -212,7 +226,7 @@ const liveGuideSources = [
   "Local possible-fall check available",
   "The camera check is available. Verify an emergency contact in My profile before automatic alerts can be sent.",
   "Face the camera and step back until one complete hip, knee, and ankle line is visible. Keep the chair beside you and both feet in view.",
-  "Before you begin, stay standing while I explain. Stand behind a stable chair and place both hands lightly on its back for balance. Place your feet about hip-width apart and keep your whole feet flat. Stand tall and look ahead. For each repetition, bend your knees slowly and move your hips back as if starting to sit on a chair. Lower only a little and only as far as comfortable. Keep your knees pointing in the same direction as your toes. Then slowly stand tall again. When I stop speaking, begin your first squat.",
+  "Keep both feet flat and keep the chair beside you. Bend both knees and hips slowly as if sitting back toward the chair, only as far as comfortable, then stand tall to complete one repetition. Begin now.",
   "AI questions will be ready after camera setup is complete.",
   "Let me check.",
   "Personalized movement recognition is ready.",

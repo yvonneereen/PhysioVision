@@ -48,7 +48,7 @@ import {
   isSafariBrowser,
   readMicrophonePermissionState,
   voiceGuidance,
-} from "./voice-guidance.js?v=37";
+} from "./voice-guidance.js?v=38";
 import {
   PRACTICE_VIEWS,
   acceptedWellnessPlan,
@@ -115,6 +115,21 @@ const synchronizedFrameContext = synchronizedFrame.getContext("2d", {
 const statusEl    = document.getElementById("status");
 const toggleBtn   = document.getElementById("toggle");
 const finishExerciseBtn = document.getElementById("finishExercise");
+const exerciseCompletionPromptEl = document.getElementById(
+  "exerciseCompletionPrompt"
+);
+const exerciseCompletionPromptTitleEl = document.getElementById(
+  "exerciseCompletionPromptTitle"
+);
+const exerciseCompletionPromptTextEl = document.getElementById(
+  "exerciseCompletionPromptText"
+);
+const exerciseCompletionConfirmBtn = document.getElementById(
+  "exerciseCompletionConfirm"
+);
+const exerciseCompletionNotYetBtn = document.getElementById(
+  "exerciseCompletionNotYet"
+);
 const cameraSessionHintEl = document.getElementById("cameraSessionHint");
 const movementAiStatusEl = document.getElementById("movementAiStatus");
 const fpsEl       = document.getElementById("fps");
@@ -1259,6 +1274,8 @@ let completedSessionReps = 0;
 let pendingSetStartCheck = null;
 let sessionAllSetsComplete = false;
 let lastFeedbackResult = null;
+let exerciseCompletionConfirmationActive = false;
+let exerciseCompletionConfirmationGeneration = 0;
 
 const MOVEMENT_AI_TRANSIENT_LISTENING_ERRORS = new Set([
   "no-match",
@@ -1654,14 +1671,9 @@ function exerciseSpokenInstruction(exercise) {
 function exerciseStartGuidance(exercise = engine?.exercise) {
   if (exercise?.id === "half-squats") {
     return (
-      "Before you begin, stay standing while I explain. Stand behind a stable chair "
-      + "and place both hands lightly "
-      + "on its back for balance. Place your feet about hip-width apart and keep "
-      + "your whole feet flat. Stand tall and look ahead. For each repetition, bend your "
-      + "knees slowly and move your hips back as if starting to sit on a chair. "
-      + "Lower only a little and only as far as comfortable. Keep your knees "
-      + "pointing in the same direction as your toes. Then slowly stand tall again. "
-      + "When I stop speaking, begin your first squat."
+      "Keep both feet flat and keep the chair beside you. Bend both knees and hips slowly "
+      + "as if sitting back toward the chair, only as far as comfortable, "
+      + "then stand tall to complete one repetition. Begin now."
     );
   }
   return exerciseSpokenInstruction(exercise);
@@ -1763,6 +1775,8 @@ function exerciseCompletionGuidance(exercise = engine?.exercise) {
   if (nextExercise) {
     return {
       nextExerciseId: nextExercise.id,
+      spokenMessage:
+        `You’re done with ${exerciseName}. Your next exercise is ${nextExercise.name}.`,
       message: (
         `You’re done with ${exerciseName}. Your next exercise is ${nextExercise.name}. `
         + `Choose Finish exercise and check in, then select ${nextExercise.name}.`
@@ -1771,6 +1785,8 @@ function exerciseCompletionGuidance(exercise = engine?.exercise) {
   }
   return {
     nextExerciseId: null,
+    spokenMessage:
+      `You’re done with ${exerciseName}. Today’s exercise session is done.`,
     message: (
       `You’re done with ${exerciseName}. There are no more exercises in this `
       + "planned session. Choose Finish exercise and check in. Today’s exercise session is done."
@@ -1795,6 +1811,170 @@ function repAnnouncementMessage({
   return isLastPlannedSet
     ? `Rep ${repNumber}. ${completionMessage}`
     : `Rep ${repNumber}. Set ${setNumber} is complete. Stand tall and rest before the next set.`;
+}
+
+function clearExerciseCompletionConfirmation({
+  cancelListening = false,
+  hide = true,
+} = {}) {
+  exerciseCompletionConfirmationGeneration += 1;
+  exerciseCompletionConfirmationActive = false;
+  if (cancelListening) voiceGuidance.cancelListening();
+  if (hide) exerciseCompletionPromptEl?.classList.add("hidden");
+}
+
+function declineExerciseCompletionConfirmation() {
+  if (!exerciseCompletionConfirmationActive) return;
+  clearExerciseCompletionConfirmation({ cancelListening: true });
+  const message =
+    "Okay. I will leave the exercise open. Choose Finish exercise and check in when you are ready.";
+  cameraSessionHintEl.textContent = message;
+  statusEl.textContent = "Exercise target reached";
+  setMovementAiStatus("off", message, { hide: true });
+  speakMovementGuide(message, {
+    key: `completion-declined:${engine.exercise.id}`,
+    interrupt: true,
+  });
+}
+
+function listenForExerciseCompletionConfirmation(generation) {
+  if (
+    !exerciseCompletionConfirmationActive
+    || generation !== exerciseCompletionConfirmationGeneration
+    || !handsFreeVoiceEnabled
+    || !voiceGuidance.canListen
+  ) {
+    return;
+  }
+  setMovementAiStatus(
+    "question",
+    "Waiting for your answer. Say yes or no, or use a button."
+  );
+  const started = voiceGuidance.listen({
+    maxNoSpeechRetries: 1,
+    interimSilenceMs: 400,
+    onStatus: () => {
+      if (
+        exerciseCompletionConfirmationActive
+        && generation === exerciseCompletionConfirmationGeneration
+      ) {
+        setMovementAiStatus(
+          "question",
+          "Waiting for your answer. Say yes or no, or use a button."
+        );
+      }
+    },
+    onResult: (transcript) => {
+      if (
+        !exerciseCompletionConfirmationActive
+        || generation !== exerciseCompletionConfirmationGeneration
+      ) {
+        return;
+      }
+      const response = parseConfirmationResponse(transcript);
+      if (response === "confirm") {
+        finishExerciseAndCheckIn({ source: "voice" });
+        return;
+      }
+      if (response === "change") {
+        declineExerciseCompletionConfirmation();
+        return;
+      }
+      const retry =
+        "Please say yes to finish and start your check-in, or no to leave the exercise open.";
+      exerciseCompletionPromptTextEl.textContent = retry;
+      setMovementAiStatus("question", retry);
+      const spoken = speakMovementGuide(retry, {
+        key: `completion-confirmation:retry:${generation}`,
+        interrupt: true,
+        onEnd: () => listenForExerciseCompletionConfirmation(generation),
+      });
+      if (!spoken) listenForExerciseCompletionConfirmation(generation);
+    },
+    onError: () => {
+      if (
+        !exerciseCompletionConfirmationActive
+        || generation !== exerciseCompletionConfirmationGeneration
+      ) {
+        return;
+      }
+      const fallback =
+        "I could not hear your answer. Say yes or no, or use one of the buttons.";
+      exerciseCompletionPromptTextEl.textContent = fallback;
+      setMovementAiStatus("error", fallback);
+    },
+  });
+  if (!started) {
+    const fallback =
+      "Voice input is unavailable. Use a button to finish the exercise or leave it open.";
+    exerciseCompletionPromptTextEl.textContent = fallback;
+    setMovementAiStatus("error", fallback);
+  }
+}
+
+function beginExerciseCompletionConfirmation(feedback, completion) {
+  clearExerciseCompletionConfirmation({ cancelListening: true, hide: false });
+  exerciseCompletionConfirmationActive = true;
+  const generation = exerciseCompletionConfirmationGeneration;
+  const question = handsFreeVoiceEnabled && voiceGuidance.canListen
+    ? "Would you like me to finish this exercise and start your check-in? Say yes or no."
+    : "Would you like to finish this exercise and start your check-in? Choose an option below.";
+  exerciseCompletionPromptTitleEl.textContent = "Exercise target reached";
+  exerciseCompletionPromptTextEl.textContent = question;
+  exerciseCompletionPromptEl.classList.remove("hidden");
+  cameraSessionHintEl.textContent = question;
+
+  let questionStarted = false;
+  const askQuestion = () => {
+    if (
+      questionStarted
+      || !exerciseCompletionConfirmationActive
+      || generation !== exerciseCompletionConfirmationGeneration
+      || !handsFreeVoiceEnabled
+      || !voiceGuidance.canListen
+    ) {
+      return;
+    }
+    questionStarted = true;
+    let listeningStarted = false;
+    const beginListening = () => {
+      if (listeningStarted) return;
+      listeningStarted = true;
+      listenForExerciseCompletionConfirmation(generation);
+    };
+    const spoken = speakMovementGuide(question, {
+      key: `completion-confirmation:question:${feedback.exercise.id}`,
+      interrupt: true,
+      onEnd: beginListening,
+    });
+    if (!spoken) beginListening();
+    else {
+      // Safari can occasionally omit SpeechSynthesis's end event. Do not let
+      // that leave the confirmation visibly waiting but unable to hear "yes".
+      window.setTimeout(() => {
+        if (!voiceGuidance.isSpeaking) beginListening();
+      }, 9000);
+    }
+  };
+  const completionAnnouncement = repAnnouncementMessage({
+    repNumber: feedback.repCount,
+    setNumber: completedSetCount,
+    setGoal: goalMetric(feedback.exercise).goal,
+    isHold: goalMetric(feedback.exercise).isHold,
+    isLastPlannedSet: true,
+    completionMessage: completion.spokenMessage,
+  });
+  const spoken = speakMovementGuide(completionAnnouncement, {
+    key: `completion:${feedback.exercise.id}:${completedSetCount}:${feedback.repCount}`,
+    interrupt: true,
+    onEnd: askQuestion,
+  });
+  if (!spoken) askQuestion();
+  else {
+    window.setTimeout(() => {
+      if (!voiceGuidance.isSpeaking) askQuestion();
+    }, 14000);
+  }
 }
 
 function processPendingRepAnnouncements() {
@@ -2531,7 +2711,14 @@ function renderHandPreview(result) {
   }
 }
 
-function presentInstructionTrackingPause() {
+function presentInstructionTrackingPause(measurements, timestampMs) {
+  // Prepare the stable starting baseline while the patient is listening, but
+  // stop feeding the sequence as soon as that baseline is confirmed. This
+  // prevents setup movements from earning repetitions while allowing the very
+  // first movement after "Begin" to count immediately.
+  if (!engine.startConfirmed && measurements) {
+    engine.update(measurements, timestampMs);
+  }
   statusEl.textContent = "Listen first — rep counting starts after this instruction";
   setFeedbackBanner(
     "ready",
@@ -2571,7 +2758,7 @@ function renderFrame() {
           updateCalibrationCapture(measurements, frameTimestamp);
           statusEl.textContent = "Personal calibration in progress";
         } else if (movementTrackingPausedForInstruction) {
-          presentInstructionTrackingPause();
+          presentInstructionTrackingPause(measurements, frameTimestamp);
         } else if (pendingSetStartCheck) {
           updateSetStartingPositionCheck(measurements, frameTimestamp);
         } else {
@@ -2603,7 +2790,7 @@ function renderFrame() {
           updateCalibrationCapture(measurements, frameTimestamp);
           statusEl.textContent = "Personal calibration in progress";
         } else if (movementTrackingPausedForInstruction) {
-          presentInstructionTrackingPause();
+          presentInstructionTrackingPause(measurements, frameTimestamp);
         } else if (pendingSetStartCheck) {
           updateSetStartingPositionCheck(measurements, frameTimestamp);
         } else {
@@ -2640,7 +2827,7 @@ function renderFrame() {
             updateCalibrationCapture(angles, frameTimestamp);
             statusEl.textContent = "Personal calibration in progress";
           } else if (movementTrackingPausedForInstruction) {
-            presentInstructionTrackingPause();
+            presentInstructionTrackingPause(angles, frameTimestamp);
           } else if (pendingSetStartCheck) {
             updateSetStartingPositionCheck(angles, frameTimestamp);
             processFallMonitoring(landmarks, frameTimestamp);
@@ -2777,20 +2964,7 @@ function handleCompletedSet(feedback) {
     // listener and interrupt any older sentence so the user immediately hears
     // that they should stop exercising.
     stopMovementAiGuide();
-    speakMovementGuide(
-      repAnnouncementMessage({
-        repNumber: feedback.repCount,
-        setNumber,
-        setGoal: goalMetric(feedback.exercise).goal,
-        isHold: goalMetric(feedback.exercise).isHold,
-        isLastPlannedSet: true,
-        completionMessage: completion.message,
-      }),
-      {
-        key: `completion:${feedback.exercise.id}:${setNumber}:${feedback.repCount}`,
-        interrupt: true,
-      }
-    );
+    beginExerciseCompletionConfirmation(feedback, completion);
     return;
   }
 
@@ -2963,8 +3137,13 @@ function updateFeedbackPanel(angles, timestampMs) {
     && fb.expectedNextPhase === "squat"
     && !personalizedCues.length
   ) {
-    bannerState = "ready";
-    bannerCue = exerciseStartGuidance(fb.exercise);
+    // Keep this as an on-screen-only confirmation. "good" is intentionally
+    // excluded from automatic speech, leaving rep announcements unobstructed.
+    bannerState = "good";
+    // The full setup has already been spoken. Reusing it here made Safari say
+    // the entire "Before you begin" instruction a second time while the first
+    // repetitions were underway.
+    bannerCue = "Starting position confirmed. Begin when you are comfortable.";
   } else if (!fb.sequenceOnTrack && fb.positionRecognized) {
     bannerState = "adjust";
     bannerCue =
@@ -4131,12 +4310,12 @@ function announceExerciseInstruction(prefix = "", { onEnd = null } = {}) {
   const clinicianNote = activeDose(engine.exercise).notes;
   const spokenInstruction = [
     prefix,
-    exerciseStartGuidance(engine.exercise),
     exerciseTargetGuidance(engine.exercise),
     clinicianNote ? `Your clinician's instruction is: ${clinicianNote}` : "",
-    handsFreeVoiceEnabled
-      ? "After this instruction, say Hey Guide followed by your question whenever you need help."
-      : "",
+    // Put the movement instruction last so its final words, "Begin now", are
+    // the signal that counting is becoming active. Hey Guide is
+    // already explained by the persistent on-screen camera status.
+    exerciseStartGuidance(engine.exercise),
   ].filter(Boolean).join(" ");
   setMovementAiStatus(
     "coaching",
@@ -4284,6 +4463,7 @@ function deactivateCameraGuide({
   running = false;
   movementTrackingPausedForInstruction = false;
   stopMovementAiGuide();
+  clearExerciseCompletionConfirmation({ cancelListening: true });
   voiceGuidance.cancel();
   resetSpokenCoaching();
   cancelAnimationFrame(rafId);
@@ -4427,6 +4607,7 @@ function resetSetProgress() {
 }
 
 function resetExerciseProgressForNewSession() {
+  clearExerciseCompletionConfirmation({ cancelListening: true });
   resetSetProgress();
   engine.changeExercise(
     exSelect.value,
@@ -4463,6 +4644,7 @@ function beginExerciseSession() {
 
 function discardExerciseSession() {
   cancelCameraSetupCountdown({ announce: false });
+  clearExerciseCompletionConfirmation({ cancelListening: true });
   exerciseSessionActive = false;
   sessionStartedAt = null;
   resetSetProgress();
@@ -6037,12 +6219,9 @@ painSkipBtn.addEventListener("click", () => {
   if (completed) continueAfterPainCheckin(completed);
 });
 
-toggleBtn.addEventListener("click", () => {
-  if (running) deactivateCameraGuide();
-});
-
-finishExerciseBtn.addEventListener("click", () => {
-  if (!exerciseSessionActive) return;
+function finishExerciseAndCheckIn({ source = "button" } = {}) {
+  if (!exerciseSessionActive) return false;
+  clearExerciseCompletionConfirmation({ cancelListening: true });
   if (running) {
     deactivateCameraGuide({
       statusMessage: "Camera stopped — finishing exercise",
@@ -6054,11 +6233,29 @@ finishExerciseBtn.addEventListener("click", () => {
   finishExerciseBtn.disabled = true;
   preExerciseCheckinCompleted = false;
   renderPrimaryCameraAction();
-  cameraSessionHintEl.textContent =
-    "Exercise marked finished. Complete the optional check-in, or skip it.";
+  cameraSessionHintEl.textContent = source === "voice"
+    ? "You said yes. The exercise is marked finished and your check-in is ready."
+    : "Exercise marked finished. Complete the optional check-in, or skip it.";
   statusEl.textContent = "Exercise marked finished";
   setFeedbackBanner("finished");
   showPainCheckin("after");
+  return true;
+}
+
+toggleBtn.addEventListener("click", () => {
+  if (running) deactivateCameraGuide();
+});
+
+finishExerciseBtn.addEventListener("click", () => {
+  finishExerciseAndCheckIn();
+});
+
+exerciseCompletionConfirmBtn?.addEventListener("click", () => {
+  finishExerciseAndCheckIn();
+});
+
+exerciseCompletionNotYetBtn?.addEventListener("click", () => {
+  declineExerciseCompletionConfirmation();
 });
 
 handTrackingToggle.addEventListener("click", async () => {

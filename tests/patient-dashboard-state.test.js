@@ -200,8 +200,8 @@ const legacyFrameCountedQuality = analysePatientTrend({
   })],
 });
 
-assert.equal(legacyFrameCountedQuality.averageQuality, 75);
-assert.deepEqual(legacyFrameCountedQuality.qualitySeries, [75]);
+assert.equal(legacyFrameCountedQuality.averageQuality, 100);
+assert.deepEqual(legacyFrameCountedQuality.qualitySeries, [100]);
 
 assert.equal(
   isCurrentPrescription(

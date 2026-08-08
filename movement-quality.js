@@ -271,7 +271,8 @@ export class CoachingQualitySession {
 /**
  * Produce a 0–100 coaching-response indicator. In version 2, only documented
  * deductions after delivered reminders affect the score. The legacy branch is
- * retained solely so existing saved sessions do not change retrospectively.
+ * used only by direct callers; saved legacy sessions are reassessed below
+ * because they contain no proof that their detected cues were delivered.
  */
 export function calculateMovementQuality({
   cuesTriggered = [],
@@ -316,12 +317,22 @@ export function movementQualityFromSession(session = {}) {
     (cue) => (nonNegativeNumber(cue?.trigger_count) ?? 0) > 0,
   ) || symmetryWarnings > 0;
 
-  if (reps > 0 && (coachingRecords(cues).length || hasCorrectionEvidence)) {
+  if (reps > 0 && coachingRecords(cues).length) {
     return calculateMovementQuality({
       cuesTriggered: cues,
       symmetryWarnings,
       repetitions: reps,
     });
+  }
+
+  if (reps > 0 && hasCorrectionEvidence) {
+    // Legacy sessions recorded camera detections, sometimes once per frame,
+    // but did not record whether the user saw or heard a reminder or received
+    // two repetitions to respond. Under the coaching-first rubric none of
+    // those old detections is a justified deduction. The underlying cues and
+    // angles remain saved; only their displayed coaching-response score is
+    // reassessed.
+    return 100;
   }
 
   return nonNegativeNumber(session.quality_score);

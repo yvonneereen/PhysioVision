@@ -27,7 +27,7 @@ import {
 import {
   calculateMovementQuality,
   CoachingQualitySession,
-} from "./movement-quality.js?v=2";
+} from "./movement-quality.js?v=3";
 import {
   createEmergencyAlert,
   getPainCheckins,
@@ -41,7 +41,7 @@ import {
   sendAgentMessage,
   updatePainCheckin,
 } from "./api.js?v=32";
-import { analysePatientTrend } from "./patient-dashboard-state.js?v=11";
+import { analysePatientTrend } from "./patient-dashboard-state.js?v=12";
 import { DRAFT_EXERCISES } from "./exercises/catalog.js?v=3";
 import {
   parseConfirmationResponse,

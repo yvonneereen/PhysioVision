@@ -173,8 +173,8 @@ assert.equal(
     }],
     symmetry_warnings_count: 0,
   }),
-  75,
-  "legacy frame-counted sessions should retain their normalized display",
+  100,
+  "legacy detections without reminder-delivery evidence must not deduct points",
 );
 
 console.log("movement quality coaching tests passed");

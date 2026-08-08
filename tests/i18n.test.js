@@ -23,7 +23,7 @@ assert.ok(
 );
 assert.deepEqual(
   [...new Set(i18nCacheVersions)],
-  ["26"],
+  ["27"],
   "all browser entry points must use one i18n URL so only one DOM observer is created"
 );
 
@@ -73,7 +73,7 @@ const voiceCacheVersions = voiceConsumerSources.flatMap((source) =>
 );
 assert.deepEqual(
   [...new Set(voiceCacheVersions)],
-  ["35"],
+  ["36"],
   "all voice consumers must share one voice-guidance module instance"
 );
 
@@ -107,6 +107,27 @@ assert.equal(translateText("Start camera guide"), "开始摄像头指导");
 assert.equal(translateText("Guide speed"), "指导语速");
 assert.equal(translateText("Slower"), "较慢");
 assert.equal(translateText("Rep 3."), "第3次。");
+assert.equal(translateText("7 of 10 repetitions"), "完成7次，共10次");
+assert.equal(
+  translateText(
+    "Your target is 10 repetitions. I will say when all 10 have been counted. Keep your full body visible until then."
+  ),
+  "您的目标是10次。当10次全部计数后，我会告诉您。在此之前，请确保全身保持在画面内。"
+);
+for (const locale of ["zh-SG", "ms-SG", "ta-SG"]) {
+  for (const source of [
+    "7 of 10 repetitions",
+    "Your target is 10 repetitions. I will say when all 10 have been counted. Keep your full body visible until then.",
+    "Your target is 30 seconds of tracked hold time. I will say when the target has been counted. Keep every required joint visible until then.",
+    "I counted 9 of 10 repetitions. The exercise is paused and has not been marked finished. Keep your full body visible and resume for any repetitions that were not counted.",
+  ]) {
+    assert.notEqual(
+      translateText(source, locale),
+      source,
+      `${locale} should translate the live camera target`,
+    );
+  }
+}
 assert.equal(
   translateText(
     "Rep 10. You reached your goal of 10 repetitions. Stop squatting now, stand tall, and rest. Choose Finish exercise when you are ready."

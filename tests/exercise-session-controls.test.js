@@ -65,6 +65,16 @@ assert.match(
   "the live camera tip must not cover setup instructions before the camera starts"
 );
 assert.match(
+  markup,
+  /id="cameraRepProgress"[\s\S]*?role="status"[\s\S]*?aria-atomic="true"[\s\S]*?>0 of 10 repetitions<\/div>/,
+  "the recognized repetition count and target should remain inside the camera view"
+);
+assert.match(
+  styles,
+  /\.camera-rep-progress\s*\{[\s\S]*?position: absolute;[\s\S]*?z-index: 3;[\s\S]*?\.camera-rep-progress\.is-complete/,
+  "the camera count should be an always-visible overlay with a clear completed state"
+);
+assert.match(
   styles,
   /@media \(max-width: 900px\)[\s\S]*?\.patient-practice-workspace \.camera-column\s*\{[\s\S]*?min-height: 0;[\s\S]*?overflow: visible;[\s\S]*?\.patient-practice-workspace \.stage\s*\{[\s\S]*?flex: 0 0 auto;[\s\S]*?min-height: 680px;[\s\S]*?\.patient-practice-workspace \.camera-placeholder\s*\{[\s\S]*?overflow-y: auto;/,
   "the mobile camera stage should expand and remain scrollable instead of clipping its primary action"
@@ -246,8 +256,13 @@ assert.match(
   "the squat instruction should clearly delay movement until its final words"
 );
 assert.match(
+  functionSource("exerciseTargetGuidance", "resetSpokenCoaching"),
+  /Your target is \$\{metric\.goal\} repetitions[\s\S]*?I will say when all \$\{metric\.goal\} have been counted[\s\S]*?Keep your full body visible/,
+  "the start instruction should state the exact recognized-repetition target"
+);
+assert.match(
   functionSource("announceExerciseInstruction", "setIntegratedCameraGuideActive"),
-  /movementTrackingPausedForInstruction = true[\s\S]*?movementTrackingPausedForInstruction = false/,
+  /exerciseTargetGuidance\(engine\.exercise\)[\s\S]*?movementTrackingPausedForInstruction = true[\s\S]*?movementTrackingPausedForInstruction = false/,
   "rep tracking should remain paused for the complete start instruction"
 );
 assert.match(
@@ -286,9 +301,24 @@ assert.match(
   "the final completion reminder should skip any stale rep-announcement backlog"
 );
 assert.match(
+  functionSource("queueRepAnnouncements", "startHoldTimer"),
+  /isLastPlannedSet[\s\S]*?pendingRepAnnouncements\.length = 0;[\s\S]*?return;[\s\S]*?const finalAnnouncement/,
+  "the final set should bypass the ordinary announcement queue"
+);
+assert.match(
   functionSource("handleCompletedSet", "updateFeedbackPanel"),
   /exerciseCompletionGuidance\(feedback\.exercise\)[\s\S]*?setFeedbackBanner\("good", completion\.message\)[\s\S]*?cameraSessionHintEl\.textContent = completion\.message/,
   "the final spoken instruction should also remain visible in the camera guide"
+);
+assert.match(
+  functionSource("handleCompletedSet", "updateFeedbackPanel"),
+  /renderCameraRepProgress\(feedback\.exercise, feedback\.repCount[\s\S]*?stopMovementAiGuide\(\)[\s\S]*?speakMovementGuide\([\s\S]*?repAnnouncementMessage[\s\S]*?interrupt: true/,
+  "the recognized target should immediately interrupt routine coaching with completion guidance"
+);
+assert.match(
+  functionSource("updateFeedbackPanel", "renderPoseStrip"),
+  /renderCameraRepProgress\(fb\.exercise, shown, \{ complete: setComplete \}\)/,
+  "every recognized repetition should update the camera overlay"
 );
 assert.doesNotMatch(
   source,
@@ -318,8 +348,8 @@ assert.doesNotMatch(
 );
 assert.match(
   deactivateSource,
-  /exercise not marked finished/,
-  "the paused state should clearly say the exercise is unfinished"
+  /I counted \$\{Math\.min\(pauseCount, pauseMetric\.goal\)\} of \$\{pauseMetric\.goal\} repetitions[\s\S]*?not been marked finished[\s\S]*?repetitions that were not counted/,
+  "the paused state should report the recognized count and clearly say the exercise is unfinished"
 );
 
 const finishHandlerStart = source.indexOf(

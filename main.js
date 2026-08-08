@@ -48,7 +48,7 @@ import {
   isSafariBrowser,
   readMicrophonePermissionState,
   voiceGuidance,
-} from "./voice-guidance.js?v=35";
+} from "./voice-guidance.js?v=36";
 import {
   PRACTICE_VIEWS,
   acceptedWellnessPlan,
@@ -122,6 +122,7 @@ const exSelect    = document.getElementById("exerciseSelect");
 const sideSelect  = document.getElementById("sideSelect");
 const poseStripEl        = document.getElementById("poseStrip");
 const repCountEl         = document.getElementById("repCount");
+const cameraRepProgressEl = document.getElementById("cameraRepProgress");
 const phaseFlowEl        = document.getElementById("phaseFlow");
 const progressEl         = document.getElementById("progressFill");
 const progressLbl        = document.getElementById("progressLabel");
@@ -1217,6 +1218,33 @@ function activeDose(exercise = engine?.exercise) {
   return exercise?.prescription ?? {};
 }
 
+function renderCameraRepProgress(
+  exercise = engine?.exercise,
+  count = null,
+  { complete = false } = {}
+) {
+  if (!cameraRepProgressEl || !exercise) return;
+  const metric = goalMetric(exercise);
+  if (metric.goal === null) {
+    cameraRepProgressEl.classList.add("hidden");
+    return;
+  }
+  const measured = count === null
+    ? metric.isHold
+      ? Number(engine?.repCount ?? 0) * metric.perHold
+      : Number(engine?.repCount ?? 0)
+    : Number(count);
+  const shown = Math.min(
+    metric.goal,
+    Math.max(0, Number.isFinite(measured) ? measured : 0)
+  );
+  cameraRepProgressEl.textContent = metric.isHold
+    ? `${shown} of ${metric.goal} seconds`
+    : `${shown} of ${metric.goal} repetitions`;
+  cameraRepProgressEl.classList.remove("hidden");
+  cameraRepProgressEl.classList.toggle("is-complete", complete);
+}
+
 // Accumulated per-session stats (reset on each camera start)
 const sessionCueCounts = {};
 let sessionSymmetryWarnings = 0;
@@ -1639,6 +1667,22 @@ function exerciseStartGuidance(exercise = engine?.exercise) {
   return exerciseSpokenInstruction(exercise);
 }
 
+function exerciseTargetGuidance(exercise = engine?.exercise) {
+  const metric = goalMetric(exercise);
+  if (metric.goal === null) return "";
+  if (metric.isHold) {
+    return (
+      `Your target is ${metric.goal} seconds of tracked hold time. `
+      + "I will say when the target has been counted. Keep every required joint visible until then."
+    );
+  }
+  return (
+    `Your target is ${metric.goal} repetitions. `
+    + `I will say when all ${metric.goal} have been counted. `
+    + "Keep your full body visible until then."
+  );
+}
+
 function resetSpokenCoaching({ preserveRepAnnouncements = false } = {}) {
   spokenCoachingCandidate = null;
   spokenRepCount = 0;
@@ -1796,6 +1840,7 @@ function queueRepAnnouncements(feedback, metric) {
       : detectedReps;
     if (metric.goal !== null && measured >= metric.goal) {
       const isLastPlannedSet = setNumber >= plannedSets;
+      if (isLastPlannedSet) return;
       pendingRepAnnouncements.push({
         exerciseId: feedback.exercise.id,
         repNumber: detectedReps,
@@ -1820,6 +1865,13 @@ function queueRepAnnouncements(feedback, metric) {
     : detectedReps;
   if (metric.goal !== null && detectedMeasurement >= metric.goal) {
     const isLastPlannedSet = setNumber >= plannedSets;
+    if (isLastPlannedSet) {
+      // The final target is announced directly by handleCompletedSet so it can
+      // interrupt an older coaching sentence instead of waiting in this queue.
+      queuedSpokenRepCount = detectedReps;
+      pendingRepAnnouncements.length = 0;
+      return;
+    }
     const finalAnnouncement = {
       exerciseId: feedback.exercise.id,
       repNumber: detectedReps,
@@ -2711,9 +2763,34 @@ function handleCompletedSet(feedback) {
     const completion = exerciseCompletionGuidance(feedback.exercise);
     sessionAllSetsComplete = true;
     lastFeedbackResult = feedback;
+    pendingRepAnnouncements.length = 0;
+    repAnnouncementActive = false;
+    queuedSpokenRepCount = Math.max(queuedSpokenRepCount, feedback.repCount);
+    spokenRepCount = Math.max(spokenRepCount, feedback.repCount);
+    renderCameraRepProgress(feedback.exercise, feedback.repCount, {
+      complete: true,
+    });
     statusEl.textContent = `${feedback.exercise.name} complete`;
     setFeedbackBanner("good", completion.message);
     cameraSessionHintEl.textContent = completion.message;
+    // Completion takes priority over routine rep/form coaching. Stop the wake
+    // listener and interrupt any older sentence so the user immediately hears
+    // that they should stop exercising.
+    stopMovementAiGuide();
+    speakMovementGuide(
+      repAnnouncementMessage({
+        repNumber: feedback.repCount,
+        setNumber,
+        setGoal: goalMetric(feedback.exercise).goal,
+        isHold: goalMetric(feedback.exercise).isHold,
+        isLastPlannedSet: true,
+        completionMessage: completion.message,
+      }),
+      {
+        key: `completion:${feedback.exercise.id}:${setNumber}:${feedback.repCount}`,
+        interrupt: true,
+      }
+    );
     return;
   }
 
@@ -2734,6 +2811,7 @@ function handleCompletedSet(feedback) {
     previousFrame: null,
   };
   repCountEl.textContent = "0";
+  renderCameraRepProgress(feedback.exercise, 0);
   setCompleteBadgeEl?.classList.add("hidden");
   progressEl.style.width = "0%";
   progressLbl.textContent = "Return to your starting position";
@@ -2810,6 +2888,7 @@ function updateFeedbackPanel(angles, timestampMs) {
   const setComplete = metric.goal !== null && shown >= metric.goal;
   if (metric.goal !== null) shown = Math.min(shown, metric.goal);
   repCountEl.textContent = shown;
+  renderCameraRepProgress(fb.exercise, shown, { complete: setComplete });
   if (repLabelEl) repLabelEl.textContent = metric.unit;
   if (setCompleteBadgeEl) setCompleteBadgeEl.classList.toggle("hidden", !setComplete);
   queueRepAnnouncements(fb, metric);
@@ -3896,6 +3975,7 @@ function renderPrescription(ex) {
     repTargetEl.textContent = metric.isHold ? `${metric.goal}s` : metric.goal;
   }
   if (setCompleteBadgeEl) setCompleteBadgeEl.classList.add("hidden");
+  renderCameraRepProgress(ex, 0);
 
   // Show inline hold timer only for stretch exercises
   if (ex.category === "stretch" && p.holdSeconds) {
@@ -4052,6 +4132,7 @@ function announceExerciseInstruction(prefix = "", { onEnd = null } = {}) {
   const spokenInstruction = [
     prefix,
     exerciseStartGuidance(engine.exercise),
+    exerciseTargetGuidance(engine.exercise),
     clinicianNote ? `Your clinician's instruction is: ${clinicianNote}` : "",
     handsFreeVoiceEnabled
       ? "After this instruction, say Hey Guide followed by your question whenever you need help."
@@ -4183,6 +4264,23 @@ async function activateCameraGuide({ announceInstruction = true } = {}) {
 function deactivateCameraGuide({
   statusMessage = "Camera paused — exercise not marked finished",
 } = {}) {
+  const defaultPause = statusMessage
+    === "Camera paused — exercise not marked finished";
+  const pauseMetric = goalMetric(engine.exercise);
+  const pauseCount = pauseMetric.isHold
+    ? Number(engine.repCount ?? 0) * pauseMetric.perHold
+    : Number(engine.repCount ?? 0);
+  const pauseProgressMessage = pauseMetric.goal === null
+    ? "Your exercise is paused and has not been marked finished. Resume the camera or finish when you are ready."
+    : pauseMetric.isHold
+      ? (
+        `I counted ${Math.min(pauseCount, pauseMetric.goal)} of ${pauseMetric.goal} seconds. `
+        + "The exercise is paused and has not been marked finished. Keep every required joint visible and resume for any hold time that was not counted."
+      )
+      : (
+        `I counted ${Math.min(pauseCount, pauseMetric.goal)} of ${pauseMetric.goal} repetitions. `
+        + "The exercise is paused and has not been marked finished. Keep your full body visible and resume for any repetitions that were not counted."
+      );
   running = false;
   movementTrackingPausedForInstruction = false;
   stopMovementAiGuide();
@@ -4207,7 +4305,9 @@ function deactivateCameraGuide({
   renderPrimaryCameraAction();
   finishExerciseBtn.disabled = !exerciseSessionActive;
   cameraSessionHintEl.textContent = exerciseSessionActive
-    ? "Your exercise is paused and has not been marked finished. Resume the camera or finish when you are ready."
+    ? defaultPause
+      ? pauseProgressMessage
+      : "Your exercise is paused and has not been marked finished. Resume the camera or finish when you are ready."
     : "Stopping the camera does not mark an exercise as finished.";
   handTrackingToggle.disabled = !handLandmarker;
   statusEl.textContent = statusMessage;
@@ -4341,6 +4441,7 @@ function resetExerciseProgressForNewSession() {
   holdTimerSection.classList.add("hidden");
   progressSection.classList.remove("hidden");
   repCountEl.textContent = "0";
+  renderCameraRepProgress(engine.exercise, 0);
   setCompleteBadgeEl?.classList.add("hidden");
   cueListEl.innerHTML = "";
   symWarnEl.classList.add("hidden");

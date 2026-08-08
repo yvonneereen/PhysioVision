@@ -34,6 +34,7 @@ const frontendEntries = [
   "runtime-config.js",
   "role-ui.js",
   "therapist.js",
+  "therapist-triage-state.js",
   "ui.js",
   "voice-guidance.js",
   "wellness-screening.js",

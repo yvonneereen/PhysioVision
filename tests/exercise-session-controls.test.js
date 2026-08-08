@@ -257,8 +257,18 @@ assert.match(
 );
 assert.match(
   source,
-  /You reached your goal of \$\{setGoal\} repetitions\. Stop squatting now, stand tall, and rest/,
-  "the final repetition should clearly tell the user to stop and rest at the plan limit"
+  /function exerciseCompletionGuidance[\s\S]*?Your next exercise is \$\{nextExercise\.name\}[\s\S]*?Today’s exercise session is done/,
+  "exercise completion should name the next planned movement or end today's session"
+);
+assert.match(
+  functionSource("queueRepAnnouncements", "startHoldTimer"),
+  /detectedMeasurement >= metric\.goal[\s\S]*?pendingRepAnnouncements\.splice\(1, Infinity, finalAnnouncement\)/,
+  "the final completion reminder should skip any stale rep-announcement backlog"
+);
+assert.match(
+  functionSource("handleCompletedSet", "updateFeedbackPanel"),
+  /exerciseCompletionGuidance\(feedback\.exercise\)[\s\S]*?setFeedbackBanner\("good", completion\.message\)[\s\S]*?cameraSessionHintEl\.textContent = completion\.message/,
+  "the final spoken instruction should also remain visible in the camera guide"
 );
 assert.doesNotMatch(
   source,

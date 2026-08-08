@@ -23,7 +23,7 @@ assert.ok(
 );
 assert.deepEqual(
   [...new Set(i18nCacheVersions)],
-  ["22"],
+  ["23"],
   "all browser entry points must use one i18n URL so only one DOM observer is created"
 );
 
@@ -113,6 +113,24 @@ assert.equal(
   ),
   "第10次。您已达到10次的目标。现在停止下蹲，站直并休息。准备好后选择“结束运动”。"
 );
+assert.equal(
+  translateText(
+    "Rep 10. You’re done with Half Squats. Your next exercise is Calf Raises. Choose Finish exercise and check in, then select Calf Raises."
+  ),
+  "第10次。您已完成半蹲。下一个运动是提踵。请选择“结束运动并进行检查”，然后选择提踵。"
+);
+for (const locale of ["zh-SG", "ms-SG", "ta-SG"]) {
+  for (const completionMessage of [
+    "You’re done with Half Squats. Your next exercise is Calf Raises. Choose Finish exercise and check in, then select Calf Raises.",
+    "You’re done with Half Squats. There are no more exercises in this planned session. Choose Finish exercise and check in. Today’s exercise session is done.",
+  ]) {
+    assert.notEqual(
+      translateText(completionMessage, locale),
+      completionMessage,
+      `${locale} should translate planned-session completion guidance`,
+    );
+  }
+}
 assert.equal(translateText("Better shoulder movement"), "改善肩部活动");
 assert.equal(translateText("Shoulder pendulum"), "肩部钟摆运动");
 for (const locale of ["zh-SG", "ms-SG", "ta-SG"]) {

@@ -7,6 +7,7 @@ import {
   wellnessPlanDoseForExercise,
   wellnessPlanExerciseIds,
   wellnessPlanIncludesExercise,
+  wellnessPlanSessionExerciseIds,
 } from "../practice-access.js";
 
 const acceptedPlan = {
@@ -37,6 +38,16 @@ assert.equal(
 assert.deepEqual(
   wellnessPlanExerciseIds(acceptedPlan),
   ["half-squats", "heel-raises"],
+);
+assert.deepEqual(
+  wellnessPlanSessionExerciseIds(acceptedPlan, "half-squats"),
+  ["half-squats", "heel-raises"],
+  "completion guidance should retain the exercise order for the selected plan day",
+);
+assert.deepEqual(
+  wellnessPlanSessionExerciseIds(acceptedPlan, "bridges"),
+  [],
+  "an exercise outside the accepted plan should have no planned next exercise",
 );
 assert.equal(wellnessPlanIncludesExercise(acceptedPlan, "half-squats"), true);
 assert.equal(wellnessPlanIncludesExercise(acceptedPlan, "bridges"), false);

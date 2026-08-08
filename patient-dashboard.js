@@ -26,7 +26,7 @@ import {
   walkingConfidencePlanNeedsRefresh,
 } from "./patient-dashboard-state.js?v=7";
 import { saveProfile } from "./personalization.js?v=13";
-import { getLocale, translateText } from "./i18n.js?v=22";
+import { getLocale, translateText } from "./i18n.js?v=23";
 import { voiceGuidance } from "./voice-guidance.js?v=32";
 import { EXERCISE_MAP } from "./exercises/registry.js?v=58";
 
@@ -137,6 +137,7 @@ const ACTIVITY_BROWSER_LABELS = Object.freeze({
 let currentUser = null;
 let currentData = null;
 let firstExerciseId = null;
+let firstSessionExerciseIds = [];
 let pendingPhysiotherapistRefresh = null;
 let primaryAction = "plan";
 let toastTimer = null;
@@ -218,7 +219,7 @@ function unavailableWellnessExercises(plan) {
   });
 }
 
-function startExercise(exerciseId = firstExerciseId) {
+function startExercise(exerciseId = firstExerciseId, plannedExerciseIds = []) {
   if (!exerciseId) {
     if (primaryAction === "ai") {
       openAiCompanion();
@@ -237,10 +238,19 @@ function startExercise(exerciseId = firstExerciseId) {
     ...(authProfile ?? {}),
     ...(currentUser?.profile ?? {}),
   };
+  const sessionExerciseIds = [...new Set(
+    (Array.isArray(plannedExerciseIds) ? plannedExerciseIds : [])
+      .map((item) => String(item))
+      .filter(Boolean)
+  )];
+  if (!sessionExerciseIds.includes(String(exerciseId))) {
+    sessionExerciseIds.unshift(String(exerciseId));
+  }
   const practiceRequest = {
     role: "patient",
     profile: Object.keys(patientProfile).length ? patientProfile : null,
     exerciseId,
+    plannedExerciseIds: sessionExerciseIds,
   };
 
   window.physioVisionPendingPracticeRequest = practiceRequest;
@@ -264,7 +274,14 @@ function startExercise(exerciseId = firstExerciseId) {
   document.getElementById("practice")?.scrollIntoView({ behavior: "smooth" });
 }
 
-function planRow({ label, title, detail, exerciseId = null, note = "" }) {
+function planRow({
+  label,
+  title,
+  detail,
+  exerciseId = null,
+  plannedExerciseIds = [],
+  note = "",
+}) {
   const row = document.createElement("article");
   row.className = "patient-plan-row";
 
@@ -290,7 +307,9 @@ function planRow({ label, title, detail, exerciseId = null, note = "" }) {
     start.className = "text-link";
     start.type = "button";
     start.textContent = "Start";
-    start.addEventListener("click", () => startExercise(exerciseId));
+    start.addEventListener("click", () => (
+      startExercise(exerciseId, plannedExerciseIds)
+    ));
     row.appendChild(start);
   }
   return row;
@@ -349,7 +368,9 @@ function renderPhysiotherapistRequest(profile) {
 
 function renderClinicianPlan(prescriptions) {
   const active = prescriptions.filter((item) => isCurrentPrescription(item));
+  const activeExerciseIds = active.map((item) => String(item.exercise));
   firstExerciseId = active[0]?.exercise ?? null;
+  firstSessionExerciseIds = activeExerciseIds;
   dashboard.classList.remove("wellness-dashboard");
   primaryActions.hidden = false;
   dashboardSide.hidden = false;
@@ -406,6 +427,7 @@ function renderClinicianPlan(prescriptions) {
       detail:
         `${prescription.sets} sets × ${prescription.reps} reps${hold} · ${prescription.days_per_week} days/week`,
       exerciseId: prescription.exercise,
+      plannedExerciseIds: activeExerciseIds,
       note: prescription.notes || "No additional specialist note.",
     }));
   });
@@ -414,6 +436,7 @@ function renderClinicianPlan(prescriptions) {
 }
 
 function renderWellnessPlan(profile) {
+  firstSessionExerciseIds = [];
   const screeningStatus =
     profile?.wellness_screening_status ??
     profile?.wellnessScreening?.status;
@@ -522,10 +545,12 @@ function renderWellnessPlan(profile) {
   }
 
   primaryAction = "exercise";
-  firstExerciseId =
-    plan.days[0]?.exercise_ids?.[0]
-    ?? plan.days[0]?.exerciseIds?.[0]
-    ?? null;
+  firstSessionExerciseIds = (
+    plan.days[0]?.exercise_ids
+    ?? plan.days[0]?.exerciseIds
+    ?? []
+  ).map((exerciseId) => String(exerciseId));
+  firstExerciseId = firstSessionExerciseIds[0] ?? null;
   planStatus.textContent = "AI plan accepted";
   planStatus.className = "status-pill";
   planIntro.textContent = localizableAiPlanSource(
@@ -546,6 +571,7 @@ function renderWellnessPlan(profile) {
       title: localizableAiPlanSource(day.title, sessionFallback),
       detail: `${day.exercises} · ${day.dosage || WELLNESS_DOSAGE_LABEL}`,
       exerciseId: exerciseIds[0],
+      plannedExerciseIds: exerciseIds,
       note:
         "AI draft accepted by you. Stop if you feel unwell or develop new or concerning symptoms.",
     }));
@@ -1287,7 +1313,9 @@ document
   .forEach((button) => button.addEventListener("click", showDashboard));
 document
   .querySelectorAll("[data-patient-start]")
-  .forEach((button) => button.addEventListener("click", () => startExercise()));
+  .forEach((button) => button.addEventListener("click", () => (
+    startExercise(firstExerciseId, firstSessionExerciseIds)
+  )));
 
 pathwayModal
   ?.querySelectorAll("[data-pathway-choice]")

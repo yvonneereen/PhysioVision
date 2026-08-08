@@ -76,6 +76,16 @@ assert.match(
   /role:\s*"patient"/,
   "patient dashboard exercise handoffs should explicitly preserve the patient role",
 );
+assert.match(
+  startExerciseSource,
+  /plannedExerciseIds:\s*sessionExerciseIds/,
+  "the camera handoff should preserve the selected plan session's exercise order",
+);
+assert.match(
+  dashboardSource,
+  /plannedExerciseIds:\s*exerciseIds/,
+  "each wellness-plan row should pass all exercises from that specific day",
+);
 
 const handlerStart = mainSource.indexOf("function handlePracticeRequest(");
 assert.ok(
@@ -112,6 +122,11 @@ assert.match(
   handlerSource,
   /syncPracticeAccess\(\)/,
   "the exercise guide should recalculate access before rendering",
+);
+assert.match(
+  handlerSource,
+  /activeSessionExerciseIds[\s\S]*?detail\.plannedExerciseIds/,
+  "the live guide should retain the selected plan session's exercise order",
 );
 assert.match(
   mainSource,
@@ -291,7 +306,7 @@ const makeStartExercise = new Function(
     FakeEvent,
   );
 
-  startExercise("half-squats");
+  startExercise("half-squats", ["half-squats", "calf-raises"]);
 
   assert.deepEqual(viewCalls, ["practice"]);
   assert.equal(bridgeCalls.length, 1);
@@ -304,6 +319,7 @@ const makeStartExercise = new Function(
       focusSide: "right",
     },
     exerciseId: "half-squats",
+    plannedExerciseIds: ["half-squats", "calf-raises"],
   });
   assert.equal(practiceDocument.exerciseSelect.value, "half-squats");
   assert.equal(practiceDocument.selectEvents.length, 1);
@@ -349,6 +365,10 @@ const makeStartExercise = new Function(
     fakeWindow.physioVisionPendingPracticeRequest,
   );
   assert.equal(dispatchedEvents[0].detail.exerciseId, "calf-raises");
+  assert.deepEqual(
+    dispatchedEvents[0].detail.plannedExerciseIds,
+    ["calf-raises"],
+  );
 }
 
 const makeCurrentPracticeIdentity = new Function(

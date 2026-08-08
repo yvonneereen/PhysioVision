@@ -52,6 +52,19 @@ export function wellnessPlanExerciseIds(plan) {
   }))];
 }
 
+export function wellnessPlanSessionExerciseIds(plan, exerciseId) {
+  if (!Array.isArray(plan?.days) || !exerciseId) return [];
+  const normalizedExerciseId = String(exerciseId);
+  const day = plan.days.find((candidate) => {
+    const exerciseIds = candidate?.exercise_ids ?? candidate?.exerciseIds;
+    return Array.isArray(exerciseIds)
+      && exerciseIds.some((item) => String(item) === normalizedExerciseId);
+  });
+  if (!day) return [];
+  const exerciseIds = day.exercise_ids ?? day.exerciseIds;
+  return [...new Set(exerciseIds.map((item) => String(item)).filter(Boolean))];
+}
+
 export function wellnessPlanIncludesExercise(plan, exerciseId) {
   if (!exerciseId) return false;
   const normalizedExerciseId = String(exerciseId);

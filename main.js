@@ -53,7 +53,8 @@ import {
   wellnessPlanDoseForExercise,
   wellnessPlanExerciseIds,
   wellnessPlanIncludesExercise,
-} from "./practice-access.js?v=4";
+  wellnessPlanSessionExerciseIds,
+} from "./practice-access.js?v=5";
 import {
   FallMonitor,
   fallMonitoringReadiness,
@@ -269,6 +270,7 @@ let authenticatedPatientProfile =
     ? initialAuthState?.user?.profile ?? null
     : null;
 let practiceIdentityOverride = null;
+let activeSessionExerciseIds = [];
 let prescriptionsLoaded =
   authenticatedRole !== "patient" ||
   window.sessionStorage.getItem("physiovision.prescriptions.v1") !== null;
@@ -1677,21 +1679,65 @@ function queueSpokenMovementCue(state, cue, timestampMs) {
   });
 }
 
+function currentPlannedSessionExerciseIds(exerciseId = engine?.exercise?.id) {
+  const normalizedExerciseId = String(exerciseId ?? "");
+  if (
+    normalizedExerciseId
+    && activeSessionExerciseIds.includes(normalizedExerciseId)
+  ) {
+    return activeSessionExerciseIds;
+  }
+  return wellnessPlanSessionExerciseIds(
+    currentAcceptedWellnessPlan(),
+    normalizedExerciseId
+  );
+}
+
+function exerciseCompletionGuidance(exercise = engine?.exercise) {
+  const exerciseName = exercise?.name ?? "This exercise";
+  const sessionExerciseIds = currentPlannedSessionExerciseIds(exercise?.id);
+  const currentIndex = sessionExerciseIds.indexOf(String(exercise?.id ?? ""));
+  const nextExercise = currentIndex >= 0
+    ? sessionExerciseIds
+      .slice(currentIndex + 1)
+      .map((exerciseId) => EXERCISES.find((item) => item.id === exerciseId))
+      .find(Boolean)
+    : null;
+
+  if (nextExercise) {
+    return {
+      nextExerciseId: nextExercise.id,
+      message: (
+        `You’re done with ${exerciseName}. Your next exercise is ${nextExercise.name}. `
+        + `Choose Finish exercise and check in, then select ${nextExercise.name}.`
+      ),
+    };
+  }
+  return {
+    nextExerciseId: null,
+    message: (
+      `You’re done with ${exerciseName}. There are no more exercises in this `
+      + "planned session. Choose Finish exercise and check in. Today’s exercise session is done."
+    ),
+  };
+}
+
 function repAnnouncementMessage({
   repNumber,
   setNumber,
   setGoal,
   isHold,
   isLastPlannedSet,
+  completionMessage,
 }) {
   if (!setGoal) return `Rep ${repNumber}.`;
   if (isHold) {
     return isLastPlannedSet
-      ? `${setGoal} seconds complete. Stop now, return to a comfortable position, and rest. Choose Finish exercise when you are ready.`
+      ? `${setGoal} seconds complete. ${completionMessage}`
       : `${setGoal} seconds complete for set ${setNumber}. Return to a comfortable position and rest.`;
   }
   return isLastPlannedSet
-    ? `Rep ${repNumber}. You reached your goal of ${setGoal} repetitions. Stop squatting now, stand tall, and rest. Choose Finish exercise when you are ready.`
+    ? `Rep ${repNumber}. ${completionMessage}`
     : `Rep ${repNumber}. Set ${setNumber} is complete. Stand tall and rest before the next set.`;
 }
 
@@ -1737,19 +1783,49 @@ function queueRepAnnouncements(feedback, metric) {
       ? detectedReps * metric.perHold
       : detectedReps;
     if (metric.goal !== null && measured >= metric.goal) {
+      const isLastPlannedSet = setNumber >= plannedSets;
       pendingRepAnnouncements.push({
         exerciseId: feedback.exercise.id,
         repNumber: detectedReps,
         setNumber,
         setGoal: metric.goal,
         isHold: metric.isHold,
-        isLastPlannedSet: setNumber >= plannedSets,
+        isLastPlannedSet,
+        completionMessage: isLastPlannedSet
+          ? exerciseCompletionGuidance(feedback.exercise).message
+          : "",
       });
     }
     return;
   }
 
   if (detectedReps <= queuedSpokenRepCount) {
+    processPendingRepAnnouncements();
+    return;
+  }
+  const detectedMeasurement = metric.isHold
+    ? detectedReps * metric.perHold
+    : detectedReps;
+  if (metric.goal !== null && detectedMeasurement >= metric.goal) {
+    const isLastPlannedSet = setNumber >= plannedSets;
+    const finalAnnouncement = {
+      exerciseId: feedback.exercise.id,
+      repNumber: detectedReps,
+      setNumber,
+      setGoal: metric.goal,
+      isHold: metric.isHold,
+      isLastPlannedSet,
+      completionMessage: isLastPlannedSet
+        ? exerciseCompletionGuidance(feedback.exercise).message
+        : "",
+    };
+    queuedSpokenRepCount = detectedReps;
+    if (repAnnouncementActive && pendingRepAnnouncements.length) {
+      pendingRepAnnouncements.splice(1, Infinity, finalAnnouncement);
+    } else {
+      pendingRepAnnouncements.length = 0;
+      pendingRepAnnouncements.push(finalAnnouncement);
+    }
     processPendingRepAnnouncements();
     return;
   }
@@ -1767,6 +1843,7 @@ function queueRepAnnouncements(feedback, metric) {
         : null,
       isHold: metric.isHold,
       isLastPlannedSet: setNumber >= plannedSets,
+      completionMessage: "",
     });
   }
   processPendingRepAnnouncements();
@@ -2013,6 +2090,13 @@ function handlePracticeRequest(detail = {}) {
     (requestedRole === "patient"
       ? authState?.user?.profile ?? authenticatedPatientProfile ?? null
       : null);
+  activeSessionExerciseIds = [...new Set(
+    (Array.isArray(detail.plannedExerciseIds)
+      ? detail.plannedExerciseIds
+      : [])
+      .map((item) => String(item))
+      .filter(Boolean)
+  )];
 
   practiceIdentityOverride = requestedRole
     ? {
@@ -2596,13 +2680,12 @@ function handleCompletedSet(feedback) {
   completedSetCount = setNumber;
 
   if (setNumber >= plannedSetCount(feedback.exercise)) {
+    const completion = exerciseCompletionGuidance(feedback.exercise);
     sessionAllSetsComplete = true;
     lastFeedbackResult = feedback;
-    statusEl.textContent = `All ${setNumber} planned sets complete`;
-    setFeedbackBanner(
-      "good",
-      "All planned sets are complete. Choose Finish exercise when you are ready."
-    );
+    statusEl.textContent = `${feedback.exercise.name} complete`;
+    setFeedbackBanner("good", completion.message);
+    cameraSessionHintEl.textContent = completion.message;
     return;
   }
 

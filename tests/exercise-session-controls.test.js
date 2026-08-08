@@ -907,8 +907,8 @@ assert.match(
 );
 assert.match(
   countdownSource,
-  /onEnd:\s*beginVisibleCountdown[\s\S]*?setTimeout\(beginVisibleCountdown, 12000\)/,
-  "camera setup should not cut off the complete spoken countdown instruction"
+  /onEnd:\s*beginVisibleCountdown[\s\S]*?voiceGuidance\.isSpeaking[\s\S]*?setTimeout\(beginCountdownWhenSpeechIsIdle, 12000\)/,
+  "camera permission fallback should wait until the complete countdown instruction is silent"
 );
 const cancelCountdownSource = functionSource(
   "cancelCameraSetupCountdown",

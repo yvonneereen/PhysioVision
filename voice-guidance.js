@@ -13,6 +13,7 @@ const DEFAULT_SPEECH_VOLUME = 1;
 // may begin until this longer post-release stabilization window has elapsed.
 const MICROPHONE_RELEASE_SETTLE_MS = 2000;
 const MICROPHONE_RELEASE_TIMEOUT_MS = 1800;
+const MUTED_BROWSER_SPEECH_WARMUP = "Audio playback is ready.";
 const NEURAL_SPEECH_MIN_LENGTH = 18;
 const NEURAL_SPEECH_CACHE_LIMIT = 24;
 const NEURAL_TARGET_RMS = 0.16;
@@ -707,6 +708,7 @@ export class VoiceGuidance {
     this.audioContext = null;
     this.activeAudioSource = null;
     this.neuralSpeaking = false;
+    this.browserSpeechWarmupPending = false;
     this.speechGeneration = 0;
     this.neuralAudioCache = new Map();
     this.refreshPreferredVoice = () => {
@@ -744,6 +746,10 @@ export class VoiceGuidance {
 
   get canListen() {
     return Boolean(this.Recognition);
+  }
+
+  get isSpeaking() {
+    return Boolean(this.synthesis?.speaking || this.neuralSpeaking);
   }
 
   setNeuralSpeechProvider(provider) {
@@ -1007,6 +1013,10 @@ export class VoiceGuidance {
     // shutting down. Set playback again after the settling interval so the
     // next sentence starts at its full level instead of growing louder midway.
     this.usePlaybackAudioSession();
+    // Waiting alone does not warm WebKit's SpeechSynthesis output path. The
+    // next browser utterance first renders one normal-length phrase at volume
+    // zero, allowing the route to reach full level without speaking anything.
+    this.browserSpeechWarmupPending = this.singleVoiceEngine;
     return voice;
   }
 
@@ -1206,7 +1216,35 @@ export class VoiceGuidance {
       // not remain stuck waiting for an end event that will never arrive.
       utterance.addEventListener("error", finishOnce);
     }
-    this.synthesis.speak(utterance);
+    const shouldWarmUp = Boolean(
+      this.singleVoiceEngine && this.browserSpeechWarmupPending
+    );
+    this.browserSpeechWarmupPending = false;
+    if (!shouldWarmUp) {
+      this.synthesis.speak(utterance);
+      return true;
+    }
+
+    const generation = this.speechGeneration;
+    const warmup = new this.window.SpeechSynthesisUtterance(
+      MUTED_BROWSER_SPEECH_WARMUP
+    );
+    warmup.voice = utterance.voice;
+    warmup.lang = utterance.lang;
+    warmup.rate = utterance.rate;
+    warmup.pitch = utterance.pitch;
+    warmup.volume = 0;
+    let warmupFinished = false;
+    const speakRealSentence = () => {
+      if (warmupFinished) return;
+      warmupFinished = true;
+      if (generation !== this.speechGeneration || !this.enabled) return;
+      this.usePlaybackAudioSession();
+      this.synthesis.speak(utterance);
+    };
+    warmup.addEventListener("end", speakRealSentence);
+    warmup.addEventListener("error", speakRealSentence);
+    this.synthesis.speak(warmup);
     return true;
   }
 

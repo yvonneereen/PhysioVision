@@ -48,7 +48,7 @@ import {
   isSafariBrowser,
   readMicrophonePermissionState,
   voiceGuidance,
-} from "./voice-guidance.js?v=34";
+} from "./voice-guidance.js?v=35";
 import {
   PRACTICE_VIEWS,
   acceptedWellnessPlan,
@@ -4761,8 +4761,17 @@ function continueAfterPainCheckin(completed) {
   );
   if (!spoken) beginVisibleCountdown();
   // Safari can occasionally omit SpeechSynthesis's end event. Preserve a
-  // bounded fallback without cutting off a normally playing sentence.
-  window.setTimeout(beginVisibleCountdown, 12000);
+  // fallback, but never open the camera permission prompt while the sentence
+  // is still playing because Safari will duck that speech route.
+  const beginCountdownWhenSpeechIsIdle = () => {
+    if (!cameraSetupCountdown || cameraSetupCountdown.timer) return;
+    if (voiceGuidance.isSpeaking) {
+      window.setTimeout(beginCountdownWhenSpeechIsIdle, 500);
+      return;
+    }
+    beginVisibleCountdown();
+  };
+  window.setTimeout(beginCountdownWhenSpeechIsIdle, 12000);
 }
 
 function renderRecordedPain({ painLevel, context }) {

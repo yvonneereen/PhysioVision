@@ -531,6 +531,24 @@ assert.equal(
   "Safari speech should begin directly with the guidance and no spoken pre-roll"
 );
 
+const safariWarmupStart = spoken.length;
+await safariOutputGuidance.prepareSpeechAfterMicrophoneRelease({ settleMs: 0 });
+safariOutputGuidance.speak(
+  "The first audible word should already be at full volume.",
+  { interrupt: true }
+);
+assert.equal(spoken.length, safariWarmupStart + 1);
+const mutedWarmup = spoken.at(-1);
+assert.equal(mutedWarmup.text, "Audio playback is ready.");
+assert.equal(mutedWarmup.volume, 0);
+mutedWarmup.listeners.end?.();
+assert.equal(spoken.length, safariWarmupStart + 2);
+assert.equal(
+  spoken.at(-1).text,
+  "The first audible word should already be at full volume."
+);
+assert.equal(spoken.at(-1).volume, 1);
+
 neuralRequest = null;
 const spokenBeforeImmediatePrompt = spoken.length;
 assert.equal(

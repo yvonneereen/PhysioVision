@@ -72,7 +72,36 @@ class ClinicianTriageTests(APITestCase):
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]["id"], str(self.waiting.id))
         self.assertEqual(response.data[0]["name"], "Waiting Patient")
+        self.assertEqual(response.data[0]["email"], "waiting@example.com")
         self.assertEqual(response.data[0]["request_kind"], "initial_pathway")
+
+    def test_clinician_account_with_stale_patient_profile_is_never_triaged(self):
+        stale_profile = PatientProfile.objects.create(
+            user=self.clinician_user,
+            pathway_choice=PatientPathwayChoice.PHYSIOTHERAPIST,
+            care_path=CarePath.CLINICIAN,
+            physiotherapist_requested_at=timezone.now(),
+        )
+        self.client.force_authenticate(self.clinician_user)
+
+        queue = self.client.get(self.queue_url)
+        claim = self.client.post(
+            self.claim_url(stale_profile),
+            {},
+            format="json",
+        )
+        decline = self.client.post(
+            self.decline_url(stale_profile),
+            {},
+            format="json",
+        )
+
+        queue_ids = {item["id"] for item in queue.data}
+        self.assertNotIn(str(stale_profile.id), queue_ids)
+        self.assertEqual(claim.status_code, 409)
+        self.assertEqual(decline.status_code, 409)
+        self.assertIn("Only patient accounts", claim.data["detail"])
+        self.assertIn("Only patient accounts", decline.data["detail"])
 
     def test_queue_contains_pending_wellness_request_without_switching_path(self):
         self.wellness.physiotherapist_requested_at = timezone.now()

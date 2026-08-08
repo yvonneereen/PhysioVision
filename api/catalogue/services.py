@@ -4,6 +4,7 @@ from django.utils import timezone
 from api.core.models import (
     CarePath,
     PatientPathwayChoice,
+    UserRole,
     WellnessScreeningStatus,
 )
 
@@ -22,6 +23,10 @@ def active_prescriptions_queryset():
 
 
 def active_prescriptions_for(patient):
+    # Historical data may contain a PatientProfile attached to a clinician
+    # account. It must never be treated as a real patient care record.
+    if patient.user.role != UserRole.PATIENT:
+        return Prescription.objects.none()
     if not patient.primary_clinician_id:
         return Prescription.objects.none()
     return active_prescriptions_queryset().filter(
@@ -35,6 +40,7 @@ def active_prescriptions_by(clinician):
     return active_prescriptions_queryset().filter(
         clinician=clinician,
         patient__primary_clinician=clinician,
+        patient__user__role=UserRole.PATIENT,
     )
 
 

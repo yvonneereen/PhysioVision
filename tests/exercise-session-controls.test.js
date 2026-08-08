@@ -273,7 +273,7 @@ assert.match(
 assert.match(
   functionSource("announceExerciseInstruction", "setIntegratedCameraGuideActive"),
   /exerciseTargetGuidance\(engine\.exercise\)[\s\S]*?exerciseStartGuidance\(engine\.exercise\)[\s\S]*?movementTrackingPausedForInstruction = true[\s\S]*?movementTrackingPausedForInstruction = false/,
-  "the concise movement cue should finish the complete startup instruction before rep tracking begins"
+  "the startup instruction should retain an explicit beginning and end state"
 );
 assert.match(
   functionSource("renderFrame", "plannedSetCount"),
@@ -283,7 +283,32 @@ assert.match(
 assert.match(
   functionSource("presentInstructionTrackingPause", "renderFrame"),
   /!engine\.startConfirmed[\s\S]*?engine\.update\(measurements, timestampMs\)/,
-  "the standing baseline should be ready before the first instructed repetition begins"
+  "non-squat movements should still prepare only their starting baseline during setup"
+);
+assert.match(
+  functionSource("presentInstructionTrackingPause", "renderFrame"),
+  /engine\.exercise\.id === "half-squats"[\s\S]*?updateFeedbackPanel\(measurements, timestampMs\)/,
+  "complete half squats performed during the opening instruction should not be discarded"
+);
+assert.match(
+  functionSource("announceExerciseInstruction", "setIntegratedCameraGuideActive"),
+  /onEnd\?\.\(\);[\s\S]*?processPendingRepAnnouncements\(\)/,
+  "wake listening should initialize before a queued early-rep announcement takes priority"
+);
+assert.match(
+  functionSource("processPendingRepAnnouncements", "queueRepAnnouncements"),
+  /movementTrackingPausedForInstruction[\s\S]*?priority: true[\s\S]*?interrupt: true/,
+  "rep speech should wait for the opening instruction, then interrupt ordinary coaching"
+);
+assert.match(
+  functionSource("speakCameraCoaching", "exerciseSpokenInstruction"),
+  /const priority = Boolean\(options\.priority\)[\s\S]*?movementCoachingGeneration[\s\S]*?coachingGeneration !== movementCoachingGeneration/,
+  "priority rep speech should invalidate the interrupted coaching callback"
+);
+assert.match(
+  functionSource("renderFrame", "plannedSetCount"),
+  /displayAngles[\s\S]*?repTrackingSmoother\.smooth[\s\S]*?updateFeedbackPanel\(angles, frameTimestamp\)/,
+  "rep recognition should use its faster movement smoother while display angles stay gentle"
 );
 assert.match(
   feedbackPanelSource,
@@ -1197,6 +1222,16 @@ assert.match(
   therapistSource,
   /painSafetyReview\(p\)/,
   "the physiotherapist pain diary should show the recorded safety outcome"
+);
+assert.match(
+  therapistSource,
+  /function patientAccountLabel[\s\S]*?patient\.email[\s\S]*?state\.patients\.map\(p => `<option value="\$\{p\.id\}">\$\{escapeHtml\(patientAccountLabel\(p\)\)\}/,
+  "patient selectors should show account email so same-name patients cannot be confused"
+);
+assert.match(
+  therapistSource,
+  /class="programme-patient"[\s\S]*?p\.patient_email/,
+  "assigned programme rows should retain the selected patient account email"
 );
 assert.match(
   finishSafetySource,

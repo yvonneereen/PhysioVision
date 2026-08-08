@@ -494,6 +494,7 @@ class ClinicianProfileSerializer(serializers.ModelSerializer):
 
 class PatientListSerializer(serializers.ModelSerializer):
     full_name             = serializers.SerializerMethodField()
+    email                 = serializers.EmailField(source='user.email', read_only=True)
     age                   = serializers.SerializerMethodField()
     last_session_at       = serializers.SerializerMethodField()
     open_escalations_count = serializers.SerializerMethodField()
@@ -505,13 +506,16 @@ class PatientListSerializer(serializers.ModelSerializer):
     class Meta:
         model  = PatientProfile
         fields = [
-            'id', 'full_name', 'age', 'goal', 'activity_level', 'mobility_status',
+            'id', 'full_name', 'email', 'age', 'goal', 'activity_level', 'mobility_status',
             'focus_side', 'care_path', 'last_session_at', 'open_escalations_count',
             'trend', 'adherence_pct', 'latest_pain_level', 'active_prescription',
         ]
 
     def get_full_name(self, obj):
-        return f"{obj.user.first_name} {obj.user.last_name}".strip()
+        return (
+            f"{obj.user.first_name} {obj.user.last_name}".strip()
+            or obj.user.email
+        )
 
     def get_age(self, obj):
         if not obj.user.date_of_birth:

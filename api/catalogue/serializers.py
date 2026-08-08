@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from api.core.models import UserRole
+
 from .models import Calibration, Exercise, Prescription
 
 
@@ -20,6 +22,7 @@ class ExerciseSerializer(serializers.ModelSerializer):
 class PrescriptionSerializer(serializers.ModelSerializer):
     exercise_name = serializers.CharField(source='exercise.name', read_only=True)
     patient_name = serializers.SerializerMethodField()
+    patient_email = serializers.EmailField(source='patient.user.email', read_only=True)
     clinician_name = serializers.SerializerMethodField()
     exercise_completed = serializers.SerializerMethodField()
     last_completed_at = serializers.SerializerMethodField()
@@ -27,7 +30,7 @@ class PrescriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Prescription
         fields = [
-            'id', 'patient', 'patient_name', 'exercise', 'exercise_name',
+            'id', 'patient', 'patient_name', 'patient_email', 'exercise', 'exercise_name',
             'clinician', 'clinician_name',
             'sets', 'reps', 'hold_seconds', 'days_per_week', 'notes',
             'is_active', 'valid_from', 'valid_until',
@@ -87,6 +90,10 @@ class PrescriptionSerializer(serializers.ModelSerializer):
                 )
             patient = attrs.get('patient', getattr(self.instance, 'patient', None))
             clinician = getattr(request.user, 'clinician_profile', None)
+            if patient and patient.user.role != UserRole.PATIENT:
+                raise serializers.ValidationError({
+                    'patient': 'Select an account registered as a patient.'
+                })
             if not patient or patient.primary_clinician_id != getattr(clinician, 'id', None):
                 raise serializers.ValidationError({
                     'patient': 'Select a patient linked to your clinician account.'

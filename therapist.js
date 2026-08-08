@@ -43,6 +43,13 @@ function initials(name) {
   return name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
 }
 
+function patientAccountLabel(patient) {
+  const name = patient?.full_name || patient?.email || "Patient";
+  return patient?.email && patient.email !== name
+    ? `${name} — ${patient.email}`
+    : name;
+}
+
 function trendIcon(trend) {
   if (trend === "improving") return { icon: "↗", cls: "trend-rising" };
   if (trend === "declining") return { icon: "⌁", cls: "trend-falling" };
@@ -419,7 +426,7 @@ function renderProgrammes() {
 
   if (patientSel) {
     patientSel.innerHTML = state.patients.length
-      ? state.patients.map(p => `<option value="${p.id}">${escapeHtml(p.full_name)}</option>`).join("")
+      ? state.patients.map(p => `<option value="${p.id}">${escapeHtml(patientAccountLabel(p))}</option>`).join("")
       : `<option value="">No linked patients yet</option>`;
   }
   if (exerciseSel) {
@@ -433,7 +440,7 @@ function renderProgrammes() {
     const selectedPatient = filterPatientSel.value || "all";
     filterPatientSel.innerHTML = `
       <option value="all">All patients</option>
-      ${state.patients.map(p => `<option value="${p.id}">${escapeHtml(p.full_name)}</option>`).join("")}`;
+      ${state.patients.map(p => `<option value="${p.id}">${escapeHtml(patientAccountLabel(p))}</option>`).join("")}`;
     filterPatientSel.value = [...filterPatientSel.options].some(option => option.value === selectedPatient)
       ? selectedPatient
       : "all";
@@ -457,7 +464,7 @@ function renderProgrammes() {
     list.innerHTML = filtered.length
       ? filtered.map(p => `
           <div class="detail-row programme-row">
-            <span><strong>${escapeHtml(p.patient_name)}</strong></span>
+            <span class="programme-patient"><strong>${escapeHtml(p.patient_name)}</strong>${p.patient_email ? `<small>${escapeHtml(p.patient_email)}</small>` : ""}</span>
             <span>${escapeHtml(p.exercise_name)}</span>
             <span>${p.sets}×${p.reps}</span>
             <span>${escapeHtml(p.days_per_week)}×/wk</span>
@@ -472,6 +479,9 @@ async function submitPrescription(e) {
   e.preventDefault();
   const status = document.getElementById("rx-status");
   const patient  = document.getElementById("rx-patient").value;
+  const patientRecord = state.patients.find(
+    item => String(item.id) === String(patient)
+  );
   const exercise = document.getElementById("rx-exercise").value;
   if (!patient || !exercise) { if (status) status.textContent = "Select a patient and exercise."; return; }
 
@@ -485,7 +495,9 @@ async function submitPrescription(e) {
       days_per_week: document.getElementById("rx-days").value.trim(),
       valid_from: new Date().toISOString().slice(0, 10),
     });
-    if (status) status.textContent = "Programme assigned ✓";
+    if (status) {
+      status.textContent = `Programme assigned to ${patientAccountLabel(patientRecord)} ✓`;
+    }
     // Refresh prescriptions + patients (adherence/programme change).
     [state.prescriptions, state.patients] = await Promise.all([
       getPrescriptions().then(unwrap),
@@ -572,7 +584,7 @@ function renderConsultations() {
   if (patientSelect) {
     const selected = patientSelect.value;
     patientSelect.innerHTML = state.patients.length
-      ? state.patients.map(patient => `<option value="${patient.id}">${escapeHtml(patient.full_name || "Patient")}</option>`).join("")
+      ? state.patients.map(patient => `<option value="${patient.id}">${escapeHtml(patientAccountLabel(patient))}</option>`).join("")
       : `<option value="">No linked patients</option>`;
     patientSelect.disabled = state.patients.length === 0;
     if ([...patientSelect.options].some(option => option.value === selected)) patientSelect.value = selected;
@@ -727,6 +739,7 @@ function renderTriage() {
           <div class="triage-avatar" aria-hidden="true">${escapeHtml(initials(patient.name))}</div>
           <div>
             <div class="triage-card-title"><strong>${escapeHtml(patient.name)}</strong><span>Awaiting clinician</span></div>
+            ${patient.email ? `<small>${escapeHtml(patient.email)}</small>` : ""}
             <p>Goal: ${escapeHtml(goal)}</p>
             <div class="triage-meta">
               ${patient.mobility_status ? `<span>Mobility: ${escapeHtml(profileLabel(patient.mobility_status))}</span>` : ""}

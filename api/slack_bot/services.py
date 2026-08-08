@@ -198,12 +198,15 @@ def claim_patient(clinician, patient_id):
     """
     from django.core.exceptions import ValidationError
 
-    from api.core.models import PatientProfile
+    from api.core.models import PatientProfile, UserRole
 
     try:
         patient = PatientProfile.objects.select_related('user', 'primary_clinician').get(id=patient_id)
     except (PatientProfile.DoesNotExist, ValidationError, ValueError, TypeError):
         return None, "That patient no longer exists."
+
+    if patient.user.role != UserRole.PATIENT:
+        return None, "Only patient accounts can be claimed from triage."
 
     if patient.primary_clinician_id and patient.primary_clinician_id != clinician.id:
         already = patient.primary_clinician.user.get_full_name() or "another clinician"
@@ -238,10 +241,13 @@ def _open_dashboard_button(*, primary=False):
 
 def _wants_therapist(patient):
     """True if the patient has opted in to seeking physiotherapist help."""
-    from api.core.models import PatientPathwayChoice
+    from api.core.models import PatientPathwayChoice, UserRole
     return bool(
-        patient.pathway_choice == PatientPathwayChoice.PHYSIOTHERAPIST
-        or patient.physiotherapist_requested_at
+        patient.user.role == UserRole.PATIENT
+        and (
+            patient.pathway_choice == PatientPathwayChoice.PHYSIOTHERAPIST
+            or patient.physiotherapist_requested_at
+        )
     )
 
 
@@ -320,7 +326,11 @@ def post_self_referral_to_triage(patient):
     Claim button so any physio can take them on. No-op if they already have a
     clinician, or Slack/triage isn't configured.
     """
+    from api.core.models import UserRole
+
     if not getattr(settings, 'SLACK_BOT_TOKEN', ''):
+        return None
+    if patient.user.role != UserRole.PATIENT:
         return None
     if patient.primary_clinician_id:
         return None

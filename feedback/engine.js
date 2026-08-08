@@ -1,4 +1,4 @@
-import { EXERCISES, EXERCISE_MAP } from "../exercises/registry.js?v=59";
+import { EXERCISES, EXERCISE_MAP } from "../exercises/registry.js?v=60";
 import { applyCalibration } from "../personalization.js";
 
 export { EXERCISES };
@@ -34,6 +34,7 @@ export class FeedbackEngine {
     this.phaseCandidateInterruptedAt = null;
     this.trackingLostSince = null;
     this.adaptiveBaselines = {};
+    this.adaptiveTargets = {};
     this.startConfirmed = !this.exercise.phaseConfirmationMs;
   }
 
@@ -57,6 +58,7 @@ export class FeedbackEngine {
         this._resetPhaseCandidate();
         this.startConfirmed = !this.exercise.phaseConfirmationMs;
         this.adaptiveBaselines = {};
+        this.adaptiveTargets = {};
       }
     } else if (!this.startConfirmed) {
       this.trackingLostSince = null;
@@ -280,6 +282,12 @@ export class FeedbackEngine {
       && this.stageIdx > 0
       && phase === adaptiveTracking.fromPhase
     );
+    const isAdaptiveTarget = Boolean(
+      adaptiveTracking
+      && this.startConfirmed
+      && phase === adaptiveTracking.targetPhase
+      && this.stages[this.stageIdx + 1] === phase
+    );
     // A rep is still required to reach and hold its target phase for the full
     // confirmation period. The return only needs a few consecutive visible
     // frames: requiring another long hold after standing made the last rep
@@ -288,6 +296,10 @@ export class FeedbackEngine {
       ? this.exercise.returnPhaseConfirmationMs
         ?? this.exercise.phaseConfirmationMs
         ?? 0
+      : isAdaptiveTarget
+        ? this.exercise.targetPhaseConfirmationMs
+          ?? this.exercise.phaseConfirmationMs
+          ?? 0
       : this.exercise.phaseConfirmationMs ?? 0;
     if (confirmationMs <= 0) return true;
 
@@ -329,6 +341,9 @@ export class FeedbackEngine {
 
   _advanceToPhase(phase, angles) {
     this._resetPhaseCandidate();
+    if (phase === this.exercise.adaptivePhaseTracking?.targetPhase) {
+      this._captureAdaptiveTarget(angles);
+    }
     this.stageIdx++;
     this.currentPhase = phase;
 
@@ -341,6 +356,7 @@ export class FeedbackEngine {
       this.repCount++;
       this.stageIdx = 0;
       this.currentPhase = this.stages[0];
+      this.adaptiveTargets = {};
       this._captureAdaptiveBaseline(angles);
     }
   }
@@ -365,7 +381,11 @@ export class FeedbackEngine {
         && this.stageIdx > 0
         && Number.isFinite(baseline)
       ) {
-        return measurement.value >= baseline - (config.returnTolerance ?? 6);
+        return measurement.value >= this._adaptiveReturnThreshold(
+          config,
+          config.measurement,
+          baseline
+        );
       }
       const condition = phase[config.measurement];
       return condition
@@ -402,6 +422,23 @@ export class FeedbackEngine {
     }
   }
 
+  _captureAdaptiveTarget(angles) {
+    const config = this.exercise.adaptivePhaseTracking;
+    if (!config?.measurement) return;
+
+    for (const side of ["left", "right"]) {
+      const measurement = this._resolve(config.measurement, angles, side);
+      if (
+        !measurement
+        || measurement.lowConfidence
+        || !Number.isFinite(measurement.value)
+      ) {
+        continue;
+      }
+      this.adaptiveTargets[`${side}:${config.measurement}`] = measurement.value;
+    }
+  }
+
   _adaptiveBaseline(measurementName) {
     const direct = this.adaptiveBaselines[
       `${this.frameTrackingSide}:${measurementName}`
@@ -414,6 +451,32 @@ export class FeedbackEngine {
       )
       .map(([, value]) => value);
     return available.length ? Math.max(...available) : null;
+  }
+
+  _adaptiveTarget(measurementName) {
+    const direct = this.adaptiveTargets[
+      `${this.frameTrackingSide}:${measurementName}`
+    ];
+    if (Number.isFinite(direct)) return direct;
+
+    const available = Object.entries(this.adaptiveTargets)
+      .filter(([key, value]) =>
+        key.endsWith(`:${measurementName}`) && Number.isFinite(value)
+      )
+      .map(([, value]) => value);
+    return available.length ? Math.min(...available) : null;
+  }
+
+  _adaptiveReturnThreshold(config, measurementName, baseline) {
+    const target = this._adaptiveTarget(measurementName);
+    if (Number.isFinite(target) && target < baseline) {
+      const recoveryFraction = Math.min(
+        0.95,
+        Math.max(0.5, config.returnRecoveryFraction ?? 0.75)
+      );
+      return target + (baseline - target) * recoveryFraction;
+    }
+    return baseline - (config.returnTolerance ?? 6);
   }
 
   // scoring from 0 - 1, base on how well the stage is done, if 1 then can move on to the next stage
@@ -443,7 +506,7 @@ export class FeedbackEngine {
 
   _adaptiveProgress(nextName, angles) {
     const config = this.exercise.adaptivePhaseTracking;
-    if (!config || nextName !== config.targetPhase) return null;
+    if (!config) return null;
     const measurement = this._resolve(config.measurement, angles);
     const baseline = this._adaptiveBaseline(config.measurement);
     if (
@@ -454,6 +517,25 @@ export class FeedbackEngine {
     ) {
       return 0;
     }
+    if (
+      nextName === config.fromPhase
+      && this.startConfirmed
+      && this.stageIdx > 0
+    ) {
+      const target = this._adaptiveTarget(config.measurement);
+      if (!Number.isFinite(target) || target >= baseline) return 0;
+      const returnThreshold = this._adaptiveReturnThreshold(
+        config,
+        config.measurement,
+        baseline
+      );
+      const returnTravel = Math.max(1, returnThreshold - target);
+      return Math.min(
+        1,
+        Math.max(0, (measurement.value - target) / returnTravel)
+      );
+    }
+    if (nextName !== config.targetPhase) return null;
     const targetRange = config.targetRange;
     const rangeChange = Array.isArray(targetRange)
       ? Math.max(0, baseline - targetRange[1])

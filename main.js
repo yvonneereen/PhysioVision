@@ -7,7 +7,7 @@ import {
   measureHandExerciseFrame,
   measurePoseExerciseFrame,
 } from "./exercise-tracking.js?v=2";
-import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=48";
+import { FeedbackEngine, EXERCISES } from "./feedback/engine.js?v=49";
 import { POSES } from "./poses.js";
 import {
   calibrationFrameMatchesPhase,
@@ -49,7 +49,7 @@ import {
   isSafariBrowser,
   readMicrophonePermissionState,
   voiceGuidance,
-} from "./voice-guidance.js?v=39";
+} from "./voice-guidance.js?v=40";
 import {
   PRACTICE_VIEWS,
   acceptedWellnessPlan,
@@ -75,6 +75,11 @@ let DrawingUtils;
 // ── EMA smoother ─────────────────────────────────────────────────────────────
 
 const EMA_ALPHA = 0.3;
+// Rep recognition should follow deliberate movement more quickly than the
+// softly animated/debug angle display. The engine still requires several
+// consecutive phase frames, so this faster EMA removes visible lag without
+// letting one noisy landmark frame earn a repetition.
+const REP_TRACKING_EMA_ALPHA = 0.65;
 
 class AngleSmoother {
   constructor(alpha = EMA_ALPHA) {
@@ -103,6 +108,7 @@ class AngleSmoother {
 }
 
 const smoother = new AngleSmoother();
+const repTrackingSmoother = new AngleSmoother(REP_TRACKING_EMA_ALPHA);
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 
@@ -359,6 +365,7 @@ let completedExerciseSessionError = null;
 let completedExerciseCheckinLinkError = false;
 let cameraSetupCountdown = null;
 let movementAiState = "off";
+let movementCoachingGeneration = 0;
 let movementAiGeneration = 0;
 let movementAiRestartTimer = null;
 let movementTrackingPausedForInstruction = false;
@@ -1344,6 +1351,7 @@ function movementAiCanListen(generation = movementAiGeneration) {
 
 function stopMovementAiGuide({ hide = true } = {}) {
   movementAiGeneration += 1;
+  movementCoachingGeneration += 1;
   movementAiState = "off";
   clearMovementAiRestartTimer();
   voiceGuidance.cancelListening();
@@ -1606,11 +1614,18 @@ function startMovementAiGuide() {
 }
 
 function speakCameraCoaching(message, options = {}) {
-  if (movementAiConversationActive() || movementAiState === "coaching") {
+  const priority = Boolean(options.priority);
+  if (
+    movementAiConversationActive()
+    || (movementAiState === "coaching" && !priority)
+  ) {
     return false;
   }
+  const speechOptions = { ...options };
+  delete speechOptions.priority;
   const generation = movementAiGeneration;
-  const resumeWakeListener = movementAiState === "wake"
+  const coachingGeneration = ++movementCoachingGeneration;
+  const resumeWakeListener = ["wake", "coaching"].includes(movementAiState)
     && movementAiCanListen(generation);
   if (resumeWakeListener) {
     clearMovementAiRestartTimer();
@@ -1622,21 +1637,25 @@ function speakCameraCoaching(message, options = {}) {
     );
   }
 
-  const originalOnEnd = options.onEnd;
+  const originalOnEnd = speechOptions.onEnd;
   const finish = () => {
+    if (coachingGeneration !== movementCoachingGeneration) return;
     originalOnEnd?.();
     if (resumeWakeListener) resumeMovementAiAfterSpeech(generation);
   };
   const speakAtFullVolume = () => {
-    if (resumeWakeListener && (
-      generation !== movementAiGeneration
-      || !running
-      || movementAiState !== "coaching"
-    )) {
+    if (
+      coachingGeneration !== movementCoachingGeneration
+      || (resumeWakeListener && (
+        generation !== movementAiGeneration
+        || !running
+        || movementAiState !== "coaching"
+      ))
+    ) {
       return;
     }
     const spoken = speakMovementGuide(message, {
-      ...options,
+      ...speechOptions,
       onEnd: finish,
     });
     if (!spoken && resumeWakeListener) resumeMovementAiAfterSpeech(generation);
@@ -1652,7 +1671,7 @@ function speakCameraCoaching(message, options = {}) {
     return true;
   }
   return speakMovementGuide(message, {
-    ...options,
+    ...speechOptions,
     onEnd: finish,
   });
 }
@@ -1986,6 +2005,7 @@ function processPendingRepAnnouncements() {
   if (
     repAnnouncementActive
     || !pendingRepAnnouncements.length
+    || movementTrackingPausedForInstruction
     || movementAiConversationActive()
   ) {
     return;
@@ -1995,6 +2015,11 @@ function processPendingRepAnnouncements() {
     repAnnouncementMessage(announcement),
     {
       key: `rep:${announcement.exerciseId}:${announcement.setNumber}:${announcement.repNumber}`,
+      // Rep numbers take precedence over ordinary form/position coaching. A
+      // count spoken during the next movement feels one repetition behind even
+      // when the camera recognized it correctly.
+      priority: true,
+      interrupt: true,
       onEnd: () => {
         const completed = pendingRepAnnouncements.shift();
         if (completed) {
@@ -2284,6 +2309,7 @@ exSelect.addEventListener("change", () => {
     getCalibration(exSelect.value, sideSelect.value)
   );
   smoother.state = {};
+  repTrackingSmoother.state = {};
   combinedPoseHistory = [];
   clearHoldTimer(activeDose(engine.exercise).holdSeconds);
   holdTimerSection.classList.add("hidden");
@@ -2322,6 +2348,7 @@ sideSelect.addEventListener("change", () => {
     getCalibration(exSelect.value, sideSelect.value)
   );
   smoother.state = {};
+  repTrackingSmoother.state = {};
   combinedPoseHistory = [];
   repCountEl.textContent = "0";
   resetSpokenCoaching();
@@ -2366,6 +2393,7 @@ window.addEventListener("physiovision:profile-updated", (event) => {
     getCalibration(exSelect.value, sideSelect.value)
   );
   smoother.state = {};
+  repTrackingSmoother.state = {};
   repCountEl.textContent = "0";
   renderPrescription(engine.exercise);
   resetSpokenCoaching();
@@ -2760,18 +2788,29 @@ function renderHandPreview(result) {
 }
 
 function presentInstructionTrackingPause(measurements, timestampMs) {
-  // Prepare the stable starting baseline while the patient is listening, but
-  // stop feeding the sequence as soon as that baseline is confirmed. This
-  // prevents setup movements from earning repetitions while allowing the very
-  // first movement after "Begin" to count immediately.
+  // A half squat is a deliberate standing → squat → standing sequence. Once a
+  // stable standing baseline exists, keep feeding that sequence while the
+  // opening instruction plays so a patient who begins early does not lose
+  // their first one or two completed repetitions. Spoken counts remain queued
+  // until the instruction finishes, so the safety/setup wording is not cut off.
+  if (engine.exercise.id === "half-squats" && measurements) {
+    updateFeedbackPanel(measurements, timestampMs);
+    statusEl.textContent =
+      "Listen first — completed repetitions are being counted";
+    setFeedbackBanner(
+      "ready",
+      "Listen to the instruction. Camera counting is already active."
+    );
+    return;
+  }
+
+  // Other movements may include setup actions that resemble one of their
+  // phases, so retain the baseline-only gate for them.
   if (!engine.startConfirmed && measurements) {
     engine.update(measurements, timestampMs);
   }
   statusEl.textContent = "Listen first — rep counting starts after this instruction";
-  setFeedbackBanner(
-    "ready",
-    "Stay in your starting position. I will tell you when rep counting begins."
-  );
+  setFeedbackBanner("ready", "Stay in your starting position. I will tell you when rep counting begins.");
 }
 
 function renderFrame() {
@@ -2866,13 +2905,19 @@ function renderFrame() {
               : engine.exercise.trackingVisibilityThreshold
                 ?? VISIBILITY_THRESHOLD,
           });
-          const angles = Object.fromEntries(
+          const displayAngles = Object.fromEntries(
             Object.entries(raw).map(([k, a]) => [k, smoother.smooth(k, a)])
           );
+          const angles = Object.fromEntries(
+            Object.entries(raw).map(([k, a]) => [
+              k,
+              repTrackingSmoother.smooth(k, a),
+            ])
+          );
 
-          updateDebugPanel(angles);
+          updateDebugPanel(displayAngles);
           if (calibrationSession) {
-            updateCalibrationCapture(angles, frameTimestamp);
+            updateCalibrationCapture(displayAngles, frameTimestamp);
             statusEl.textContent = "Personal calibration in progress";
           } else if (movementTrackingPausedForInstruction) {
             presentInstructionTrackingPause(angles, frameTimestamp);
@@ -3022,6 +3067,7 @@ function handleCompletedSet(feedback) {
     getCalibration(exSelect.value, sideSelect.value)
   );
   smoother.state = {};
+  repTrackingSmoother.state = {};
   combinedPoseHistory = [];
   if (holdInterval) {
     clearHoldTimer(activeDose(engine.exercise).holdSeconds);
@@ -3629,6 +3675,7 @@ function saveCompletedCalibration(draft) {
   }
   engine.changeExercise(exSelect.value, sideSelect.value, draft);
   smoother.state = {};
+  repTrackingSmoother.state = {};
   combinedPoseHistory = [];
   renderPersonalization();
   cancelCalibration();
@@ -4000,6 +4047,7 @@ function finishCalibrationCapture(capture) {
           checkedCalibration
         );
         smoother.state = {};
+        repTrackingSmoother.state = {};
         combinedPoseHistory = [];
         cancelCalibration();
         statusEl.textContent =
@@ -4393,18 +4441,30 @@ function announceExerciseInstruction(prefix = "", { onEnd = null } = {}) {
   ].filter(Boolean).join(" ");
   setMovementAiStatus(
     "coaching",
-    "Listen to the complete start instruction. Rep counting and Hey Guide will begin afterward."
+    engine.exercise.id === "half-squats"
+      ? "Listen to the start instruction. Camera counting is already active."
+      : "Listen to the complete start instruction. Rep counting and Hey Guide will begin afterward."
   );
   movementTrackingPausedForInstruction = true;
   const finishInstruction = () => {
     movementTrackingPausedForInstruction = false;
     spokenCoachingCandidate = null;
-    statusEl.textContent = "Instruction complete — begin your first repetition";
+    const alreadyCounting = engine.exercise.id === "half-squats"
+      && engine.repCount > 0;
+    statusEl.textContent = alreadyCounting
+      ? "Instruction complete — keep going"
+      : "Instruction complete — begin your first repetition";
     setFeedbackBanner(
       "ready",
-      "Begin now. Rep counting is active."
+      alreadyCounting
+        ? "Keep going. Rep counting is active."
+        : "Begin now. Rep counting is active."
     );
     onEnd?.();
+    // Start the wake-listener lifecycle first, then let the latest queued rep
+    // temporarily take priority. Reversing this order invalidates the rep's
+    // completion callback and can leave subsequent counts permanently queued.
+    processPendingRepAnnouncements();
   };
   const spoken = speakMovementGuide(spokenInstruction, {
     key: `instruction:${engine.exercise.id}`,
@@ -4683,6 +4743,7 @@ function resetExerciseProgressForNewSession() {
     getCalibration(exSelect.value, sideSelect.value)
   );
   smoother.state = {};
+  repTrackingSmoother.state = {};
   combinedPoseHistory = [];
   if (holdInterval) {
     clearHoldTimer(activeDose(engine.exercise).holdSeconds);

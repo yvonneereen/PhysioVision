@@ -292,6 +292,27 @@ class ClaimPatientTests(TestCase):
         self.patient.refresh_from_db()
         self.assertEqual(self.patient.primary_clinician_id, other.id)
 
+    def test_claim_rejects_stale_patient_profile_for_clinician_account(self):
+        from api.core.models import PatientProfile, User, UserRole
+        from .services import claim_patient
+
+        clinician_user = User.objects.create_user(
+            username="clinician-shadow@c.com",
+            email="clinician-shadow@c.com",
+            password="pw",
+            role=UserRole.CLINICIAN,
+            first_name="Rosanne",
+            last_name="Lee",
+        )
+        stale_profile = PatientProfile.objects.create(user=clinician_user)
+
+        patient, error = claim_patient(self.clinician, str(stale_profile.id))
+
+        self.assertIsNone(patient)
+        self.assertIn("Only patient accounts", error)
+        stale_profile.refresh_from_db()
+        self.assertIsNone(stale_profile.primary_clinician_id)
+
     def test_claim_unknown_patient_errors(self):
         from .services import claim_patient
         # A well-formed but non-existent UUID.
@@ -514,6 +535,31 @@ class SelfReferralTriageTests(TestCase):
         client = MagicMock()
         with patch('api.slack_bot.services._get_slack_client', return_value=client):
             result = post_self_referral_to_triage(self.patient)
+
+        self.assertIsNone(result)
+        client.chat_postMessage.assert_not_called()
+
+    def test_clinician_account_with_stale_patient_profile_is_not_posted(self):
+        from unittest.mock import MagicMock, patch
+        from api.core.models import PatientProfile, User, UserRole
+        from .services import post_self_referral_to_triage
+
+        clinician_user = User.objects.create_user(
+            username="clinician-shadow@c.com",
+            email="clinician-shadow@c.com",
+            password="pw",
+            role=UserRole.CLINICIAN,
+            first_name="Rosanne",
+            last_name="Lee",
+        )
+        stale_profile = PatientProfile.objects.create(
+            user=clinician_user,
+            pathway_choice=self.PatientPathwayChoice.PHYSIOTHERAPIST,
+        )
+
+        client = MagicMock()
+        with patch('api.slack_bot.services._get_slack_client', return_value=client):
+            result = post_self_referral_to_triage(stale_profile)
 
         self.assertIsNone(result)
         client.chat_postMessage.assert_not_called()

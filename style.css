@@ -7302,6 +7302,15 @@ details.metrics summary {
   font-size: .95rem;
 }
 .programme-row { grid-template-columns: 1.1fr 1.2fr .6fr .75fr .65fr .9fr; }
+.programme-patient strong,
+.programme-patient small {
+  display: block;
+}
+.programme-patient small {
+  margin-top: 2px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
 .programme-status {
   justify-self: start;
   padding: 4px 9px;

@@ -36,6 +36,7 @@ class PrescriptionViewSet(ModelViewSet):
             return base.filter(
                 clinician=clinician,
                 patient__primary_clinician=clinician,
+                patient__user__role=UserRole.PATIENT,
             ).order_by('-valid_from', 'patient__user__last_name')
         return base.none()
 

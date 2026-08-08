@@ -83,6 +83,7 @@ class PrescriptionAccessTests(APITestCase):
         self.assertEqual(len(prescriptions), 1)
         self.assertEqual(prescriptions[0]['exercise'], self.exercise.id)
         self.assertEqual(prescriptions[0]['reps'], 8)
+        self.assertEqual(prescriptions[0]['patient_email'], 'patient@example.com')
 
     def test_prescription_reports_completion_from_finished_target_session(self):
         self.client.force_authenticate(self.clinician_user)
@@ -136,6 +137,32 @@ class PrescriptionAccessTests(APITestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn('patient', response.data)
+
+    def test_clinician_cannot_prescribe_to_stale_clinician_patient_profile(self):
+        stale_profile = PatientProfile.objects.create(
+            user=self.clinician_user,
+            primary_clinician=self.clinician,
+            care_path=CarePath.CLINICIAN,
+        )
+        self.client.force_authenticate(self.clinician_user)
+
+        response = self.client.post(
+            self.endpoint,
+            self.payload(stale_profile),
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('patient', response.data)
+        self.assertIn('registered as a patient', str(response.data['patient']))
+        self.assertFalse(stale_profile.prescriptions.exists())
+
+        roster = self.client.get('/api/patients/')
+        self.assertEqual(roster.status_code, 200)
+        self.assertNotIn(
+            str(stale_profile.id),
+            {str(item['id']) for item in roster.data},
+        )
 
     def test_expired_prescription_is_visible_to_clinician_but_hidden_from_patient(self):
         self.client.force_authenticate(self.clinician_user)

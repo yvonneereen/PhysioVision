@@ -153,7 +153,10 @@ class PatientViewSet(ReadOnlyModelViewSet):
     def get_queryset(self):
         return (
             PatientProfile.objects
-            .filter(primary_clinician=self.request.user.clinician_profile)
+            .filter(
+                primary_clinician=self.request.user.clinician_profile,
+                user__role=UserRole.PATIENT,
+            )
             .select_related('user')
             .prefetch_related('sessions', 'escalations', 'prescriptions', 'prescriptions__exercise', 'pain_checkins')
         )
@@ -1653,7 +1656,8 @@ class ClinicianPatientsView(APIView):
 
         clinician = request.user.clinician_profile
         patients = (
-            clinician.patients.select_related("user")
+            clinician.patients.filter(user__role=UserRole.PATIENT)
+            .select_related("user")
             .prefetch_related("prescriptions")
             .order_by("user__last_name", "user__first_name")
         )
@@ -1698,6 +1702,7 @@ class ClinicianTriageQueueView(APIView):
         patients = (
             PatientProfile.objects.filter(
                 primary_clinician__isnull=True,
+                user__role=UserRole.PATIENT,
             )
             .filter(
                 Q(pathway_choice=PatientPathwayChoice.PHYSIOTHERAPIST)
@@ -1709,6 +1714,7 @@ class ClinicianTriageQueueView(APIView):
         return Response([{
             "id": str(patient.id),
             "name": patient.user.get_full_name().strip() or "Patient",
+            "email": patient.user.email,
             "goal": patient.goal,
             "custom_goal": patient.custom_goal,
             "activity_level": patient.activity_level,
@@ -1742,6 +1748,7 @@ class ClinicianTriageClaimView(APIView):
         with transaction.atomic():
             patient = (
                 PatientProfile.objects.select_for_update()
+                .select_related("user")
                 .filter(pk=patient_id)
                 .first()
             )
@@ -1749,6 +1756,11 @@ class ClinicianTriageClaimView(APIView):
                 return Response(
                     {"detail": "This triage request no longer exists."},
                     status=status.HTTP_404_NOT_FOUND,
+                )
+            if patient.user.role != UserRole.PATIENT:
+                return Response(
+                    {"detail": "Only patient accounts can be claimed from triage."},
+                    status=status.HTTP_409_CONFLICT,
                 )
             if patient.primary_clinician_id:
                 return Response(
@@ -1849,6 +1861,7 @@ class ClinicianTriageDeclineView(APIView):
         with transaction.atomic():
             patient = (
                 PatientProfile.objects.select_for_update()
+                .select_related("user")
                 .filter(pk=patient_id)
                 .first()
             )
@@ -1856,6 +1869,11 @@ class ClinicianTriageDeclineView(APIView):
                 return Response(
                     {"detail": "This triage request no longer exists."},
                     status=status.HTTP_404_NOT_FOUND,
+                )
+            if patient.user.role != UserRole.PATIENT:
+                return Response(
+                    {"detail": "Only patient accounts can have triage requests."},
+                    status=status.HTTP_409_CONFLICT,
                 )
             if patient.primary_clinician_id:
                 return Response(

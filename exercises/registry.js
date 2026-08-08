@@ -105,7 +105,9 @@ export const EXERCISES = [
     id: "half-squats",
     name: "Half Squats",
     category: "strengthening",
-    prescription: { sets: 3, reps: 10, holdSeconds: 5, daysPerWeek: "4–5" },
+    // The general-wellness guide uses a single 10-repetition target. A linked
+    // clinician prescription or accepted AI plan can still override this dose.
+    prescription: { sets: 1, reps: 10, holdSeconds: 5, daysPerWeek: "4–5" },
     camera: "front", // required for bilateral symmetry and facing-direction checks
     trackingWarning:
       "Face the camera and step back until one complete hip, knee, and ankle line is visible. Keep the chair beside you and both feet in view.",
@@ -142,17 +144,25 @@ export const EXERCISES = [
       targetPhase: "squat",
       minimumChange: 10,
       targetRange: [90, 155],
-      returnTolerance: 8,
+      returnTolerance: 15,
+      // Count the return after most of the observed knee-angle excursion has
+      // recovered. Requiring the exact first-frame standing angle caused the
+      // count to arrive during the following squat.
+      returnRecoveryFraction: 0.75,
     },
     preferExpectedPhase: true,
     // Brief landmark flicker is common while knees bend. Preserve a nearly
     // confirmed phase across a few missed frames, but reset after sustained
     // tracking loss so stale poses cannot earn a repetition.
     phaseConfirmationMs: 400,
+    // A continuous squat should not require a long pause at the bottom. The
+    // faster recognition EMA and this short multi-frame confirmation keep the
+    // movement responsive while rejecting one-frame pose jitter.
+    targetPhaseConfirmationMs: 180,
     // Once the squat itself has been held and recognized, a short run of
     // standing frames completes the rep. This gives the guide time to count
     // the final return before the user walks back toward their device.
-    returnPhaseConfirmationMs: 180,
+    returnPhaseConfirmationMs: 140,
     phaseInterruptionGraceMs: 250,
     trackingLossGraceMs: 450,
     maxCues: 1,

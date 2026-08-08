@@ -86,6 +86,12 @@ const halfSquatBottom = (overrides = {}) =>
     ...overrides,
   });
 
+assert.equal(
+  EXERCISE_MAP["half-squats"].prescription.sets,
+  1,
+  "the unassigned wellness fallback should finish after its 10-repetition target"
+);
+
 {
   const engine = new FeedbackEngine("half-squats", "right");
   const result = engine.update(halfSquatPose({ rightKnee: hidden }));
@@ -159,13 +165,47 @@ const halfSquatBottom = (overrides = {}) =>
 
   assert.equal(ready.startConfirmed, true);
   assert.equal(engine.update(halfSquatBottom(), 500).phase, "standing");
-  assert.equal(engine.update(halfSquatBottom(), 899).phase, "standing");
-  assert.equal(engine.update(halfSquatBottom(), 900).phase, "squat");
+  assert.equal(engine.update(halfSquatBottom(), 679).phase, "standing");
+  assert.equal(engine.update(halfSquatBottom(), 680).phase, "squat");
   assert.equal(engine.update(halfSquatPose(), 1000).repCount, 0);
 
-  const completed = engine.update(halfSquatPose(), 1400);
+  const completed = engine.update(halfSquatPose(), 1140);
   assert.equal(completed.phase, "standing");
   assert.equal(completed.repCount, 1);
+}
+
+{
+  const engine = new FeedbackEngine("half-squats", "right");
+  const partialReturn = halfSquatPose({
+    leftKnee: visible(150),
+    rightKnee: visible(150),
+  });
+  const recoveredReturn = halfSquatPose({
+    leftKnee: visible(156),
+    rightKnee: visible(156),
+  });
+
+  engine.update(halfSquatPose(), 0);
+  engine.update(halfSquatPose(), 400);
+  engine.update(halfSquatBottom(), 500);
+  engine.update(halfSquatBottom(), 680);
+  assert.equal(
+    engine.update(partialReturn, 760).repCount,
+    0,
+    "a partially recovered squat must not count as standing"
+  );
+  const returning = engine.update(recoveredReturn, 900);
+  assert.equal(
+    returning.progress,
+    1,
+    "return progress should reach 100% at the same angle used for recognition"
+  );
+  const completed = engine.update(recoveredReturn, 1040);
+  assert.equal(
+    completed.repCount,
+    1,
+    "recovering most of the observed excursion should count without requiring the exact baseline angle"
+  );
 }
 
 {
@@ -211,6 +251,40 @@ const halfSquatBottom = (overrides = {}) =>
     assert.equal(result.repCount, repetition);
   }
   assert.equal(engine.repCount, 10, "the target repetition must be recorded");
+}
+
+{
+  // Exercise the engine with the same faster EMA used by main.js and a
+  // continuous, no-pause home-exercise cadence. Every standing return must be
+  // credited before the following descent begins.
+  const engine = new FeedbackEngine("half-squats", "right");
+  let timestamp = 0;
+  let smoothedKnee = 170;
+  const feedRawKnee = (rawKnee, durationMs) => {
+    let result = null;
+    const frameCount = Math.ceil(durationMs / 40);
+    for (let frame = 0; frame < frameCount; frame += 1) {
+      smoothedKnee += 0.65 * (rawKnee - smoothedKnee);
+      timestamp += 40;
+      result = engine.update(halfSquatPose({
+        leftKnee: visible(smoothedKnee),
+        rightKnee: visible(smoothedKnee),
+      }), timestamp);
+    }
+    return result;
+  };
+
+  feedRawKnee(170, 480);
+  for (let repetition = 1; repetition <= 10; repetition += 1) {
+    feedRawKnee(110, 360);
+    const returned = feedRawKnee(170, 360);
+    assert.equal(
+      returned.repCount,
+      repetition,
+      `continuous repetition ${repetition} should count on its own standing return`
+    );
+  }
+  assert.equal(engine.repCount, 10);
 }
 
 {

@@ -285,6 +285,14 @@ export async function postPainCheckin(checkin) {
   return request("POST", "/pain-checkins/", checkin);
 }
 
+export async function updatePainCheckin(id, fields) {
+  return request(
+    "PATCH",
+    `/pain-checkins/${encodeURIComponent(id)}/`,
+    fields,
+  );
+}
+
 export async function getSessions() {
   return request("GET", "/sessions/");
 }

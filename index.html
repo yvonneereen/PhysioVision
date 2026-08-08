@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=99" />
+  <link rel="stylesheet" href="style.css?v=100" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -340,6 +340,7 @@
         <p class="patient-card-intro" id="patientTrendMessage">
           Complete guided sessions and pain check-ins to begin your trend.
         </p>
+        <p class="patient-trend-scope" id="patientTrendScope" hidden></p>
         <div class="patient-metric-grid">
           <article>
             <span>Sessions this week</span>
@@ -919,9 +920,9 @@
               </div>
               <div class="camera-placeholder-actions">
                 <p id="primaryCameraInstruction">
-                  <strong>Stand where your full body fits</strong>
+                  <strong>Start near your device</strong>
                   Press Start camera guide below. We’ll ask about your pain
-                  level before turning on the camera.
+                  level and camera permission before telling you when to step back.
                 </p>
                 <button
                   class="button button-coral camera-setup-button"
@@ -1650,6 +1651,72 @@
       <span>Not a medical device · For demonstration only</span>
     </div>
   </footer>
+
+  <div class="modal-shell" id="session-summary-modal" aria-hidden="true">
+    <div class="modal-backdrop" data-session-summary-close></div>
+    <section
+      class="modal session-summary-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="sessionSummaryTitle"
+    >
+      <button
+        class="modal-close"
+        type="button"
+        data-session-summary-close
+        aria-label="Close session summary"
+      >×</button>
+      <div class="session-summary-heading">
+        <div>
+          <p class="eyebrow">Your session summary</p>
+          <h2 id="sessionSummaryTitle" tabindex="-1">Exercise session complete</h2>
+        </div>
+        <span id="sessionSummaryStatus" class="status-pill">Preparing your results</span>
+      </div>
+      <p id="sessionSummaryScope" class="session-summary-scope">
+        Results and trends compare the same exercise and affected side only.
+      </p>
+      <div class="session-summary-grid">
+        <article>
+          <span>Completed</span>
+          <strong id="sessionSummaryCompleted">—</strong>
+        </article>
+        <article>
+          <span>Movement quality</span>
+          <strong id="sessionSummaryQuality">—</strong>
+        </article>
+        <article>
+          <span>Pain response</span>
+          <strong id="sessionSummaryPain">—</strong>
+        </article>
+        <article>
+          <span>Recovery</span>
+          <strong id="sessionSummaryRecovery">—</strong>
+        </article>
+      </div>
+      <section class="session-summary-trend" aria-labelledby="sessionSummaryTrendHeading">
+        <h3 id="sessionSummaryTrendHeading">Same-exercise trend</h3>
+        <p id="sessionSummaryTrend" aria-live="polite">
+          Saving this check-in and calculating your same-exercise trend…
+        </p>
+      </section>
+      <p id="sessionSummaryCue" class="session-summary-cue">
+        Reviewing movement guidance…
+      </p>
+      <p class="session-summary-note">
+        These are early wellness indicators, not a diagnosis. Stop and seek
+        appropriate help for severe, new, or worsening symptoms.
+      </p>
+      <div class="session-summary-actions">
+        <button id="sessionSummaryHome" class="button button-coral" type="button">
+          View my progress <span aria-hidden="true">→</span>
+        </button>
+        <button class="text-button" type="button" data-session-summary-close>
+          Stay on exercise guide
+        </button>
+      </div>
+    </section>
+  </div>
 
   <div class="modal-shell" id="plan-modal" aria-hidden="true">
     <div class="modal-backdrop" data-close-modal></div>
@@ -2784,13 +2851,13 @@
   <script src="runtime-config.js"></script>
   <p id="textSizeStatus" class="sr-only" role="status" aria-live="polite"></p>
   <script type="module" src="text-size.js?v=1"></script>
-  <script type="module" src="i18n.js?v=23"></script>
+  <script type="module" src="i18n.js?v=25"></script>
   <script type="module" src="auth.js?v=32"></script>
-  <script type="module" src="ui.js?v=28"></script>
-  <script type="module" src="patient-dashboard.js?v=43"></script>
+  <script type="module" src="ui.js?v=29"></script>
+  <script type="module" src="patient-dashboard.js?v=45"></script>
   <script type="module" src="therapist.js?v=39"></script>
   <script type="module" src="exercise-library.js?v=17"></script>
-  <script type="module" src="main.js?v=121"></script>
+  <script type="module" src="main.js?v=123"></script>
   <script type="module" src="agent-chat.js?v=33"></script>
   <script type="module" src="care-workflow.js?v=19"></script>
 </body>

@@ -138,3 +138,48 @@ class PatientDataIsolationTests(APITestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn('session', response.data)
+
+    def test_patient_can_attach_before_and_after_checkins_to_own_session(self):
+        session = Session.objects.create(
+            patient=self.patient_a,
+            exercise=self.exercise,
+            started_at=timezone.now(),
+            reps_completed=3,
+            reps_target=5,
+            sets_completed=1,
+            sets_target=1,
+            affected_side='right',
+        )
+        self.client.force_authenticate(self.user_a)
+
+        before = self.client.post(
+            '/api/pain-checkins/',
+            {
+                'pain_level': 3,
+                'timing': 'before',
+                'checked_at': timezone.now().isoformat(),
+            },
+            format='json',
+        )
+        linked_before = self.client.patch(
+            f"/api/pain-checkins/{before.data['id']}/",
+            {'session': str(session.id)},
+            format='json',
+        )
+        after = self.client.post(
+            '/api/pain-checkins/',
+            {
+                'session': str(session.id),
+                'pain_level': 4,
+                'timing': 'after',
+                'recovery_status': 'worse',
+                'checked_at': timezone.now().isoformat(),
+            },
+            format='json',
+        )
+
+        self.assertEqual(before.status_code, 201)
+        self.assertEqual(linked_before.status_code, 200)
+        self.assertEqual(after.status_code, 201)
+        self.assertEqual(str(linked_before.data['session']), str(session.id))
+        self.assertEqual(str(after.data['session']), str(session.id))

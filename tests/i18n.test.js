@@ -23,7 +23,7 @@ assert.ok(
 );
 assert.deepEqual(
   [...new Set(i18nCacheVersions)],
-  ["23"],
+  ["25"],
   "all browser entry points must use one i18n URL so only one DOM observer is created"
 );
 
@@ -73,7 +73,7 @@ const voiceCacheVersions = voiceConsumerSources.flatMap((source) =>
 );
 assert.deepEqual(
   [...new Set(voiceCacheVersions)],
-  ["32"],
+  ["33"],
   "all voice consumers must share one voice-guidance module instance"
 );
 
@@ -169,11 +169,11 @@ const liveGuideSources = [
   "Local possible-fall check available",
   "The camera check is available. Verify an emergency contact in My profile before automatic alerts can be sent.",
   "Face the camera and step back until one complete hip, knee, and ankle line is visible. Keep the chair beside you and both feet in view.",
-  "Before you begin, stand behind a stable chair and place both hands lightly on its back for balance. Place your feet about hip-width apart and keep your whole feet flat. Stand tall and look ahead. Begin now. Bend your knees slowly and move your hips back as if starting to sit on a chair. Lower only a little and only as far as comfortable. Keep your knees pointing in the same direction as your toes. Then slowly stand tall again.",
+  "Before you begin, stay standing while I explain. Stand behind a stable chair and place both hands lightly on its back for balance. Place your feet about hip-width apart and keep your whole feet flat. Stand tall and look ahead. For each repetition, bend your knees slowly and move your hips back as if starting to sit on a chair. Lower only a little and only as far as comfortable. Keep your knees pointing in the same direction as your toes. Then slowly stand tall again. When I stop speaking, begin your first squat.",
   "AI questions will be ready after camera setup is complete.",
   "Let me check.",
   "Personalized movement recognition is ready.",
-  "Listen to the complete start instruction. Hey Guide will be ready afterward.",
+  "Listen to the complete start instruction. Rep counting and Hey Guide will begin afterward.",
   "Starting position confirmed.",
   "Hold your standing position with your full body visible.",
   "Move into a comfortable squat position.",

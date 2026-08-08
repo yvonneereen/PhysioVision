@@ -1,18 +1,22 @@
 import {
   getSpeechLocale,
   translateText,
-} from "./i18n.js?v=23";
-import { generateGuidanceSpeech } from "./api.js?v=31";
+} from "./i18n.js?v=25";
+import { generateGuidanceSpeech } from "./api.js?v=32";
 
 const VOICE_PREFERENCE_KEY = "physiovision.voice.enabled.v1";
 const VOICE_RATE_PREFERENCE_KEY = "physiovision.voice.rate.v1";
 const DEFAULT_SPEECH_VOLUME = 1;
 // Safari's `audioend` fires before its speaker has always finished recovering
 // from the quiet play-and-record route. The supplied recordings show the
-// recovery completing roughly one second later, so no utterance may begin
-// until this post-release stabilization window has elapsed.
-const MICROPHONE_RELEASE_SETTLE_MS = 1300;
+// recovery can still fade the first word after a shorter wait, so no utterance
+// may begin until this longer post-release stabilization window has elapsed.
+const MICROPHONE_RELEASE_SETTLE_MS = 2000;
 const MICROPHONE_RELEASE_TIMEOUT_MS = 1800;
+// WebKit can fade in the first spoken word while it changes from microphone
+// capture to playback. A punctuation-only pre-roll gives that audio route time
+// to settle without adding another audible prompt or changing voice engines.
+const SINGLE_ENGINE_SPEECH_PREROLL = "… ";
 const NEURAL_SPEECH_MIN_LENGTH = 18;
 const NEURAL_SPEECH_CACHE_LIMIT = 24;
 const NEURAL_TARGET_RMS = 0.16;
@@ -1149,7 +1153,11 @@ export class VoiceGuidance {
     volume = DEFAULT_SPEECH_VOLUME,
     voiceGroup = "",
   } = {}) {
-    const utterance = new this.window.SpeechSynthesisUtterance(message);
+    const utterance = new this.window.SpeechSynthesisUtterance(
+      this.singleVoiceEngine
+        ? `${SINGLE_ENGINE_SPEECH_PREROLL}${message}`
+        : message
+    );
     const normalizedVoiceGroup = String(voiceGroup ?? "").trim();
     const hasGroupedVoice = Boolean(
       normalizedVoiceGroup

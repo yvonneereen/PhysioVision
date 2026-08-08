@@ -77,28 +77,94 @@ function differenceNewestToOldest(values) {
   return numeric[0] - numeric[numeric.length - 1];
 }
 
+function recordId(value) {
+  if (value && typeof value === "object") return String(value.id ?? "");
+  return value === null || value === undefined ? "" : String(value);
+}
+
+function normalizedSide(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function sessionPainCheckins(session, painCheckins) {
+  const sessionId = recordId(session?.id);
+  if (!sessionId) return [];
+  return newestFirst(
+    painCheckins.filter((checkin) => recordId(checkin?.session) === sessionId),
+    "checked_at",
+  );
+}
+
 export function analysePatientTrend({
   sessions = [],
   painCheckins = [],
   escalations = [],
   now = new Date(),
+  focusExercise = null,
+  focusSide = null,
+  focusSessionId = null,
 } = {}) {
   const sortedSessions = newestFirst(sessions, "started_at");
-  const recentSessions = sortedSessions.slice(0, 7);
-  const recentPain = newestFirst(painCheckins, "checked_at").slice(0, 7);
+  const requestedSession = focusSessionId
+    ? sortedSessions.find((session) => recordId(session.id) === recordId(focusSessionId))
+    : null;
+  const referenceSession = requestedSession
+    ?? sortedSessions.find((session) => {
+      const exerciseMatches = !focusExercise
+        || recordId(session.exercise) === recordId(focusExercise);
+      const sideMatches = !focusSide
+        || normalizedSide(session.affected_side) === normalizedSide(focusSide);
+      return exerciseMatches && sideMatches;
+    })
+    ?? null;
+  const selectedExercise = recordId(
+    focusExercise ?? referenceSession?.exercise,
+  );
+  const selectedSide = normalizedSide(
+    focusSide ?? referenceSession?.affected_side,
+  );
+  const comparableSessions = sortedSessions.filter((session) => (
+    (!selectedExercise || recordId(session.exercise) === selectedExercise)
+    && (!selectedSide || normalizedSide(session.affected_side) === selectedSide)
+  ));
+  const recentSessions = comparableSessions.slice(0, 7);
+  const comparableSessionIds = new Set(
+    comparableSessions.map((session) => recordId(session.id)).filter(Boolean),
+  );
   const qualityValues = recentSessions
     .map((session) => number(session.quality_score))
     .filter((value) => value !== null);
-  const painValues = recentPain
-    .map((checkin) => number(checkin.pain_level))
+  const sessionPainPairs = recentSessions.map((session) => {
+    const checkins = sessionPainCheckins(session, painCheckins);
+    return {
+      session,
+      before: checkins.find((checkin) => checkin.timing === "before") ?? null,
+      after: checkins.find((checkin) => checkin.timing === "after") ?? null,
+    };
+  });
+  const painValues = sessionPainPairs
+    .map(({ after }) => number(after?.pain_level))
     .filter((value) => value !== null);
+  const painResponseValues = sessionPainPairs
+    .map(({ before, after }) => {
+      const beforeValue = number(before?.pain_level);
+      const afterValue = number(after?.pain_level);
+      return beforeValue === null || afterValue === null
+        ? null
+        : afterValue - beforeValue;
+    })
+    .filter((value) => value !== null);
+  const recoveryCheckins = sessionPainPairs
+    .map(({ after }) => after)
+    .filter((checkin) => checkin?.recovery_status);
   const qualityDelta = differenceNewestToOldest(qualityValues.slice(0, 3));
   const painDelta = differenceNewestToOldest(painValues.slice(0, 3));
-  const openEscalation = newestFirst(escalations, "created_at").find(
-    (item) => item.status === "open",
-  );
+  const openEscalation = newestFirst(escalations, "created_at").find((item) => (
+    item.status === "open"
+    && (!recordId(item.session) || comparableSessionIds.has(recordId(item.session)))
+  ));
   const repeatedWorseRecovery =
-    recentPain
+    recoveryCheckins
       .slice(0, 3)
       .filter((checkin) => checkin.recovery_status === "worse").length >= 2;
   const qualityDeclining =
@@ -139,9 +205,14 @@ export function analysePatientTrend({
     }
   } else if (
     qualityValues.length >= PROVISIONAL_TREND_THRESHOLDS.minimumReadings ||
-    painValues.length >= PROVISIONAL_TREND_THRESHOLDS.minimumReadings
+    painValues.length >= PROVISIONAL_TREND_THRESHOLDS.minimumReadings ||
+    recoveryCheckins.length >= PROVISIONAL_TREND_THRESHOLDS.minimumReadings
   ) {
-    status = qualityDelta > 0 ? "improving" : "stable";
+    status = (
+      qualityDelta > 0
+      || painDelta < 0
+      || recoveryCheckins[0]?.recovery_status === "better"
+    ) ? "improving" : "stable";
     title =
       status === "improving"
         ? "Your recent movement trend is improving"
@@ -160,7 +231,14 @@ export function analysePatientTrend({
     latestPain: painValues[0] ?? null,
     qualityDelta,
     painDelta,
+    latestPainChange: painResponseValues[0] ?? null,
+    latestRecovery: recoveryCheckins[0]?.recovery_status ?? "",
+    painResponseSeries: [...painResponseValues].reverse(),
     qualitySeries: [...qualityValues].reverse(),
+    comparableSessionCount: comparableSessions.length,
+    focusExercise: selectedExercise || null,
+    focusExerciseName: referenceSession?.exercise_name ?? "",
+    focusSide: selectedSide || null,
   };
 }
 

@@ -14,7 +14,7 @@ import {
   isLoggedIn,
   selectPatientPathway,
   sendCareMessage,
-} from "./api.js?v=31";
+} from "./api.js?v=32";
 import {
   analysePatientTrend,
   findUpcomingConsultation,
@@ -24,10 +24,10 @@ import {
   mergeConsultationTranscript,
   shouldShowPhysiotherapistRequest,
   walkingConfidencePlanNeedsRefresh,
-} from "./patient-dashboard-state.js?v=7";
+} from "./patient-dashboard-state.js?v=8";
 import { saveProfile } from "./personalization.js?v=13";
-import { getLocale, translateText } from "./i18n.js?v=23";
-import { voiceGuidance } from "./voice-guidance.js?v=32";
+import { getLocale, translateText } from "./i18n.js?v=25";
+import { voiceGuidance } from "./voice-guidance.js?v=33";
 import { EXERCISE_MAP } from "./exercises/registry.js?v=58";
 
 const WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions";
@@ -80,6 +80,7 @@ const messagesForm = document.getElementById("patientMessagesForm");
 const messagesInput = document.getElementById("patientMessagesInput");
 const trendStatus = document.getElementById("patientTrendStatus");
 const trendMessage = document.getElementById("patientTrendMessage");
+const trendScope = document.getElementById("patientTrendScope");
 const trendChart = document.getElementById("patientTrendChart");
 const sessionsMetric = document.getElementById("patientSessionsMetric");
 const qualityMetric = document.getElementById("patientQualityMetric");
@@ -629,6 +630,16 @@ function renderTrend(data) {
       ? "status-pill status-pill-review"
       : "status-pill";
   trendMessage.textContent = `${trend.title}. ${trend.message}`;
+  if (trend.focusExercise) {
+    const exerciseName = trend.focusExerciseName || trend.focusExercise;
+    const side = trend.focusSide ? `${trend.focusSide} side` : "selected side";
+    trendScope.textContent =
+      `Comparing ${exerciseName} on the ${side} only · ${trend.comparableSessionCount} recorded sessions`;
+    trendScope.hidden = false;
+  } else {
+    trendScope.textContent = "";
+    trendScope.hidden = true;
+  }
   sessionsMetric.textContent = String(trend.sessionsThisWeek);
   qualityMetric.textContent =
     trend.averageQuality === null ? "—" : `${Math.round(trend.averageQuality)}/100`;
@@ -1494,6 +1505,10 @@ window.addEventListener("physiovision:language-change", () => {
   renderTrend(currentData);
   renderUpcomingConsultation(currentData.consultations);
   renderPendingConsults(currentData.consultations);
+});
+
+window.addEventListener("physiovision:session-completed", () => {
+  if (currentUser?.role === "patient") void loadDashboardData();
 });
 
 window.addEventListener("focus", refreshPendingPhysiotherapistRequest);

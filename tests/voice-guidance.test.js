@@ -365,7 +365,7 @@ assert.equal(
 );
 assert.equal(
   microphoneReleaseDelay,
-  1300,
+  2000,
   "the first prompt should wait until Safari's speaker level stabilizes after microphone release"
 );
 assert.equal(
@@ -525,6 +525,11 @@ await Promise.resolve();
 assert.equal(safariNeuralRequests, 0);
 assert.equal(spoken.length, safariSpokenBefore + 1);
 assert.equal(spoken.at(-1).volume, 1);
+assert.equal(
+  spoken.at(-1).text,
+  "… This longer guidance sentence must stay on one steady Safari output path.",
+  "Safari speech should use a silent punctuation pre-roll so its first word is not faded in"
+);
 
 neuralRequest = null;
 const spokenBeforeImmediatePrompt = spoken.length;
@@ -702,10 +707,11 @@ assert.equal(
 );
 activeRecognitionInstance.emitAudioEnd();
 await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
+await Promise.resolve();
 assert.equal(safariDeliveredTranscript, "five");
 assert.equal(safariListeningSession.type, "playback");
 assert.ok(safariListeningDelays.includes(1800));
-assert.ok(safariListeningDelays.includes(1300));
+assert.ok(safariListeningDelays.includes(2000));
 assert.equal(
   safariListeningTimers.size,
   0,

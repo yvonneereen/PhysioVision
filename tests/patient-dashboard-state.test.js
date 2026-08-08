@@ -17,9 +17,23 @@ const dates = [
   "2026-07-23T08:00:00Z",
 ];
 
+function session(index, overrides = {}) {
+  return {
+    id: `session-${index}`,
+    exercise: "half-squat",
+    exercise_name: "Half Squats",
+    affected_side: "right",
+    started_at: dates[index],
+    ...overrides,
+  };
+}
+
 assert.equal(
   analysePatientTrend({
     sessions: dates.map((started_at, index) => ({
+      id: `quality-${index}`,
+      exercise: "half-squat",
+      affected_side: "right",
       started_at,
       quality_score: [62, 72, 80][index],
     })),
@@ -30,7 +44,10 @@ assert.equal(
 
 assert.equal(
   analysePatientTrend({
+    sessions: dates.map((_, index) => session(index)),
     painCheckins: dates.map((checked_at, index) => ({
+      session: `session-${index}`,
+      timing: "after",
       checked_at,
       pain_level: [6, 5, 3][index],
       recovery_status: index < 2 ? "worse" : "same",
@@ -54,12 +71,75 @@ assert.equal(
 assert.equal(
   analysePatientTrend({
     sessions: dates.map((started_at, index) => ({
+      id: `improving-${index}`,
+      exercise: "half-squat",
+      affected_side: "right",
       started_at,
       quality_score: [84, 80, 76][index],
     })),
   }).status,
   "improving",
 );
+
+const scopedTrend = analysePatientTrend({
+  sessions: [
+    session(0, { quality_score: 88 }),
+    session(1, { quality_score: 80 }),
+    session(2, { quality_score: 72 }),
+    session(0, {
+      id: "other-exercise",
+      exercise: "calf-raise",
+      exercise_name: "Calf Raises",
+      quality_score: 10,
+    }),
+    session(0, {
+      id: "other-side",
+      affected_side: "left",
+      quality_score: 12,
+    }),
+  ],
+  focusSessionId: "session-0",
+});
+
+assert.deepEqual(scopedTrend.qualitySeries, [72, 80, 88]);
+assert.equal(scopedTrend.focusExercise, "half-squat");
+assert.equal(scopedTrend.focusSide, "right");
+
+const pairedPainTrend = analysePatientTrend({
+  sessions: dates.map((_, index) => session(index)),
+  painCheckins: dates.flatMap((checked_at, index) => [
+    {
+      session: `session-${index}`,
+      timing: "before",
+      checked_at,
+      pain_level: [3, 4, 4][index],
+    },
+    {
+      session: `session-${index}`,
+      timing: "after",
+      checked_at: new Date(new Date(checked_at).getTime() + 60_000).toISOString(),
+      pain_level: [5, 4, 3][index],
+      recovery_status: ["worse", "same", "better"][index],
+    },
+  ]),
+});
+
+assert.equal(pairedPainTrend.latestPainChange, 2);
+assert.deepEqual(pairedPainTrend.painResponseSeries, [-1, 0, 2]);
+assert.equal(pairedPainTrend.latestRecovery, "worse");
+
+const unlinkedPainIsExcluded = analysePatientTrend({
+  sessions: dates.map((_, index) => session(index)),
+  painCheckins: dates.map((checked_at) => ({
+    timing: "after",
+    checked_at,
+    pain_level: 10,
+    recovery_status: "worse",
+  })),
+});
+
+assert.equal(unlinkedPainIsExcluded.latestPain, null);
+assert.equal(unlinkedPainIsExcluded.reason, null);
 
 assert.equal(
   isCurrentPrescription(

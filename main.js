@@ -26,6 +26,8 @@ import {
 } from "./calibration-policy.js?v=2";
 import {
   createEmergencyAlert,
+  getPainCheckins,
+  getSessions,
   interpretSafetyLanguage,
   isLoggedIn,
   postCalibration,
@@ -33,7 +35,9 @@ import {
   postSession,
   respondEmergencyAlert,
   sendAgentMessage,
-} from "./api.js?v=31";
+  updatePainCheckin,
+} from "./api.js?v=32";
+import { analysePatientTrend } from "./patient-dashboard-state.js?v=8";
 import { DRAFT_EXERCISES } from "./exercises/catalog.js?v=3";
 import {
   parseConfirmationResponse,
@@ -44,7 +48,7 @@ import {
   isSafariBrowser,
   readMicrophonePermissionState,
   voiceGuidance,
-} from "./voice-guidance.js?v=32";
+} from "./voice-guidance.js?v=33";
 import {
   PRACTICE_VIEWS,
   acceptedWellnessPlan,
@@ -331,10 +335,16 @@ let voiceModeChoicePromise = null;
 let resolveVoiceModeChoice = null;
 let preExerciseCheckinCompleted = false;
 let confirmedPreExercisePain = null;
+let activePreExerciseCheckinPromise = null;
+let completedExerciseSessionPromise = null;
+let completedExerciseSessionSnapshot = null;
+let completedExerciseSessionError = null;
+let completedExerciseCheckinLinkError = false;
 let cameraSetupCountdown = null;
 let movementAiState = "off";
 let movementAiGeneration = 0;
 let movementAiRestartTimer = null;
+let movementTrackingPausedForInstruction = false;
 const exerciseContent = new Map(
   DRAFT_EXERCISES.map((exercise) => [exercise.id, exercise])
 );
@@ -1616,12 +1626,14 @@ function exerciseSpokenInstruction(exercise) {
 function exerciseStartGuidance(exercise = engine?.exercise) {
   if (exercise?.id === "half-squats") {
     return (
-      "Before you begin, stand behind a stable chair and place both hands lightly "
+      "Before you begin, stay standing while I explain. Stand behind a stable chair "
+      + "and place both hands lightly "
       + "on its back for balance. Place your feet about hip-width apart and keep "
-      + "your whole feet flat. Stand tall and look ahead. Begin now. Bend your "
+      + "your whole feet flat. Stand tall and look ahead. For each repetition, bend your "
       + "knees slowly and move your hips back as if starting to sit on a chair. "
       + "Lower only a little and only as far as comfortable. Keep your knees "
-      + "pointing in the same direction as your toes. Then slowly stand tall again."
+      + "pointing in the same direction as your toes. Then slowly stand tall again. "
+      + "When I stop speaking, begin your first squat."
     );
   }
   return exerciseSpokenInstruction(exercise);
@@ -1829,22 +1841,24 @@ function queueRepAnnouncements(feedback, metric) {
     processPendingRepAnnouncements();
     return;
   }
-  while (queuedSpokenRepCount < detectedReps) {
-    queuedSpokenRepCount += 1;
-    const measured = metric.isHold
-      ? queuedSpokenRepCount * metric.perHold
-      : queuedSpokenRepCount;
-    pendingRepAnnouncements.push({
-      exerciseId: feedback.exercise.id,
-      repNumber: queuedSpokenRepCount,
-      setNumber,
-      setGoal: metric.goal !== null && measured >= metric.goal
-        ? metric.goal
-        : null,
-      isHold: metric.isHold,
-      isLastPlannedSet: setNumber >= plannedSets,
-      completionMessage: "",
-    });
+  // Announce the count the user is actually on. If another instruction is
+  // speaking, replace any waiting numbers with the latest one instead of
+  // rapidly replaying "Rep 1, Rep 2…" after the user has moved ahead.
+  queuedSpokenRepCount = detectedReps;
+  const latestAnnouncement = {
+    exerciseId: feedback.exercise.id,
+    repNumber: detectedReps,
+    setNumber,
+    setGoal: null,
+    isHold: metric.isHold,
+    isLastPlannedSet: setNumber >= plannedSets,
+    completionMessage: "",
+  };
+  if (repAnnouncementActive && pendingRepAnnouncements.length) {
+    pendingRepAnnouncements.splice(1, Infinity, latestAnnouncement);
+  } else {
+    pendingRepAnnouncements.length = 0;
+    pendingRepAnnouncements.push(latestAnnouncement);
   }
   processPendingRepAnnouncements();
 }
@@ -2465,6 +2479,14 @@ function renderHandPreview(result) {
   }
 }
 
+function presentInstructionTrackingPause() {
+  statusEl.textContent = "Listen first — rep counting starts after this instruction";
+  setFeedbackBanner(
+    "ready",
+    "Stay in your starting position. I will tell you when rep counting begins."
+  );
+}
+
 function renderFrame() {
   if (!running) return;
   if (safetyCheckActive) {
@@ -2496,6 +2518,8 @@ function renderFrame() {
         if (calibrationSession) {
           updateCalibrationCapture(measurements, frameTimestamp);
           statusEl.textContent = "Personal calibration in progress";
+        } else if (movementTrackingPausedForInstruction) {
+          presentInstructionTrackingPause();
         } else if (pendingSetStartCheck) {
           updateSetStartingPositionCheck(measurements, frameTimestamp);
         } else {
@@ -2526,6 +2550,8 @@ function renderFrame() {
         if (calibrationSession) {
           updateCalibrationCapture(measurements, frameTimestamp);
           statusEl.textContent = "Personal calibration in progress";
+        } else if (movementTrackingPausedForInstruction) {
+          presentInstructionTrackingPause();
         } else if (pendingSetStartCheck) {
           updateSetStartingPositionCheck(measurements, frameTimestamp);
         } else {
@@ -2561,6 +2587,8 @@ function renderFrame() {
           if (calibrationSession) {
             updateCalibrationCapture(angles, frameTimestamp);
             statusEl.textContent = "Personal calibration in progress";
+          } else if (movementTrackingPausedForInstruction) {
+            presentInstructionTrackingPause();
           } else if (pendingSetStartCheck) {
             updateSetStartingPositionCheck(angles, frameTimestamp);
             processFallMonitoring(landmarks, frameTimestamp);
@@ -3004,8 +3032,8 @@ function renderPrimaryCameraAction({
     primaryCalibrationLabel.textContent = "Cancel camera setup";
     primaryCameraInstruction.innerHTML =
       `<strong>Camera setup starts in ${seconds}</strong>`
-      + "Step back so your full body is visible. Choose Cancel camera setup "
-      + "if you are not ready.";
+      + "Stay near your device so you can choose Allow if the browser asks "
+      + "for camera access. Choose Cancel camera setup if you are not ready.";
     return;
   }
 
@@ -3027,9 +3055,9 @@ function renderPrimaryCameraAction({
 
   primaryCalibrationLabel.textContent = "Start camera guide";
   primaryCameraInstruction.innerHTML =
-    "<strong>Stand where your full body fits</strong>"
+    "<strong>Start near your device</strong>"
     + "Press Start camera guide below. We’ll ask about your pain level "
-    + "before turning on the camera.";
+    + "and camera permission before telling you when to step back.";
 }
 
 function calibrationSummary(calibration, config) {
@@ -3754,12 +3782,17 @@ function announceCalibrationStage(
   if (type === "start") {
     const startInstruction = config.startInstruction
       ?? `Hold your ${config.startPhase.replaceAll("_", " ")} position with your full body visible.`;
+    const cameraReadyPositioning = exerciseUsesHand(engine.exercise)
+      ? "Camera is ready. Now place the required hand and arm inside the guide. "
+      : "Camera is ready. Now step back until your required joints are visible. ";
     const introduction = calibrationSession.mode === "position-check"
       ? (
-        "I will quickly confirm your starting position using your saved personal range. "
+        cameraReadyPositioning
+        + "I will quickly confirm your starting position using your saved personal range. "
       )
       : (
-        "Let’s personalize movement recognition before you begin. "
+        cameraReadyPositioning
+        + "Let’s personalize movement recognition before you begin. "
       );
     const spoken = speakCalibrationGuidance(
       introduction
@@ -4021,15 +4054,26 @@ function announceExerciseInstruction(prefix = "", { onEnd = null } = {}) {
   ].filter(Boolean).join(" ");
   setMovementAiStatus(
     "coaching",
-    "Listen to the complete start instruction. Hey Guide will be ready afterward."
+    "Listen to the complete start instruction. Rep counting and Hey Guide will begin afterward."
   );
+  movementTrackingPausedForInstruction = true;
+  const finishInstruction = () => {
+    movementTrackingPausedForInstruction = false;
+    spokenCoachingCandidate = null;
+    statusEl.textContent = "Instruction complete — begin your first repetition";
+    setFeedbackBanner(
+      "ready",
+      "Begin now. Rep counting is active."
+    );
+    onEnd?.();
+  };
   const spoken = speakMovementGuide(spokenInstruction, {
     key: `instruction:${engine.exercise.id}`,
     cooldownMs: 3000,
     interrupt: true,
-    onEnd,
+    onEnd: finishInstruction,
   });
-  if (!spoken) onEnd?.();
+  if (!spoken) finishInstruction();
   return spoken;
 }
 
@@ -4110,12 +4154,16 @@ async function activateCameraGuide({ announceInstruction = true } = {}) {
         "Pausing only stops the camera. Choose “Finish exercise and check in” "
         + "when you decide you are done."
       );
-    renderFrame();
     if (announceInstruction) {
+      // Set the gate before the first rendered camera frame. Otherwise that
+      // frame can be mistaken for a repetition while the user is still
+      // repositioning and listening to the start instruction.
+      movementTrackingPausedForInstruction = true;
       announceExerciseInstruction("", { onEnd: startMovementAiGuide });
     } else {
       startMovementAiGuide();
     }
+    renderFrame();
     return true;
   } catch (err) {
     statusEl.textContent = `Camera error: ${err.message}`;
@@ -4130,6 +4178,7 @@ function deactivateCameraGuide({
   statusMessage = "Camera paused — exercise not marked finished",
 } = {}) {
   running = false;
+  movementTrackingPausedForInstruction = false;
   stopMovementAiGuide();
   voiceGuidance.cancel();
   resetSpokenCoaching();
@@ -4328,12 +4377,12 @@ function completeExerciseSession() {
   const shouldRecord =
     exerciseSessionActive &&
     isPracticeAccountAuthenticated() &&
-    totalRepsCompleted > 0 &&
     Boolean(sessionStartedAt);
 
   if (!shouldRecord) {
     discardExerciseSession();
-    return;
+    completedExerciseSessionPromise = Promise.resolve(null);
+    return completedExerciseSessionPromise;
   }
 
   const endedAt = new Date().toISOString();
@@ -4353,7 +4402,7 @@ function completeExerciseSession() {
     }
   });
 
-  postSession({
+  const sessionPayload = {
     exercise:                ex.id,
     prescription:            dose.id ?? null,
     started_at:              sessionStartedAt,
@@ -4362,14 +4411,39 @@ function completeExerciseSession() {
     reps_completed:          totalRepsCompleted,
     reps_target:             dose.reps ?? totalRepsCompleted,
     sets_target:             dose.sets ?? 1,
-    affected_side:           profile.focusSide ?? "right",
+    affected_side:           sideSelect.value || profile.focusSide || "right",
     cues_triggered:          cuesTriggered,
     symmetry_warnings_count: sessionSymmetryWarnings,
     angle_summaries:         angleSummaries,
     quality_score:           movementQualityScore(cuesTriggered, sessionSymmetryWarnings, totalRepsCompleted),
-  }).catch(() => {});
+  };
+  completedExerciseSessionSnapshot = {
+    ...sessionPayload,
+    exercise_name: ex.name,
+  };
+  completedExerciseSessionError = null;
+  completedExerciseCheckinLinkError = false;
+  const beforeCheckinPromise = activePreExerciseCheckinPromise;
+  completedExerciseSessionPromise = postSession(sessionPayload)
+    .then(async (createdSession) => {
+      if (beforeCheckinPromise) {
+        const beforeCheckin = await beforeCheckinPromise;
+        const linkedCheckin = beforeCheckin?.id
+          ? await updatePainCheckin(beforeCheckin.id, {
+            session: createdSession.id,
+          }).catch(() => null)
+          : null;
+        completedExerciseCheckinLinkError = !linkedCheckin;
+      }
+      return createdSession;
+    })
+    .catch((error) => {
+      completedExerciseSessionError = error;
+      return null;
+    });
 
   discardExerciseSession();
+  return completedExerciseSessionPromise;
 }
 
 // ── Pain check-in ─────────────────────────────────────────────────────────────
@@ -4394,6 +4468,16 @@ const recordedPainEl = document.getElementById("recordedPain");
 const recordedPainContextEl = document.getElementById("recordedPainContext");
 const recordedPainMessageEl = document.getElementById("recordedPainMessage");
 const recordedPainValueEl = document.getElementById("recordedPainValue");
+const sessionSummaryModalEl = document.getElementById("session-summary-modal");
+const sessionSummaryTitleEl = document.getElementById("sessionSummaryTitle");
+const sessionSummaryScopeEl = document.getElementById("sessionSummaryScope");
+const sessionSummaryCompletedEl = document.getElementById("sessionSummaryCompleted");
+const sessionSummaryQualityEl = document.getElementById("sessionSummaryQuality");
+const sessionSummaryPainEl = document.getElementById("sessionSummaryPain");
+const sessionSummaryRecoveryEl = document.getElementById("sessionSummaryRecovery");
+const sessionSummaryTrendEl = document.getElementById("sessionSummaryTrend");
+const sessionSummaryCueEl = document.getElementById("sessionSummaryCue");
+const sessionSummaryStatusEl = document.getElementById("sessionSummaryStatus");
 let painCheckinState = null;
 let painSafetyRestTimer = null;
 let painVoiceFallbackNeeded = false;
@@ -4632,7 +4716,7 @@ function continueAfterPainCheckin(completed) {
   statusEl.textContent = "Pain level confirmed — camera setup starts in 3 seconds";
   setFeedbackBanner(
     "position",
-    "Pain level confirmed. Step back so your full body is visible."
+    "Pain level confirmed. Stay near your device so you can allow camera access if asked."
   );
   renderPrimaryCameraAction();
   const beginVisibleCountdown = () => {
@@ -4656,7 +4740,7 @@ function continueAfterPainCheckin(completed) {
     }, 1000);
   };
   const spoken = speakMovementGuide(
-    "Pain level confirmed. Camera setup will begin in three seconds. Step back so your full body is visible.",
+    "Pain level confirmed. Camera setup will begin in three seconds. Stay near your device. If your browser asks for camera access, choose Allow. I will tell you when to step back after the camera starts.",
     {
       key: `camera-setup:countdown:${completed.context}`,
       interrupt: true,
@@ -4887,7 +4971,14 @@ function showPainCheckin(context = "after", {
     return;
   }
 
-  if (context === "before") clearRecordedPain();
+  if (context === "before") {
+    clearRecordedPain();
+    activePreExerciseCheckinPromise = null;
+    completedExerciseSessionPromise = null;
+    completedExerciseSessionSnapshot = null;
+    completedExerciseSessionError = null;
+    completedExerciseCheckinLinkError = false;
+  }
 
   painCheckinState = {
     context,
@@ -4965,10 +5056,7 @@ function hidePainCheckin() {
 }
 
 function shouldAskRecovery() {
-  return (
-    profile.carePath === "clinician" &&
-    painCheckinState?.context === "after"
-  );
+  return painCheckinState?.context === "after";
 }
 
 function beginRecoveryQuestion() {
@@ -4982,6 +5070,8 @@ function beginRecoveryQuestion() {
   painSkipBtn.classList.remove("hidden");
   updatePainCheckinPresentation();
   painCheckinTitleEl.textContent = recoveryQuestion(painCheckinState.context);
+  recoveryChoicesEl.querySelector("p").textContent =
+    recoveryQuestion(painCheckinState.context);
   voiceCheckinStatusEl.textContent = handsFreeVoiceEnabled
     ? "Listening will start after the question. Say better, same, worse, or not sure."
     : voiceGuidance.canListen
@@ -4994,21 +5084,182 @@ function beginRecoveryQuestion() {
   );
 }
 
-function finishPainCheckin() {
-  if (!painCheckinState) return;
-  const completed = { ...painCheckinState };
-
-  postPainCheckin({
+function painCheckinPayload(completed, sessionId = null) {
+  return {
+    ...(sessionId ? { session: sessionId } : {}),
     pain_level: completed.painLevel,
     timing: completed.context,
     recovery_status: completed.recoveryStatus,
     checked_at: new Date().toISOString(),
-  }).catch(() => {});
+  };
+}
+
+function apiResults(data) {
+  return data?.results ?? data ?? [];
+}
+
+function recoveryLabel(status) {
+  return {
+    better: "Better",
+    same: "About the same",
+    worse: "Worse",
+    unsure: "Not sure",
+  }[status] ?? "Not recorded";
+}
+
+function painResponseLabel(beforePain, afterPain) {
+  if (!Number.isInteger(beforePain) || !Number.isInteger(afterPain)) {
+    return "Not enough information";
+  }
+  const change = afterPain - beforePain;
+  if (change === 0) return `No change · ${afterPain}/10`;
+  return change > 0
+    ? `${change} point increase · ${afterPain}/10`
+    : `${Math.abs(change)} point decrease · ${afterPain}/10`;
+}
+
+function openSessionSummary(completed, beforePain) {
+  const snapshot = completedExerciseSessionSnapshot ?? {};
+  const exerciseName = snapshot.exercise_name ?? "Exercise";
+  const side = snapshot.affected_side
+    ? `${snapshot.affected_side} side`
+    : "selected side";
+  sessionSummaryTitleEl.textContent = `${exerciseName} session complete`;
+  sessionSummaryScopeEl.textContent =
+    `Results and trends compare ${exerciseName} on the ${side} only.`;
+  sessionSummaryCompletedEl.textContent =
+    `${snapshot.reps_completed ?? 0} of ${snapshot.reps_target ?? 0} repetitions`;
+  sessionSummaryQualityEl.textContent = (
+    snapshot.quality_score !== null
+    && snapshot.quality_score !== undefined
+    && Number.isFinite(Number(snapshot.quality_score))
+  )
+    ? `${Math.round(Number(snapshot.quality_score))}/100`
+    : "Not enough measured movement";
+  sessionSummaryPainEl.textContent = painResponseLabel(
+    beforePain,
+    completed.painLevel,
+  );
+  sessionSummaryRecoveryEl.textContent = recoveryLabel(
+    completed.recoveryStatus,
+  );
+  sessionSummaryTrendEl.textContent =
+    "Saving this check-in and calculating your same-exercise trend…";
+  sessionSummaryCueEl.textContent = "Reviewing movement guidance…";
+  sessionSummaryStatusEl.textContent = "Preparing your results";
+  sessionSummaryModalEl?.classList.add("is-open");
+  sessionSummaryModalEl?.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  sessionSummaryTitleEl?.focus({ preventScroll: true });
+}
+
+function closeSessionSummary() {
+  sessionSummaryModalEl?.classList.remove("is-open");
+  sessionSummaryModalEl?.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+}
+
+function mostFrequentSessionCue(snapshot = {}) {
+  return [...(snapshot.cues_triggered ?? [])]
+    .filter((cue) => Number(cue.trigger_count) > 0)
+    .sort((a, b) => Number(b.trigger_count) - Number(a.trigger_count))[0] ?? null;
+}
+
+async function finalizeSessionSummary(completed, beforePain, painSavePromise) {
+  const session = await (completedExerciseSessionPromise ?? Promise.resolve(null));
+  const savedAfterCheckin = await painSavePromise;
+  const checkinSaveIncomplete = Boolean(
+    session && (!savedAfterCheckin || completedExerciseCheckinLinkError)
+  );
+
+  let trend = null;
+  if (session) {
+    try {
+      const [sessionsResponse, painResponse] = await Promise.all([
+        getSessions(),
+        getPainCheckins(),
+      ]);
+      trend = analysePatientTrend({
+        sessions: apiResults(sessionsResponse),
+        painCheckins: apiResults(painResponse),
+        focusSessionId: session.id,
+      });
+    } catch (_) {
+      trend = null;
+    }
+  }
+
+  const snapshot = completedExerciseSessionSnapshot ?? {};
+  const cue = mostFrequentSessionCue(snapshot);
+  sessionSummaryCueEl.textContent = cue
+    ? `Most frequent correction: ${cue.cue_text} (${cue.trigger_count} times).`
+    : snapshot.reps_completed > 0
+      ? "No repeated movement correction was measured in this session."
+      : "No repetitions were measured. Check your camera position before trying again.";
+
+  if (trend) {
+    const sessionsNeeded = Math.max(0, 3 - trend.comparableSessionCount);
+    sessionSummaryTrendEl.textContent = trend.comparableSessionCount < 3
+      ? (
+        `Baseline ${trend.comparableSessionCount} of 3: complete ${sessionsNeeded} more `
+        + `${snapshot.exercise_name ?? "exercise"} session${sessionsNeeded === 1 ? "" : "s"} `
+        + "on this side to establish a trend."
+      )
+      : `${trend.title}. ${trend.message}`;
+    sessionSummaryStatusEl.textContent = {
+      review_suggested: "Review suggested",
+      improving: "Improving",
+      stable: "Steady",
+      building_baseline: "Building baseline",
+    }[trend.status] ?? "Building baseline";
+    if (checkinSaveIncomplete) {
+      sessionSummaryTrendEl.textContent +=
+        " One or more pain check-ins could not be attached to this session.";
+      sessionSummaryStatusEl.textContent = "Check-in save incomplete";
+    }
+  } else {
+    sessionSummaryTrendEl.textContent = completedExerciseSessionError
+      ? "Your results are shown, but the session could not be saved. Check your connection and try again."
+      : "Your session was saved, but the longer-term trend could not be loaded right now.";
+    sessionSummaryStatusEl.textContent = completedExerciseSessionError
+      ? "Save incomplete"
+      : "Trend unavailable";
+  }
+
+  if (session) {
+    window.dispatchEvent(new CustomEvent(
+      "physiovision:session-completed",
+      { detail: { sessionId: session.id } },
+    ));
+  }
+  speakMovementGuide(
+    "Your session summary is ready. Review your movement quality, pain response, and recovery before continuing.",
+    { key: `session-summary:${session?.id ?? "unsaved"}`, interrupt: true },
+  );
+}
+
+function finishPainCheckin() {
+  if (!painCheckinState) return;
+  const completed = { ...painCheckinState };
 
   if (completed.context === "before") {
+    activePreExerciseCheckinPromise = postPainCheckin(
+      painCheckinPayload(completed),
+    ).catch(() => null);
     preExerciseCheckinCompleted = true;
     confirmedPreExercisePain = completed.painLevel;
   } else {
+    const beforePain = confirmedPreExercisePain;
+    openSessionSummary(completed, beforePain);
+    const painSavePromise = (async () => {
+      const session = await (
+        completedExerciseSessionPromise ?? Promise.resolve(null)
+      );
+      return postPainCheckin(
+        painCheckinPayload(completed, session?.id),
+      ).catch(() => null);
+    })();
+    void finalizeSessionSummary(completed, beforePain, painSavePromise);
     confirmedPreExercisePain = null;
   }
   hidePainCheckin();
@@ -5286,12 +5537,18 @@ function persistPainSafetyInterview({
   if (state.safetySavePromise) return state.safetySavePromise;
 
   state.safetyAnswers.reportForPhysiotherapist = effectiveReport;
-  state.safetySavePromise = postPainCheckin(
-    painSafetyCheckinPayload(state, effectiveReport)
-  )
-    .then(() => {
+  state.safetySavePromise = (async () => {
+    const session = state.context === "after"
+      ? await (completedExerciseSessionPromise ?? Promise.resolve(null))
+      : null;
+    return postPainCheckin({
+      ...painSafetyCheckinPayload(state, effectiveReport),
+      ...(session?.id ? { session: session.id } : {}),
+    });
+  })()
+    .then((savedCheckin) => {
       state.safetySaved = true;
-      return true;
+      return savedCheckin;
     })
     .catch(() => {
       state.safetySavePromise = null;
@@ -5478,7 +5735,7 @@ function finishPainSafetyInterview({ reportForPhysiotherapist = false } = {}) {
       && painCheckinState.safetyAnswers.outcome !== "monitor"
     )
   );
-  void persistPainSafetyInterview({
+  const safetySavePromise = persistPainSafetyInterview({
     reportForPhysiotherapist: effectiveReport,
   });
   const completed = {
@@ -5489,6 +5746,7 @@ function finishPainSafetyInterview({ reportForPhysiotherapist = false } = {}) {
     },
   };
   const answers = completed.safetyAnswers;
+  const beforePain = confirmedPreExercisePain;
 
   preExerciseCheckinCompleted = false;
   confirmedPreExercisePain = null;
@@ -5505,6 +5763,11 @@ function finishPainSafetyInterview({ reportForPhysiotherapist = false } = {}) {
     key: `checkin:${completed.context}:safety-saved:${effectiveReport}`,
     interrupt: true,
   });
+  if (completed.context === "after") {
+    completed.recoveryStatus = answers.restTrend || completed.recoveryStatus;
+    openSessionSummary(completed, beforePain);
+    void finalizeSessionSummary(completed, beforePain, safetySavePromise);
+  }
 }
 
 function acceptPainLevel(level) {
@@ -5630,6 +5893,23 @@ painSafetyChoicesEl.addEventListener("click", (event) => {
 
 painVoiceInputBtn.addEventListener("click", () => {
   startPainVoiceListening();
+});
+
+sessionSummaryModalEl
+  ?.querySelectorAll("[data-session-summary-close]")
+  .forEach((element) => {
+    element.addEventListener("click", closeSessionSummary);
+  });
+
+document.getElementById("sessionSummaryHome")?.addEventListener("click", () => {
+  closeSessionSummary();
+  window.pvShowPatientDashboard?.();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && sessionSummaryModalEl?.classList.contains("is-open")) {
+    closeSessionSummary();
+  }
 });
 
 painSkipBtn.addEventListener("click", () => {

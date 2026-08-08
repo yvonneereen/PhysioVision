@@ -237,13 +237,33 @@ assert.match(
 );
 assert.match(
   source,
-  /function exerciseStartGuidance[\s\S]*?stand behind a stable chair[\s\S]*?feet about hip-width apart[\s\S]*?Keep your knees[\s\S]*?same direction as your toes/,
+  /function exerciseStartGuidance[\s\S]*?[Ss]tand behind a stable chair[\s\S]*?feet about hip-width apart[\s\S]*?Keep your knees[\s\S]*?same direction as your toes/,
   "the automatic squat guide should use clear chair, foot, and knee instructions before movement"
 );
 assert.match(
+  functionSource("exerciseStartGuidance", "resetSpokenCoaching"),
+  /stay standing while I explain[\s\S]*?When I stop speaking, begin your first squat/,
+  "the squat instruction should clearly delay movement until its final words"
+);
+assert.match(
+  functionSource("announceExerciseInstruction", "setIntegratedCameraGuideActive"),
+  /movementTrackingPausedForInstruction = true[\s\S]*?movementTrackingPausedForInstruction = false/,
+  "rep tracking should remain paused for the complete start instruction"
+);
+assert.match(
+  functionSource("renderFrame", "plannedSetCount"),
+  /movementTrackingPausedForInstruction[\s\S]*?presentInstructionTrackingPause\(\)[\s\S]*?updateFeedbackPanel/,
+  "camera frames may remain visible while the start instruction prevents false repetitions"
+);
+assert.match(
   source,
-  /function queueRepAnnouncements[\s\S]*?while \(queuedSpokenRepCount < detectedReps\)[\s\S]*?pendingRepAnnouncements\.push/,
-  "every detected repetition should be queued instead of being discarded while another sentence is speaking"
+  /function queueRepAnnouncements[\s\S]*?const latestAnnouncement[\s\S]*?pendingRepAnnouncements\.splice\(1, Infinity, latestAnnouncement\)/,
+  "rep announcements should skip stale waiting numbers and retain the user's latest count"
+);
+assert.doesNotMatch(
+  functionSource("queueRepAnnouncements", "startHoldTimer"),
+  /while \(queuedSpokenRepCount < detectedReps\)/,
+  "the guide must not rapidly replay every missed number after another sentence ends"
 );
 assert.match(
   functionSource("queueRepAnnouncements", "startHoldTimer"),
@@ -867,8 +887,13 @@ assert.match(
 );
 assert.match(
   countdownSource,
-  /Pain level confirmed\. Camera setup will begin in three seconds\. Step back so your full body is visible\./,
-  "the countdown should announce what will happen before the camera permission step"
+  /Camera setup will begin in three seconds\. Stay near your device\.[\s\S]*?choose Allow\.[\s\S]*?tell you when to step back/,
+  "the countdown should keep the patient near the device for camera permission before asking them to step back"
+);
+assert.doesNotMatch(
+  countdownSource,
+  /three seconds\. Step back/,
+  "the guide must not ask the patient to step back before camera permission"
 );
 assert.match(
   countdownSource,
@@ -898,6 +923,31 @@ assert.match(
   recoveryRuleSource,
   /context === "after"/,
   "a safe pre-exercise confirmation should not stall on an extra recovery question"
+);
+assert.doesNotMatch(
+  recoveryRuleSource,
+  /carePath|clinician/,
+  "both clinician and wellness pathways should receive the post-session recovery question"
+);
+
+const completeSessionSource = functionSource(
+  "completeExerciseSession",
+  "painQuestion"
+);
+assert.match(
+  completeSessionSource,
+  /updatePainCheckin\(beforeCheckin\.id,[\s\S]*?session: createdSession\.id/,
+  "the before-exercise pain check-in should be attached to the completed session"
+);
+assert.match(
+  finishPainSource,
+  /painCheckinPayload\(completed, session\?\.id\)/,
+  "the after-exercise pain and recovery check-in should use the completed session id"
+);
+assert.match(
+  markup,
+  /id="session-summary-modal"[\s\S]*?id="sessionSummaryQuality"[\s\S]*?id="sessionSummaryPain"[\s\S]*?id="sessionSummaryRecovery"[\s\S]*?id="sessionSummaryTrend"/,
+  "completed sessions should show immediate movement, pain, recovery, and trend results"
 );
 assert.doesNotMatch(
   acknowledgementSource,

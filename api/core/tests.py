@@ -1623,10 +1623,10 @@ class PatientPathwayChoiceViewTests(APITestCase):
 
 
 class CareInvitationFlowTests(APITestCase):
-    def make_clinician(self):
+    def make_clinician(self, email='clinician@example.com'):
         user = User.objects.create_user(
-            username='clinician@example.com',
-            email='clinician@example.com',
+            username=email,
+            email=email,
             password='test-password',
             role=UserRole.CLINICIAN,
         )
@@ -1649,6 +1649,10 @@ class CareInvitationFlowTests(APITestCase):
     def test_clinician_code_links_the_intended_patient_once(self):
         clinician = self.make_clinician()
         patient = self.make_patient()
+        patient.patient_profile.physiotherapist_requested_at = timezone.now()
+        patient.patient_profile.save(
+            update_fields=['physiotherapist_requested_at', 'updated_at'],
+        )
 
         self.client.force_authenticate(clinician)
         created = self.client.post(
@@ -1679,6 +1683,9 @@ class CareInvitationFlowTests(APITestCase):
             patient.patient_profile.pathway_choice,
             PatientPathwayChoice.PHYSIOTHERAPIST,
         )
+        self.assertIsNone(
+            patient.patient_profile.physiotherapist_requested_at,
+        )
 
         second = self.client.post(
             '/api/auth/care-invitations/accept/',
@@ -1686,6 +1693,43 @@ class CareInvitationFlowTests(APITestCase):
             format='json',
         )
         self.assertEqual(second.status_code, 400)
+
+        self.client.force_authenticate(clinician)
+        triage = self.client.get('/api/auth/clinician/triage/')
+        roster = self.client.get('/api/patients/')
+        self.assertEqual(triage.status_code, 200)
+        self.assertNotIn(
+            str(patient.patient_profile.id),
+            {item['id'] for item in triage.data},
+        )
+        self.assertEqual(roster.status_code, 200)
+        self.assertIn(
+            str(patient.patient_profile.id),
+            {item['id'] for item in roster.data},
+        )
+
+    def test_patient_profile_patch_cannot_change_clinician_link(self):
+        clinician = self.make_clinician()
+        other_clinician = self.make_clinician('other-clinician@example.com')
+        patient = self.make_patient()
+        patient.patient_profile.primary_clinician = clinician.clinician_profile
+        patient.patient_profile.save(
+            update_fields=['primary_clinician', 'updated_at'],
+        )
+        self.client.force_authenticate(patient)
+
+        response = self.client.patch(
+            '/api/auth/me/',
+            {'primary_clinician': str(other_clinician.clinician_profile.id)},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        patient.patient_profile.refresh_from_db()
+        self.assertEqual(
+            patient.patient_profile.primary_clinician,
+            clinician.clinician_profile,
+        )
 
     def test_patient_cannot_generate_clinician_invitation(self):
         patient = self.make_patient()

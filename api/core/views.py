@@ -1550,9 +1550,14 @@ class CareInvitationAcceptView(APIView):
             patient.pathway_selected_at = (
                 patient.pathway_selected_at or timezone.now()
             )
+            # Redeeming a clinician's code completes any earlier self-referral.
+            # Keep the persisted state consistent with the triage invariant:
+            # linked patients are roster patients, never pending applicants.
+            patient.physiotherapist_requested_at = None
             patient.save(update_fields=[
                 "primary_clinician", "care_path", "pathway_choice",
-                "pathway_selected_at", "updated_at",
+                "pathway_selected_at", "physiotherapist_requested_at",
+                "updated_at",
             ])
             invitation.accepted_by = patient
             invitation.accepted_at = timezone.now()

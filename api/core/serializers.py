@@ -196,7 +196,8 @@ class PatientProfileSerializer(serializers.ModelSerializer):
             'wellness_screening_answers', 'wellness_screened_at',
             'wellness_plan', 'wellness_plan_accepted_at',
             'emergency_contact_verified_at', 'emergency_contact_alerts_ready',
-            'primary_clinician_name', 'created_at', 'updated_at',
+            'primary_clinician', 'primary_clinician_name',
+            'created_at', 'updated_at',
         ]
 
     def get_primary_clinician_name(self, obj):

@@ -52,7 +52,7 @@ import {
   isSafariBrowser,
   readMicrophonePermissionState,
   voiceGuidance,
-} from "./voice-guidance.js?v=40";
+} from "./voice-guidance.js?v=41";
 import {
   PRACTICE_VIEWS,
   acceptedWellnessPlan,
@@ -63,7 +63,7 @@ import {
   wellnessPlanExerciseIds,
   wellnessPlanIncludesExercise,
   wellnessPlanSessionExerciseIds,
-} from "./practice-access.js?v=6";
+} from "./practice-access.js?v=7";
 import {
   FallMonitor,
   fallMonitoringReadiness,

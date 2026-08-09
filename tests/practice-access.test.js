@@ -140,10 +140,20 @@ assert.deepEqual(
 const unstructuredDosagePlan = {
   days: [{ exercise_ids: ["half-squats"], dosage: "Follow your gentle plan" }],
 };
-assert.equal(
-  wellnessPlanDoseForExercise(unstructuredDosagePlan, "half-squats")?.mode,
-  "wellness_plan",
-  "a planned exercise must remain accessible when optional dosage details are incomplete",
+assert.deepEqual(
+  wellnessPlanDoseForExercise(unstructuredDosagePlan, "half-squats"),
+  {
+    mode: "wellness_plan",
+    source: "accepted_wellness_plan",
+    sets: 1,
+    reps: 10,
+    repsMin: 6,
+    repsMax: 10,
+    repetitionLabel: "6–10",
+    daysPerWeek: 1,
+    dosage: "Follow your gentle plan",
+  },
+  "an older accepted plan without numeric dosage should inherit the general-wellness counting target",
 );
 
 assert.equal(hasAuthenticatedPracticeAccount(), false);

@@ -18,6 +18,9 @@ const NEURAL_SPEECH_MIN_LENGTH = 18;
 const NEURAL_SPEECH_CACHE_LIMIT = 24;
 const NEURAL_TARGET_RMS = 0.16;
 const NEURAL_PEAK_CEILING = 0.86;
+const BROWSER_SPEECH_WATCHDOG_MIN_MS = 5000;
+const BROWSER_SPEECH_WATCHDOG_MAX_MS = 30000;
+const BROWSER_SPEECH_WORDS_PER_MINUTE = 165;
 
 export const SPEECH_RATE_PRESETS = Object.freeze({
   normal: 1,
@@ -664,6 +667,22 @@ export function conversationalProsody(text) {
   return { rate: 0.98, pitch: 1.03 };
 }
 
+export function browserSpeechWatchdogMs(text, rate = 1) {
+  const message = String(text ?? "").trim();
+  const wordCount = Math.max(1, message ? message.split(/\s+/).length : 0);
+  const effectiveRate = Math.min(Math.max(Number(rate) || 1, 0.5), 1.25);
+  const estimatedSpeechMs = (
+    wordCount / BROWSER_SPEECH_WORDS_PER_MINUTE
+  ) * 60000 / effectiveRate;
+  return Math.min(
+    BROWSER_SPEECH_WATCHDOG_MAX_MS,
+    Math.max(
+      BROWSER_SPEECH_WATCHDOG_MIN_MS,
+      Math.ceil(estimatedSpeechMs + 3500),
+    ),
+  );
+}
+
 function readStoredPreference(browserWindow) {
   try {
     return browserWindow.localStorage.getItem(VOICE_PREFERENCE_KEY) !== "false";
@@ -709,6 +728,7 @@ export class VoiceGuidance {
     this.activeAudioSource = null;
     this.neuralSpeaking = false;
     this.browserSpeechWarmupPending = false;
+    this.browserSpeechWatchdog = null;
     this.speechGeneration = 0;
     this.neuralAudioCache = new Map();
     this.refreshPreferredVoice = () => {
@@ -1204,23 +1224,46 @@ export class VoiceGuidance {
       Math.max(Number(volume) || DEFAULT_SPEECH_VOLUME, 0.2),
       1
     );
+    let armSpeechWatchdog = () => {};
     if (typeof onEnd === "function") {
       let finished = false;
+      let watchdog = null;
+      const schedule = this.window?.setTimeout?.bind(this.window)
+        ?? globalThis.setTimeout;
+      const unschedule = this.window?.clearTimeout?.bind(this.window)
+        ?? globalThis.clearTimeout;
       const finishOnce = () => {
         if (finished) return;
         finished = true;
+        if (watchdog !== null) unschedule(watchdog);
+        if (this.browserSpeechWatchdog === watchdog) {
+          this.browserSpeechWatchdog = null;
+        }
         onEnd();
       };
       utterance.addEventListener("end", finishOnce);
       // Treat a browser synthesis failure as completion so a guided flow does
       // not remain stuck waiting for an end event that will never arrive.
       utterance.addEventListener("error", finishOnce);
+      armSpeechWatchdog = () => {
+        const generation = this.speechGeneration;
+        watchdog = schedule(() => {
+          if (finished || generation !== this.speechGeneration) return;
+          // Safari occasionally remains in `speaking` forever without emitting
+          // either end or error. Cancel that stale utterance before releasing the
+          // flow so microphone listening (including Hey Guide) can resume.
+          this.synthesis?.cancel();
+          finishOnce();
+        }, browserSpeechWatchdogMs(message, utterance.rate));
+        this.browserSpeechWatchdog = watchdog;
+      };
     }
     const shouldWarmUp = Boolean(
       this.singleVoiceEngine && this.browserSpeechWarmupPending
     );
     this.browserSpeechWarmupPending = false;
     if (!shouldWarmUp) {
+      armSpeechWatchdog();
       this.synthesis.speak(utterance);
       return true;
     }
@@ -1235,15 +1278,31 @@ export class VoiceGuidance {
     warmup.pitch = utterance.pitch;
     warmup.volume = 0;
     let warmupFinished = false;
+    const schedule = this.window?.setTimeout?.bind(this.window)
+      ?? globalThis.setTimeout;
+    const unschedule = this.window?.clearTimeout?.bind(this.window)
+      ?? globalThis.clearTimeout;
+    let warmupWatchdog = null;
     const speakRealSentence = () => {
       if (warmupFinished) return;
       warmupFinished = true;
+      if (warmupWatchdog !== null) unschedule(warmupWatchdog);
+      if (this.browserSpeechWatchdog === warmupWatchdog) {
+        this.browserSpeechWatchdog = null;
+      }
       if (generation !== this.speechGeneration || !this.enabled) return;
       this.usePlaybackAudioSession();
+      armSpeechWatchdog();
       this.synthesis.speak(utterance);
     };
     warmup.addEventListener("end", speakRealSentence);
     warmup.addEventListener("error", speakRealSentence);
+    warmupWatchdog = schedule(() => {
+      if (warmupFinished || generation !== this.speechGeneration) return;
+      this.synthesis?.cancel();
+      speakRealSentence();
+    }, 2500);
+    this.browserSpeechWatchdog = warmupWatchdog;
     this.synthesis.speak(warmup);
     return true;
   }
@@ -1343,6 +1402,12 @@ export class VoiceGuidance {
   cancelSpokenOutput() {
     this.speechGeneration += 1;
     this.neuralSpeaking = false;
+    if (this.browserSpeechWatchdog !== null) {
+      const unschedule = this.window?.clearTimeout?.bind(this.window)
+        ?? globalThis.clearTimeout;
+      unschedule(this.browserSpeechWatchdog);
+      this.browserSpeechWatchdog = null;
+    }
     const activeSource = this.activeAudioSource;
     this.activeAudioSource = null;
     try {

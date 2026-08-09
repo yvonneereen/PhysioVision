@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import {
+  browserSpeechWatchdogMs,
   describeMicrophoneAccessFailure,
   isSafariBrowser,
   parseConfirmationResponse,
@@ -212,6 +213,15 @@ assert.deepEqual(
   { rate: 0.95, pitch: 1.02 }
 );
 assert.ok(
+  browserSpeechWatchdogMs("Rep ten. Your exercise is complete.", 1) >= 5000,
+  "browser speech recovery should allow a normal short sentence to finish",
+);
+assert.equal(
+  browserSpeechWatchdogMs(Array(200).fill("guidance").join(" "), 0.5),
+  30000,
+  "browser speech recovery should remain bounded even for unusually long text",
+);
+assert.ok(
   Math.abs(normalizedNeuralSpeechGain({
     numberOfChannels: 1,
     getChannelData: () => new Float32Array([0.1, -0.1, 0.1, -0.1]),
@@ -311,6 +321,53 @@ assert.equal(
   browserCompletionCount,
   1,
   "a browser speech error should release the guided flow exactly once"
+);
+
+let stalledSpeechWatchdog = null;
+let stalledSpeechWatchdogDelay = null;
+let stalledSpeechCancelCount = 0;
+let stalledSpeechCompletionCount = 0;
+const stalledSpeech = [];
+const stalledSpeechGuidance = new VoiceGuidance({
+  ...mockWindow,
+  setTimeout: (callback, delay) => {
+    stalledSpeechWatchdog = callback;
+    stalledSpeechWatchdogDelay = delay;
+    return 91;
+  },
+  clearTimeout: () => {},
+  speechSynthesis: {
+    ...mockWindow.speechSynthesis,
+    speak: (utterance) => stalledSpeech.push(utterance),
+    cancel: () => { stalledSpeechCancelCount += 1; },
+  },
+});
+stalledSpeechGuidance.speak(
+  "Your movement cue has finished and Hey Guide can listen again.",
+  { onEnd: () => { stalledSpeechCompletionCount += 1; } },
+);
+assert.equal(stalledSpeech.length, 1);
+assert.equal(typeof stalledSpeechWatchdog, "function");
+assert.equal(
+  stalledSpeechWatchdogDelay,
+  browserSpeechWatchdogMs(stalledSpeech[0].text, stalledSpeech[0].rate),
+);
+stalledSpeechWatchdog();
+assert.equal(
+  stalledSpeechCancelCount,
+  1,
+  "a Safari utterance with no end event should be cancelled after its bounded recovery time",
+);
+assert.equal(
+  stalledSpeechCompletionCount,
+  1,
+  "a missing Safari end event should still release the guided flow",
+);
+stalledSpeech[0].listeners.end?.();
+assert.equal(
+  stalledSpeechCompletionCount,
+  1,
+  "a late Safari end event must not release the guided flow twice",
 );
 
 let delayedVoiceList = [];

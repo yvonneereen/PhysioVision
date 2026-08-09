@@ -6,6 +6,15 @@ export const PRACTICE_VIEWS = Object.freeze({
   CLINICIAN: "clinician",
 });
 
+// Accepted plans generated before structured dose fields were introduced can
+// contain only free-form copy such as "Follow your gentle plan". Keep those
+// plans usable with the same conservative general-wellness dose the backend
+// applies to newly generated plans, so the live guide always has a visible
+// counting and completion target.
+const DEFAULT_WELLNESS_SETS = 1;
+const DEFAULT_WELLNESS_REPETITIONS_MIN = 6;
+const DEFAULT_WELLNESS_REPETITIONS_MAX = 10;
+
 // auth.js publishes a role only after the backend confirms the current
 // session. Keep accepting the legacy browser token so older sessions remain
 // compatible while cookie-based authentication is in use.
@@ -124,7 +133,7 @@ export function wellnessPlanDoseForExercise(plan, exerciseId) {
     parsedDosage.sets,
     constraints.sets_per_exercise,
     constraints.setsPerExercise,
-  );
+  ) ?? DEFAULT_WELLNESS_SETS;
   const exactRepetitions = firstPositiveInteger(
     day.reps,
     day.repetitions,
@@ -145,19 +154,21 @@ export function wellnessPlanDoseForExercise(plan, exerciseId) {
     constraints.repetitionsMax,
     exactRepetitions,
   );
-  const hasRepetitions = Boolean(minimumRepetitions || maximumRepetitions);
-  const repetitionsMin = hasRepetitions
+  const hasExplicitRepetitions = Boolean(
+    minimumRepetitions || maximumRepetitions
+  );
+  const repetitionsMin = hasExplicitRepetitions
     ? Math.min(
       minimumRepetitions ?? maximumRepetitions,
       maximumRepetitions ?? minimumRepetitions,
     )
-    : null;
-  const repetitionsMax = hasRepetitions
+    : DEFAULT_WELLNESS_REPETITIONS_MIN;
+  const repetitionsMax = hasExplicitRepetitions
     ? Math.max(
       minimumRepetitions ?? maximumRepetitions,
       maximumRepetitions ?? minimumRepetitions,
     )
-    : null;
+    : DEFAULT_WELLNESS_REPETITIONS_MAX;
   const daysPerWeek = firstPositiveInteger(
     constraints.days_per_week,
     constraints.daysPerWeek,
@@ -171,11 +182,9 @@ export function wellnessPlanDoseForExercise(plan, exerciseId) {
     reps: repetitionsMax,
     repsMin: repetitionsMin,
     repsMax: repetitionsMax,
-    repetitionLabel: hasRepetitions
-      ? repetitionsMin === repetitionsMax
-        ? String(repetitionsMax)
-        : `${repetitionsMin}–${repetitionsMax}`
-      : "",
+    repetitionLabel: repetitionsMin === repetitionsMax
+      ? String(repetitionsMax)
+      : `${repetitionsMin}–${repetitionsMax}`,
     daysPerWeek,
     dosage,
   };

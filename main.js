@@ -57,12 +57,13 @@ import {
   PRACTICE_VIEWS,
   acceptedWellnessPlan,
   hasAuthenticatedPracticeAccount,
+  resolvePatientCarePath,
   resolvePracticeAccess,
   wellnessPlanDoseForExercise,
   wellnessPlanExerciseIds,
   wellnessPlanIncludesExercise,
   wellnessPlanSessionExerciseIds,
-} from "./practice-access.js?v=5";
+} from "./practice-access.js?v=6";
 import {
   FallMonitor,
   fallMonitoringReadiness,
@@ -1221,8 +1222,15 @@ function currentAcceptedWellnessPlan() {
     ?? acceptedWellnessPlan(profile);
 }
 
+function currentPatientCarePath() {
+  return resolvePatientCarePath(
+    currentPracticeIdentity().patientProfile,
+    profile,
+  );
+}
+
 function activeDose(exercise = engine?.exercise) {
-  if (profile.carePath === "clinician") {
+  if (currentPatientCarePath() === "clinician") {
     const prescription = activePrescriptions.get(exercise?.id);
     if (!prescription) return {};
     return {
@@ -2313,9 +2321,9 @@ function refreshExerciseAccess() {
   EXERCISES.forEach((exercise) => {
     const option = [...exSelect.options].find((item) => item.value === exercise.id);
     if (!option) return;
-    if (profile.carePath === "clinician") {
+    if (currentPatientCarePath() === "clinician") {
       option.disabled = !activePrescriptions.has(exercise.id);
-    } else if (profile.carePath === "needs_review") {
+    } else if (currentPatientCarePath() === "needs_review") {
       option.disabled = true;
     } else {
       option.disabled = Boolean(
@@ -2383,6 +2391,7 @@ exSelect.addEventListener("change", () => {
   renderStaticPhaseFlow(engine);
   renderExerciseImage(engine.exercise);
   repCountEl.textContent = "0";
+  renderCameraRepProgress(engine.exercise, 0);
   resetSpokenCoaching();
   cueListEl.innerHTML = "";
   symWarnEl.classList.add("hidden");
@@ -2414,6 +2423,7 @@ sideSelect.addEventListener("change", () => {
   repTrackingSmoother.state = {};
   combinedPoseHistory = [];
   repCountEl.textContent = "0";
+  renderCameraRepProgress(engine.exercise, 0);
   resetSpokenCoaching();
   progressEl.style.width = "0%";
   setFeedbackBanner("ready");
@@ -2458,6 +2468,7 @@ window.addEventListener("physiovision:profile-updated", (event) => {
   smoother.state = {};
   repTrackingSmoother.state = {};
   repCountEl.textContent = "0";
+  renderCameraRepProgress(engine.exercise, 0);
   renderPrescription(engine.exercise);
   resetSpokenCoaching();
   progressEl.style.width = "0%";
@@ -3680,7 +3691,7 @@ async function startCalibrationFlow(
     : reuseDecision.action;
   if (!running && !(await activateCameraGuide({ announceInstruction: false }))) {
     cameraSetupStatus.textContent = engine.exercise.requiresClinicianPlan
-      && profile.carePath !== "clinician"
+      && currentPatientCarePath() !== "clinician"
       ? (
         "This movement requires a physiotherapist-approved care plan. "
         + "Return to My home and create a new general-wellness AI plan."
@@ -4323,10 +4334,10 @@ function renderPrescription(ex) {
     && Number(p.sets) > 0
     && Number.isFinite(Number(p.reps))
     && Number(p.reps) > 0;
-  if (profile.carePath === "clinician" && !p.id) {
+  if (currentPatientCarePath() === "clinician" && !p.id) {
     prescEl.textContent = "This movement is not in your active prescription";
     if (repTargetEl) repTargetEl.textContent = "—";
-  } else if (profile.carePath === "clinician") {
+  } else if (currentPatientCarePath() === "clinician") {
     prescEl.textContent =
       `${p.sets} ${setUnit} × ${repetitions} reps` +
       (p.holdSeconds ? ` · hold ${p.holdSeconds}s` : "") +

@@ -648,6 +648,21 @@ const activeDoseSource = functionSource(
   "movementAiConversationActive"
 );
 assert.match(
+  source,
+  /function currentPatientCarePath\(\)[\s\S]*?resolvePatientCarePath\([\s\S]*?currentPracticeIdentity\(\)\.patientProfile,[\s\S]*?profile/,
+  "live exercise doses should resolve the authenticated pathway before the cached profile",
+);
+assert.match(
+  activeDoseSource,
+  /currentPatientCarePath\(\) === "clinician"/,
+  "dose selection must use the normalized authenticated pathway",
+);
+assert.doesNotMatch(
+  activeDoseSource,
+  /profile\.carePath === "clinician"/,
+  "a stale cached pathway must not erase an accepted AI-plan target",
+);
+assert.match(
   activeDoseSource,
   /currentAcceptedWellnessPlan\(\)[\s\S]*?wellnessPlanDoseForExercise\(wellnessPlan, exercise\?\.id\)/,
   "wellness camera targets should resolve from the accepted AI plan"

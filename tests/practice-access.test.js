@@ -3,12 +3,27 @@ import {
   PRACTICE_VIEWS,
   acceptedWellnessPlan,
   hasAuthenticatedPracticeAccount,
+  resolvePatientCarePath,
   resolvePracticeAccess,
   wellnessPlanDoseForExercise,
   wellnessPlanExerciseIds,
   wellnessPlanIncludesExercise,
   wellnessPlanSessionExerciseIds,
 } from "../practice-access.js";
+
+assert.equal(
+  resolvePatientCarePath(
+    { care_path: "wellness", carePath: "clinician" },
+    { carePath: "clinician" },
+  ),
+  "wellness",
+  "the authenticated API pathway must override a stale browser pathway",
+);
+assert.equal(
+  resolvePatientCarePath(null, { carePath: "clinician" }),
+  "clinician",
+  "the browser pathway should remain a fallback for legacy cached profiles",
+);
 
 const acceptedPlan = {
   source: "gemini_wellness_agent",

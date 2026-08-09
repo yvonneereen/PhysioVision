@@ -20,6 +20,18 @@ function profileValue(profile, apiName, browserName) {
   return profile?.[apiName] ?? profile?.[browserName];
 }
 
+export function resolvePatientCarePath(
+  patientProfile,
+  fallbackProfile = null,
+) {
+  // API fields are the authenticated source of truth. A browser profile can
+  // still contain an older camelCase value from before the latest account
+  // refresh, so never let that stale value override care_path.
+  return profileValue(patientProfile, "care_path", "carePath")
+    ?? profileValue(fallbackProfile, "care_path", "carePath")
+    ?? null;
+}
+
 function positiveInteger(value) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0
@@ -204,7 +216,7 @@ export function resolvePracticeAccess({
     };
   }
 
-  const carePath = profileValue(patientProfile, "care_path", "carePath");
+  const carePath = resolvePatientCarePath(patientProfile);
   const primaryClinician = profileValue(
     patientProfile,
     "primary_clinician",

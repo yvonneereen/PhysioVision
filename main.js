@@ -72,10 +72,11 @@ import {
   parseWellbeingResponse,
 } from "./fall-monitoring.js?v=4";
 import {
+  painBaselineForNextExercise,
   sessionReachedTarget,
   serializePlannedSessionNote,
   sessionsForPlannedSession,
-} from "./planned-session-progress.js?v=1";
+} from "./planned-session-progress.js?v=2";
 
 let PoseLandmarker;
 let HandLandmarker;
@@ -380,6 +381,7 @@ let completedExerciseSessionPromise = null;
 let completedExerciseSessionSnapshot = null;
 let completedExerciseSessionError = null;
 let completedExerciseCheckinLinkError = false;
+let exerciseTransitionPainBaseline = null;
 let cameraSetupCountdown = null;
 let movementAiState = "off";
 let movementCoachingGeneration = 0;
@@ -2406,14 +2408,32 @@ configureFallMonitoring(engine.exercise);
 renderLiveSessionContext(engine.exercise.id);
 
 exSelect.addEventListener("change", () => {
+  const carriedPainBaseline = (
+    exerciseTransitionPainBaseline?.exerciseId === String(exSelect.value)
+  )
+    ? exerciseTransitionPainBaseline
+    : null;
+  exerciseTransitionPainBaseline = null;
   cancelCameraSetupCountdown({ announce: false });
   if (running) {
     deactivateCameraGuide({
       statusMessage: "Camera paused because the exercise changed",
     });
   }
-  preExerciseCheckinCompleted = false;
-  confirmedPreExercisePain = null;
+  preExerciseCheckinCompleted = Boolean(carriedPainBaseline);
+  confirmedPreExercisePain = carriedPainBaseline?.painLevel ?? null;
+  if (carriedPainBaseline) {
+    activePreExerciseCheckinPromise = postPainCheckin({
+      pain_level: carriedPainBaseline.painLevel,
+      timing: "before",
+      recovery_status: "",
+      checked_at: new Date().toISOString(),
+    }).catch(() => null);
+    completedExerciseSessionPromise = null;
+    completedExerciseSessionSnapshot = null;
+    completedExerciseSessionError = null;
+    completedExerciseCheckinLinkError = false;
+  }
   clearRecordedPain();
   discardExerciseSession();
   cancelCalibration();
@@ -2547,6 +2567,7 @@ function handlePracticeRequest(detail = {}) {
       .map((item) => String(item))
       .filter(Boolean)
   );
+  exerciseTransitionPainBaseline = null;
 
   practiceIdentityOverride = requestedRole
     ? {
@@ -2618,6 +2639,7 @@ window.addEventListener("physiovision:auth-role", (event) => {
   resetVoiceModeChoice();
   preExerciseCheckinCompleted = false;
   confirmedPreExercisePain = null;
+  exerciseTransitionPainBaseline = null;
   if (painCheckinState) hidePainCheckin();
   if (running) {
     deactivateCameraGuide({
@@ -5760,10 +5782,14 @@ function plannedSessionProgressAfterCurrent() {
   };
 }
 
-function openExerciseTransition(progress) {
+function openExerciseTransition(progress, painLevel) {
   const currentExerciseName = exerciseDisplayName(progress.currentExerciseId);
   const nextExerciseName = exerciseDisplayName(progress.nextExerciseId);
   exerciseTransitionNextExerciseId = progress.nextExerciseId;
+  exerciseTransitionPainBaseline = painBaselineForNextExercise({
+    nextExerciseId: progress.nextExerciseId,
+    painLevel,
+  });
   exerciseTransitionContextEl.textContent = activeSessionDay
     ? `${translateText(activeSessionDay)} ${translateText("session")}`
     : translateText("Today’s session");
@@ -5794,10 +5820,11 @@ function openExerciseTransition(progress) {
   exerciseTransitionTitleEl?.focus({ preventScroll: true });
 }
 
-function closeExerciseTransition() {
+function closeExerciseTransition({ retainPainBaseline = false } = {}) {
   exerciseTransitionModalEl?.classList.remove("is-open");
   exerciseTransitionModalEl?.setAttribute("aria-hidden", "true");
   document.body.classList.remove("modal-open");
+  if (!retainPainBaseline) exerciseTransitionPainBaseline = null;
 }
 
 function announceSavedExerciseSession(session) {
@@ -5843,7 +5870,7 @@ function showPostExerciseDestination(completed, beforePain, painSavePromise) {
     && progress.nextExerciseId
     && sessionReachedTarget(completedExerciseSessionSnapshot)
   ) {
-    openExerciseTransition(progress);
+    openExerciseTransition(progress, completed.painLevel);
     void finalizeExerciseTransition(painSavePromise);
     return;
   }
@@ -6717,7 +6744,7 @@ exerciseTransitionModalEl
 exerciseTransitionContinueEl?.addEventListener("click", () => {
   if (!exerciseTransitionNextExerciseId) return;
   const nextExerciseId = exerciseTransitionNextExerciseId;
-  closeExerciseTransition();
+  closeExerciseTransition({ retainPainBaseline: true });
   exSelect.value = nextExerciseId;
   exSelect.dispatchEvent(new Event("change", { bubbles: true }));
   document.getElementById("practice")?.scrollIntoView({

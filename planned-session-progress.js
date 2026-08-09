@@ -114,6 +114,29 @@ export function nextIncompleteExerciseId(exerciseIds, completedExerciseIds) {
     .find((exerciseId) => !completed.has(exerciseId)) ?? null;
 }
 
+export function painBaselineForNextExercise({
+  nextExerciseId,
+  painLevel,
+} = {}) {
+  const exerciseId = String(nextExerciseId ?? "").trim();
+  const normalizedPainLevel = Number(painLevel);
+  if (
+    !exerciseId
+    || painLevel === null
+    || painLevel === undefined
+    || painLevel === ""
+    || !Number.isInteger(normalizedPainLevel)
+    || normalizedPainLevel < 0
+    || normalizedPainLevel > 10
+  ) {
+    return null;
+  }
+  return {
+    exerciseId,
+    painLevel: normalizedPainLevel,
+  };
+}
+
 export function sessionsForPlannedSession(sessions, sessionKey) {
   if (!sessionKey) return [];
   return (Array.isArray(sessions) ? sessions : []).filter(

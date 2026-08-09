@@ -5,6 +5,7 @@ import {
   buildPlannedSessionKey,
   completedExerciseIdsForPlannedSession,
   nextIncompleteExerciseId,
+  painBaselineForNextExercise,
   parsePlannedSessionNote,
   planWeekKey,
   serializePlannedSessionNote,
@@ -75,6 +76,43 @@ assert.equal(
 );
 assert.deepEqual(sessionsForPlannedSession(sessions, sessionKey), [sessions[0]]);
 
+const calfRaiseBaseline = painBaselineForNextExercise({
+  nextExerciseId: "calf-raises",
+  painLevel: 4,
+});
+assert.deepEqual(
+  calfRaiseBaseline,
+  { exerciseId: "calf-raises", painLevel: 4 },
+  "the pain answer after Half Squats should become the Calf Raises baseline",
+);
+assert.deepEqual(
+  [
+    "before Half Squats",
+    "after Half Squats",
+    ...(calfRaiseBaseline ? [] : ["before Calf Raises"]),
+    "after Calf Raises",
+  ],
+  [
+    "before Half Squats",
+    "after Half Squats",
+    "after Calf Raises",
+  ],
+  "a two-exercise session should ask for pain exactly three times",
+);
+assert.equal(
+  painBaselineForNextExercise({
+    nextExerciseId: "calf-raises",
+    painLevel: null,
+  }),
+  null,
+  "a skipped intermediate pain check must not create an invented baseline",
+);
+assert.equal(
+  painBaselineForNextExercise({ painLevel: 4 }),
+  null,
+  "the final exercise should not create another starting baseline",
+);
+
 const mainSource = fs.readFileSync(new URL("../main.js", import.meta.url), "utf8");
 const dashboardSource = fs.readFileSync(
   new URL("../patient-dashboard.js", import.meta.url),
@@ -89,13 +127,23 @@ assert.match(
 );
 assert.match(
   mainSource,
-  /function showPostExerciseDestination[\s\S]*?openExerciseTransition\(progress\)[\s\S]*?openSessionSummary/,
+  /function showPostExerciseDestination[\s\S]*?openExerciseTransition\(progress, completed\.painLevel\)[\s\S]*?openSessionSummary/,
   "an unfinished multi-exercise day should show the continuation screen before the report",
 );
 assert.match(
   mainSource,
   /exerciseTransitionContinueEl[\s\S]*?exSelect\.value = nextExerciseId[\s\S]*?dispatchEvent\(new Event\("change"/,
   "continuing should open the next exercise without returning home",
+);
+assert.match(
+  mainSource,
+  /function openExerciseTransition\(progress, painLevel\)[\s\S]*?painBaselineForNextExercise\([\s\S]*?nextExerciseId:\s*progress\.nextExerciseId[\s\S]*?painLevel/,
+  "the intermediate check-in should be carried into the next planned exercise",
+);
+assert.match(
+  mainSource,
+  /exSelect\.addEventListener\("change"[\s\S]*?carriedPainBaseline[\s\S]*?preExerciseCheckinCompleted = Boolean\(carriedPainBaseline\)[\s\S]*?timing:\s*"before"/,
+  "the next exercise should reuse the intermediate answer instead of asking for pain again",
 );
 assert.match(
   dashboardSource,

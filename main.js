@@ -4529,9 +4529,11 @@ function announceExerciseInstruction(prefix = "", { onEnd = null } = {}) {
     prefix,
     exerciseTargetGuidance(engine.exercise),
     clinicianNote ? `Your clinician's instruction is: ${clinicianNote}` : "",
+    handsFreeVoiceEnabled
+      ? "After this instruction, say Hey Guide followed by your question whenever you need help."
+      : "",
     // Put the movement instruction last so its final words, "Begin now", are
-    // the signal that counting is becoming active. Hey Guide is
-    // already explained by the persistent on-screen camera status.
+    // the signal that counting is becoming active.
     exerciseStartGuidance(engine.exercise),
   ].filter(Boolean).join(" ");
   setMovementAiStatus(

@@ -276,6 +276,11 @@ assert.match(
   "the startup instruction should retain an explicit beginning and end state"
 );
 assert.match(
+  functionSource("announceExerciseInstruction", "setIntegratedCameraGuideActive"),
+  /handsFreeVoiceEnabled[\s\S]*?After this instruction, say Hey Guide followed by your question whenever you need help\.[\s\S]*?exerciseStartGuidance\(engine\.exercise\)/,
+  "hands-free startup guidance should explain the Hey Guide wake phrase aloud before movement begins"
+);
+assert.match(
   functionSource("renderFrame", "plannedSetCount"),
   /movementTrackingPausedForInstruction[\s\S]*?presentInstructionTrackingPause\((?:measurements|angles), frameTimestamp\)[\s\S]*?updateFeedbackPanel/,
   "camera frames should prepare the starting baseline while the start instruction prevents false repetitions"

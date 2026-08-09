@@ -5669,8 +5669,6 @@ function beginRecoveryQuestion() {
   painSkipBtn.classList.remove("hidden");
   updatePainCheckinPresentation();
   painCheckinTitleEl.textContent = recoveryQuestion(painCheckinState.context);
-  recoveryChoicesEl.querySelector("p").textContent =
-    recoveryQuestion(painCheckinState.context);
   voiceCheckinStatusEl.textContent = handsFreeVoiceEnabled
     ? "Listening will start after the question. Say better, same, worse, or not sure."
     : voiceGuidance.canListen

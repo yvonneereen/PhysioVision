@@ -1067,6 +1067,29 @@ assert.doesNotMatch(
   /carePath|clinician/,
   "both clinician and wellness pathways should receive the post-session recovery question"
 );
+const recoveryChoicesMarkup = markup.slice(
+  markup.indexOf('id="recoveryChoices"'),
+  markup.indexOf('id="painSafetyInterview"'),
+);
+assert.doesNotMatch(
+  recoveryChoicesMarkup,
+  /<p[\s>]/,
+  "the recovery question should appear once in the shared check-in heading"
+);
+const recoveryQuestionSource = functionSource(
+  "beginRecoveryQuestion",
+  "painCheckinPayload"
+);
+assert.match(
+  recoveryQuestionSource,
+  /painCheckinTitleEl\.textContent = recoveryQuestion/,
+  "the single visible recovery question should remain in the check-in heading"
+);
+assert.doesNotMatch(
+  recoveryQuestionSource,
+  /recoveryChoicesEl\.querySelector\("p"\)/,
+  "the recovery question should not be copied into the answer container"
+);
 
 const completeSessionSource = functionSource(
   "completeExerciseSession",

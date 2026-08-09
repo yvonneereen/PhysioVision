@@ -43,7 +43,7 @@ import {
 } from "./api.js?v=32";
 import { analysePatientTrend } from "./patient-dashboard-state.js?v=13";
 import { DRAFT_EXERCISES } from "./exercises/catalog.js?v=3";
-import { translateText } from "./i18n.js?v=32";
+import { translateText } from "./i18n.js?v=33";
 import {
   parseConfirmationResponse,
   parsePainLevel,
@@ -71,6 +71,11 @@ import {
   parseWellbeingClarificationResponse,
   parseWellbeingResponse,
 } from "./fall-monitoring.js?v=4";
+import {
+  sessionReachedTarget,
+  serializePlannedSessionNote,
+  sessionsForPlannedSession,
+} from "./planned-session-progress.js?v=1";
 
 let PoseLandmarker;
 let HandLandmarker;
@@ -308,6 +313,8 @@ let practiceIdentityOverride = null;
 let activeSessionExerciseIds = [];
 let activeSessionDay = "";
 let activeSessionTitle = "";
+let activeSessionKey = "";
+let activeSessionCompletedExerciseIds = new Set();
 let prescriptionsLoaded =
   authenticatedRole !== "patient" ||
   window.sessionStorage.getItem("physiovision.prescriptions.v1") !== null;
@@ -2532,6 +2539,14 @@ function handlePracticeRequest(detail = {}) {
   )];
   activeSessionDay = String(detail.sessionDay ?? "").trim();
   activeSessionTitle = String(detail.sessionTitle ?? "").trim();
+  activeSessionKey = String(detail.sessionKey ?? "").trim();
+  activeSessionCompletedExerciseIds = new Set(
+    (Array.isArray(detail.completedExerciseIds)
+      ? detail.completedExerciseIds
+      : [])
+      .map((item) => String(item))
+      .filter(Boolean)
+  );
 
   practiceIdentityOverride = requestedRole
     ? {
@@ -4978,6 +4993,11 @@ function completeExerciseSession() {
       symmetryWarnings: 0,
       repetitions: totalRepsCompleted,
     }),
+    notes:                   serializePlannedSessionNote({
+      sessionKey: activeSessionKey,
+      sessionDay: activeSessionDay,
+      sessionTitle: activeSessionTitle,
+    }),
   };
   completedExerciseSessionSnapshot = {
     ...sessionPayload,
@@ -5030,6 +5050,13 @@ const recordedPainEl = document.getElementById("recordedPain");
 const recordedPainContextEl = document.getElementById("recordedPainContext");
 const recordedPainMessageEl = document.getElementById("recordedPainMessage");
 const recordedPainValueEl = document.getElementById("recordedPainValue");
+const exerciseTransitionModalEl = document.getElementById("exercise-transition-modal");
+const exerciseTransitionContextEl = document.getElementById("exerciseTransitionContext");
+const exerciseTransitionTitleEl = document.getElementById("exerciseTransitionTitle");
+const exerciseTransitionMessageEl = document.getElementById("exerciseTransitionMessage");
+const exerciseTransitionStatusEl = document.getElementById("exerciseTransitionStatus");
+const exerciseTransitionContinueEl = document.getElementById("exerciseTransitionContinue");
+const exerciseTransitionHomeEl = document.getElementById("exerciseTransitionHome");
 const sessionSummaryModalEl = document.getElementById("session-summary-modal");
 const sessionSummaryTitleEl = document.getElementById("sessionSummaryTitle");
 const sessionSummaryScopeEl = document.getElementById("sessionSummaryScope");
@@ -5040,6 +5067,7 @@ const sessionSummaryRecoveryEl = document.getElementById("sessionSummaryRecovery
 const sessionSummaryTrendEl = document.getElementById("sessionSummaryTrend");
 const sessionSummaryCueEl = document.getElementById("sessionSummaryCue");
 const sessionSummaryStatusEl = document.getElementById("sessionSummaryStatus");
+let exerciseTransitionNextExerciseId = null;
 let painCheckinState = null;
 let painSafetyRestTimer = null;
 let painVoiceFallbackNeeded = false;
@@ -5689,17 +5717,166 @@ function painResponseLabel(beforePain, afterPain) {
     : `${Math.abs(change)} point decrease · ${afterPain}/10`;
 }
 
+function exerciseDisplayName(exerciseId) {
+  const normalizedId = String(exerciseId ?? "");
+  if (
+    normalizedId
+    && normalizedId === String(completedExerciseSessionSnapshot?.exercise ?? "")
+  ) {
+    return completedExerciseSessionSnapshot?.exercise_name ?? normalizedId;
+  }
+  return EXERCISES.find((exercise) => exercise.id === normalizedId)?.name
+    ?? normalizedId
+    ?? "Exercise";
+}
+
+function plannedSessionProgressAfterCurrent() {
+  const exerciseIds = [...new Set(
+    activeSessionExerciseIds.map((exerciseId) => String(exerciseId)).filter(Boolean)
+  )];
+  const currentExerciseId = String(
+    completedExerciseSessionSnapshot?.exercise ?? engine?.exercise?.id ?? ""
+  );
+  const completedExerciseIds = new Set(activeSessionCompletedExerciseIds);
+  if (
+    currentExerciseId
+    && exerciseIds.includes(currentExerciseId)
+    && sessionReachedTarget(completedExerciseSessionSnapshot)
+  ) {
+    completedExerciseIds.add(currentExerciseId);
+  }
+  const nextExerciseId = exerciseIds.find(
+    (exerciseId) => !completedExerciseIds.has(exerciseId)
+  ) ?? null;
+  const completedCount = exerciseIds.filter(
+    (exerciseId) => completedExerciseIds.has(exerciseId)
+  ).length;
+  return {
+    enabled: Boolean(activeSessionKey && exerciseIds.length > 1),
+    exerciseIds,
+    completedExerciseIds,
+    completedCount,
+    totalExercises: exerciseIds.length,
+    currentExerciseId,
+    nextExerciseId,
+  };
+}
+
+function openExerciseTransition(progress) {
+  const currentExerciseName = exerciseDisplayName(progress.currentExerciseId);
+  const nextExerciseName = exerciseDisplayName(progress.nextExerciseId);
+  exerciseTransitionNextExerciseId = progress.nextExerciseId;
+  exerciseTransitionContextEl.textContent = activeSessionDay
+    ? `${translateText(activeSessionDay)} ${translateText("session")}`
+    : translateText("Today’s session");
+  exerciseTransitionTitleEl.textContent = (
+    `${translateText(currentExerciseName)} ${translateText("complete")} — `
+    + `${progress.completedCount} ${translateText("of")} ${progress.totalExercises} `
+    + translateText("exercises")
+  );
+  exerciseTransitionMessageEl.textContent = (
+    `${translateText(currentExerciseName)} ${translateText("is being saved.")} `
+    + `${translateText("Continue with")} ${translateText(nextExerciseName)} `
+    + translateText("when you are ready.")
+  );
+  exerciseTransitionStatusEl.textContent = translateText("Saving result…");
+  exerciseTransitionStatusEl.classList.remove("is-error");
+  exerciseTransitionContinueEl.disabled = true;
+  exerciseTransitionContinueEl.replaceChildren(document.createTextNode(
+    `${translateText("Continue to")} ${translateText(nextExerciseName)} `
+  ));
+  const arrow = document.createElement("span");
+  arrow.setAttribute("aria-hidden", "true");
+  arrow.textContent = "→";
+  exerciseTransitionContinueEl.appendChild(arrow);
+  exerciseTransitionHomeEl.disabled = true;
+  exerciseTransitionModalEl?.classList.add("is-open");
+  exerciseTransitionModalEl?.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  exerciseTransitionTitleEl?.focus({ preventScroll: true });
+}
+
+function closeExerciseTransition() {
+  exerciseTransitionModalEl?.classList.remove("is-open");
+  exerciseTransitionModalEl?.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+}
+
+function announceSavedExerciseSession(session) {
+  if (!session) return;
+  const completedExerciseId = String(
+    completedExerciseSessionSnapshot?.exercise ?? session.exercise ?? ""
+  );
+  if (completedExerciseId && sessionReachedTarget(completedExerciseSessionSnapshot)) {
+    activeSessionCompletedExerciseIds.add(completedExerciseId);
+  }
+  window.dispatchEvent(new CustomEvent(
+    "physiovision:session-completed",
+    { detail: { sessionId: session.id } },
+  ));
+}
+
+async function finalizeExerciseTransition(painSavePromise) {
+  const session = await (completedExerciseSessionPromise ?? Promise.resolve(null));
+  const savedAfterCheckin = await painSavePromise;
+  if (!session) {
+    exerciseTransitionStatusEl.textContent =
+      "Your result could not be saved. Check your connection before continuing.";
+    exerciseTransitionStatusEl.classList.add("is-error");
+    exerciseTransitionHomeEl.disabled = false;
+    return;
+  }
+
+  announceSavedExerciseSession(session);
+  const checkinSaveIncomplete = Boolean(
+    !savedAfterCheckin || completedExerciseCheckinLinkError
+  );
+  exerciseTransitionStatusEl.textContent = checkinSaveIncomplete
+    ? translateText("Exercise saved · check-in save incomplete")
+    : translateText("Exercise saved");
+  exerciseTransitionContinueEl.disabled = false;
+  exerciseTransitionHomeEl.disabled = false;
+}
+
+function showPostExerciseDestination(completed, beforePain, painSavePromise) {
+  const progress = plannedSessionProgressAfterCurrent();
+  if (
+    progress.enabled
+    && progress.nextExerciseId
+    && sessionReachedTarget(completedExerciseSessionSnapshot)
+  ) {
+    openExerciseTransition(progress);
+    void finalizeExerciseTransition(painSavePromise);
+    return;
+  }
+  openSessionSummary(completed, beforePain);
+  void finalizeSessionSummary(completed, beforePain, painSavePromise);
+}
+
 function openSessionSummary(completed, beforePain) {
   const snapshot = completedExerciseSessionSnapshot ?? {};
   const exerciseName = snapshot.exercise_name ?? "Exercise";
   const side = snapshot.affected_side
     ? `${snapshot.affected_side} side`
     : "selected side";
-  sessionSummaryTitleEl.textContent = `${exerciseName} session complete`;
-  sessionSummaryScopeEl.textContent =
-    `Results and trends compare ${exerciseName} on the ${side} only.`;
-  sessionSummaryCompletedEl.textContent =
-    `${snapshot.reps_completed ?? 0} of ${snapshot.reps_target ?? 0} repetitions`;
+  const progress = plannedSessionProgressAfterCurrent();
+  const completedPlannedSession = Boolean(
+    progress.enabled
+    && !progress.nextExerciseId
+    && progress.completedCount === progress.totalExercises
+  );
+  sessionSummaryTitleEl.textContent = completedPlannedSession
+    ? `${activeSessionDay || "Today’s"} session complete`
+    : `${exerciseName} session complete`;
+  sessionSummaryScopeEl.textContent = completedPlannedSession
+    ? (
+      `All ${progress.totalExercises} exercises for this day are complete. `
+      + `Pain, recovery, and the same-exercise trend below use ${exerciseName} on the ${side}.`
+    )
+    : `Results and trends compare ${exerciseName} on the ${side} only.`;
+  sessionSummaryCompletedEl.textContent = completedPlannedSession
+    ? `${progress.completedCount} of ${progress.totalExercises} exercises`
+    : `${snapshot.reps_completed ?? 0} of ${snapshot.reps_target ?? 0} repetitions`;
   sessionSummaryQualityEl.textContent = (
     snapshot.quality_score !== null
     && snapshot.quality_score !== undefined
@@ -5793,11 +5970,39 @@ async function finalizeSessionSummary(completed, beforePain, painSavePromise) {
         getSessions(),
         getPainCheckins(),
       ]);
+      const savedSessions = apiResults(sessionsResponse);
       trend = analysePatientTrend({
-        sessions: apiResults(sessionsResponse),
+        sessions: savedSessions,
         painCheckins: apiResults(painResponse),
         focusSessionId: session.id,
       });
+      const progress = plannedSessionProgressAfterCurrent();
+      if (
+        progress.enabled
+        && !progress.nextExerciseId
+        && progress.completedCount === progress.totalExercises
+      ) {
+        const plannedSessions = sessionsForPlannedSession(
+          savedSessions,
+          activeSessionKey,
+        );
+        const completedExercises = new Set(
+          plannedSessions.map((item) => String(item.exercise ?? "")).filter(Boolean)
+        );
+        const qualityScores = plannedSessions
+          .map((item) => Number(item.quality_score))
+          .filter((score) => Number.isFinite(score));
+        sessionSummaryCompletedEl.textContent =
+          `${completedExercises.size} of ${progress.totalExercises} exercises`;
+        if (qualityScores.length) {
+          const averageQuality = qualityScores.reduce(
+            (total, score) => total + score,
+            0,
+          ) / qualityScores.length;
+          sessionSummaryQualityEl.textContent =
+            `${Math.round(averageQuality)}/100 day average`;
+        }
+      }
     } catch (_) {
       trend = null;
     }
@@ -5842,12 +6047,7 @@ async function finalizeSessionSummary(completed, beforePain, painSavePromise) {
       : "Trend unavailable";
   }
 
-  if (session) {
-    window.dispatchEvent(new CustomEvent(
-      "physiovision:session-completed",
-      { detail: { sessionId: session.id } },
-    ));
-  }
+  announceSavedExerciseSession(session);
   speakMovementGuide(
     "Your session summary is ready. Review your movement quality, pain response, and recovery before continuing.",
     { key: `session-summary:${session?.id ?? "unsaved"}`, interrupt: true },
@@ -5866,7 +6066,6 @@ function finishPainCheckin() {
     confirmedPreExercisePain = completed.painLevel;
   } else {
     const beforePain = confirmedPreExercisePain;
-    openSessionSummary(completed, beforePain);
     const painSavePromise = (async () => {
       const session = await (
         completedExerciseSessionPromise ?? Promise.resolve(null)
@@ -5875,7 +6074,7 @@ function finishPainCheckin() {
         painCheckinPayload(completed, session?.id),
       ).catch(() => null);
     })();
-    void finalizeSessionSummary(completed, beforePain, painSavePromise);
+    showPostExerciseDestination(completed, beforePain, painSavePromise);
     confirmedPreExercisePain = null;
   }
   hidePainCheckin();
@@ -6511,6 +6710,29 @@ painVoiceInputBtn.addEventListener("click", () => {
   startPainVoiceListening();
 });
 
+exerciseTransitionModalEl
+  ?.querySelectorAll("[data-exercise-transition-close]")
+  .forEach((element) => {
+    element.addEventListener("click", closeExerciseTransition);
+  });
+
+exerciseTransitionContinueEl?.addEventListener("click", () => {
+  if (!exerciseTransitionNextExerciseId) return;
+  const nextExerciseId = exerciseTransitionNextExerciseId;
+  closeExerciseTransition();
+  exSelect.value = nextExerciseId;
+  exSelect.dispatchEvent(new Event("change", { bubbles: true }));
+  document.getElementById("practice")?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+});
+
+exerciseTransitionHomeEl?.addEventListener("click", () => {
+  closeExerciseTransition();
+  window.pvShowPatientDashboard?.();
+});
+
 sessionSummaryModalEl
   ?.querySelectorAll("[data-session-summary-close]")
   .forEach((element) => {
@@ -6523,6 +6745,13 @@ document.getElementById("sessionSummaryHome")?.addEventListener("click", () => {
 });
 
 document.addEventListener("keydown", (event) => {
+  if (
+    event.key === "Escape"
+    && exerciseTransitionModalEl?.classList.contains("is-open")
+  ) {
+    closeExerciseTransition();
+    return;
+  }
   if (event.key === "Escape" && sessionSummaryModalEl?.classList.contains("is-open")) {
     closeSessionSummary();
   }
@@ -6535,7 +6764,15 @@ painSkipBtn.addEventListener("click", () => {
     preExerciseCheckinCompleted = true;
     confirmedPreExercisePain = null;
   } else if (completed?.context === "after") {
+    const beforePain = confirmedPreExercisePain;
     confirmedPreExercisePain = null;
+    completed.painLevel = null;
+    completed.recoveryStatus = null;
+    showPostExerciseDestination(
+      completed,
+      beforePain,
+      Promise.resolve({ skipped: true }),
+    );
   }
   hidePainCheckin();
   if (completed) continueAfterPainCheckin(completed);

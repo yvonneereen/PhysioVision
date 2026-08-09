@@ -33,6 +33,7 @@ const frontendEntries = [
   "patient-dashboard-state.js",
   "poses.js",
   "practice-access.js",
+  "planned-session-progress.js",
   "runtime-config.js",
   "role-ui.js",
   "therapist.js",

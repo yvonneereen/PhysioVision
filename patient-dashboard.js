@@ -27,9 +27,14 @@ import {
   walkingConfidencePlanNeedsRefresh,
 } from "./patient-dashboard-state.js?v=13";
 import { saveProfile } from "./personalization.js?v=13";
-import { getLocale, translateText } from "./i18n.js?v=32";
+import { getLocale, translateText } from "./i18n.js?v=33";
 import { voiceGuidance } from "./voice-guidance.js?v=41";
 import { EXERCISE_MAP } from "./exercises/registry.js?v=61";
+import {
+  buildPlannedSessionKey,
+  completedExerciseIdsForPlannedSession,
+  nextIncompleteExerciseId,
+} from "./planned-session-progress.js?v=1";
 
 const WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions";
 
@@ -146,6 +151,8 @@ let firstExerciseId = null;
 let firstSessionExerciseIds = [];
 let firstSessionDay = "";
 let firstSessionTitle = "";
+let firstSessionKey = "";
+let firstSessionCompletedExerciseIds = [];
 let pendingPhysiotherapistRefresh = null;
 let primaryAction = "plan";
 let toastTimer = null;
@@ -274,6 +281,8 @@ function startExercise(
   plannedExerciseIds = [],
   sessionDay = "",
   sessionTitle = "",
+  sessionKey = "",
+  completedExerciseIds = [],
 ) {
   if (!exerciseId) {
     if (primaryAction === "ai") {
@@ -308,6 +317,12 @@ function startExercise(
     plannedExerciseIds: sessionExerciseIds,
     ...(sessionDay ? { sessionDay } : {}),
     ...(sessionTitle ? { sessionTitle } : {}),
+    ...(sessionKey ? { sessionKey } : {}),
+    completedExerciseIds: [...new Set(
+      (Array.isArray(completedExerciseIds) ? completedExerciseIds : [])
+        .map((item) => String(item))
+        .filter(Boolean)
+    )],
   };
 
   window.physioVisionPendingPracticeRequest = practiceRequest;
@@ -343,6 +358,9 @@ function planRow({
   startLabel = "Start",
   sessionDay = "",
   sessionTitle = "",
+  sessionKey = "",
+  completedExerciseIds = [],
+  statusLabel = "",
   note = "",
 }) {
   const row = document.createElement("article");
@@ -365,9 +383,20 @@ function planRow({
     exerciseHeading.textContent = translateText("Exercises for this day");
     const exerciseList = document.createElement("ol");
     exerciseList.className = "patient-plan-exercise-list";
-    exerciseNames.forEach((exerciseName) => {
+    const completed = new Set(
+      completedExerciseIds.map((exerciseId) => String(exerciseId))
+    );
+    exerciseNames.forEach((exerciseName, index) => {
       const item = document.createElement("li");
+      const exerciseIdForItem = String(plannedExerciseIds[index] ?? "");
       item.textContent = translateText(exerciseName);
+      if (completed.has(exerciseIdForItem)) {
+        item.classList.add("is-complete");
+        const badge = document.createElement("span");
+        badge.className = "patient-plan-exercise-complete";
+        badge.textContent = `✓ ${translateText("Completed")}`;
+        item.append(" ", badge);
+      }
       exerciseList.appendChild(item);
     });
     copy.append(exerciseHeading, exerciseList);
@@ -402,9 +431,16 @@ function planRow({
         plannedExerciseIds,
         sessionDay,
         sessionTitle,
+        sessionKey,
+        completedExerciseIds,
       )
     ));
     row.appendChild(start);
+  } else if (statusLabel) {
+    const status = document.createElement("span");
+    status.className = "patient-plan-row-status";
+    status.textContent = statusLabel;
+    row.appendChild(status);
   }
   return row;
 }
@@ -467,6 +503,9 @@ function renderClinicianPlan(prescriptions) {
   firstSessionExerciseIds = activeExerciseIds;
   firstSessionDay = "";
   firstSessionTitle = "";
+  firstSessionKey = "";
+  firstSessionCompletedExerciseIds = [];
+  planStart.disabled = false;
   planTitle.textContent = translateText("Specialist-assigned programme");
   planScheduleHelp.hidden = true;
   dashboard.classList.remove("wellness-dashboard");
@@ -534,9 +573,13 @@ function renderClinicianPlan(prescriptions) {
 }
 
 function renderWellnessPlan(profile) {
+  firstExerciseId = null;
   firstSessionExerciseIds = [];
   firstSessionDay = "";
   firstSessionTitle = "";
+  firstSessionKey = "";
+  firstSessionCompletedExerciseIds = [];
+  planStart.disabled = false;
   planTitle.textContent = translateText("Your weekly programme");
   planScheduleHelp.hidden = true;
   const screeningStatus =
@@ -647,17 +690,13 @@ function renderWellnessPlan(profile) {
   }
 
   primaryAction = "exercise";
-  firstSessionExerciseIds = (
-    plan.days[0]?.exercise_ids
-    ?? plan.days[0]?.exerciseIds
-    ?? []
-  ).map((exerciseId) => String(exerciseId));
-  firstExerciseId = firstSessionExerciseIds[0] ?? null;
-  firstSessionDay = fullWeekdayName(plan.days[0]?.day, "Session 1");
-  firstSessionTitle = localizableAiPlanSource(
-    plan.days[0]?.title,
-    plan.days[0]?.exercises || "",
+  const acceptedAt = (
+    profile.wellness_plan_accepted_at
+    ?? profile.wellnessPlanAcceptedAt
+    ?? plan.accepted_at
+    ?? "accepted-plan"
   );
+  const completedSessions = currentData?.sessions ?? [];
   planStatus.textContent = "AI plan accepted";
   planStatus.className = "status-pill";
   planScheduleHelp.hidden = false;
@@ -666,7 +705,8 @@ function renderWellnessPlan(profile) {
     `A gradual plan focused on ${plan.goal ?? "Stay active"}.`,
   );
   plan.days.forEach((day, index) => {
-    const exerciseIds = day.exercise_ids ?? day.exerciseIds ?? [];
+    const exerciseIds = (day.exercise_ids ?? day.exerciseIds ?? [])
+      .map((exerciseId) => String(exerciseId));
     const exerciseNames = exerciseIds
       .map((exerciseId) => EXERCISE_MAP[exerciseId]?.name)
       .filter(Boolean);
@@ -675,23 +715,70 @@ function renderWellnessPlan(profile) {
       || exerciseNames.join(" · ")
       || `Session ${index + 1}`;
     const sessionTitle = localizableAiPlanSource(day.title, sessionFallback);
+    const sessionKey = buildPlannedSessionKey({
+      acceptedAt,
+      day: dayName,
+      dayIndex: index,
+      exerciseIds,
+    });
+    const completedExerciseIds = completedExerciseIdsForPlannedSession(
+      completedSessions,
+      sessionKey,
+    );
+    const nextExerciseId = nextIncompleteExerciseId(
+      exerciseIds,
+      completedExerciseIds,
+    );
+    const nextExerciseName = nextExerciseId
+      ? EXERCISE_MAP[nextExerciseId]?.name ?? nextExerciseId
+      : "";
+
+    if (!firstExerciseId && nextExerciseId) {
+      firstExerciseId = nextExerciseId;
+      firstSessionExerciseIds = exerciseIds;
+      firstSessionDay = dayName;
+      firstSessionTitle = sessionTitle;
+      firstSessionKey = sessionKey;
+      firstSessionCompletedExerciseIds = completedExerciseIds;
+    }
+
     planList.appendChild(planRow({
       label: translateText(day.day),
       title: `${translateText(dayName)} ${translateText("session")}`,
       detail: "",
-      exerciseId: exerciseIds[0],
+      exerciseId: nextExerciseId,
       plannedExerciseIds: exerciseIds,
       exerciseNames,
       sessionFocus: sessionTitle,
       dose: day.dosage || WELLNESS_DOSAGE_LABEL,
-      startLabel: `${translateText("Start")} ${translateText(dayName)}`,
+      startLabel: completedExerciseIds.length
+        ? `${translateText("Resume with")} ${translateText(nextExerciseName)}`
+        : `${translateText("Start")} ${translateText(dayName)}`,
       sessionDay: dayName,
       sessionTitle,
+      sessionKey,
+      completedExerciseIds,
+      statusLabel: nextExerciseId ? "" : translateText("Session complete"),
       note:
         "AI draft accepted by you. Stop if you feel unwell or develop new or concerning symptoms.",
     }));
   });
-  planStart.innerHTML = 'Start wellness exercises <span aria-hidden="true">→</span>';
+  if (firstExerciseId) {
+    const hasStartedSession = firstSessionCompletedExerciseIds.length > 0;
+    const nextExerciseName = EXERCISE_MAP[firstExerciseId]?.name ?? firstExerciseId;
+    planStart.replaceChildren(document.createTextNode(
+      hasStartedSession
+        ? `${translateText("Resume with")} ${translateText(nextExerciseName)} `
+        : `${translateText("Start wellness exercises")} `,
+    ));
+    const arrow = document.createElement("span");
+    arrow.setAttribute("aria-hidden", "true");
+    arrow.textContent = "→";
+    planStart.appendChild(arrow);
+  } else {
+    planStart.textContent = translateText("Weekly programme complete");
+    planStart.disabled = true;
+  }
   if (planChange) planChange.hidden = false;
   primaryStart.innerHTML = 'Start today’s exercises <span aria-hidden="true">→</span>';
 }
@@ -903,6 +990,7 @@ function setBookingClinician(prescriptions) {
 
 async function loadDashboardData() {
   if (!currentUser || currentUser.role !== "patient") return;
+  planStart.disabled = false;
   planStatus.textContent = "Loading plan…";
   planIntro.textContent =
     "We are loading the exercises available for your care pathway.";
@@ -1473,6 +1561,8 @@ document
       firstSessionExerciseIds,
       firstSessionDay,
       firstSessionTitle,
+      firstSessionKey,
+      firstSessionCompletedExerciseIds,
     )
   )));
 

@@ -91,6 +91,16 @@ assert.match(
   /sessionDay:\s*dayName[\s\S]*?sessionTitle/,
   "each wellness-plan row should identify its selected day and session focus",
 );
+assert.match(
+  dashboardSource,
+  /buildPlannedSessionKey\([\s\S]*?completedExerciseIdsForPlannedSession\([\s\S]*?nextIncompleteExerciseId\(/,
+  "each wellness-plan day should resume from its first unfinished exercise",
+);
+assert.match(
+  startExerciseSource,
+  /sessionKey[\s\S]*?completedExerciseIds/,
+  "the practice handoff should preserve durable plan-session progress",
+);
 
 const handlerStart = mainSource.indexOf("function handlePracticeRequest(");
 assert.ok(
@@ -326,6 +336,8 @@ const makeStartExercise = new Function(
     ["half-squats", "calf-raises"],
     "Monday",
     "Leg Strength & Ankle Balance",
+    "wellness|2026-08-03|accepted|0|monday|half-squats,calf-raises",
+    ["half-squats"],
   );
 
   assert.deepEqual(viewCalls, ["practice"]);
@@ -342,6 +354,9 @@ const makeStartExercise = new Function(
     plannedExerciseIds: ["half-squats", "calf-raises"],
     sessionDay: "Monday",
     sessionTitle: "Leg Strength & Ankle Balance",
+    sessionKey:
+      "wellness|2026-08-03|accepted|0|monday|half-squats,calf-raises",
+    completedExerciseIds: ["half-squats"],
   });
   assert.equal(practiceDocument.exerciseSelect.value, "half-squats");
   assert.equal(practiceDocument.selectEvents.length, 1);
@@ -391,6 +406,7 @@ const makeStartExercise = new Function(
     dispatchedEvents[0].detail.plannedExerciseIds,
     ["calf-raises"],
   );
+  assert.deepEqual(dispatchedEvents[0].detail.completedExerciseIds, []);
 }
 
 const makeCurrentPracticeIdentity = new Function(

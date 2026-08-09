@@ -15,7 +15,7 @@
     href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="style.css?v=104" />
+  <link rel="stylesheet" href="style.css?v=105" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -263,12 +263,20 @@
         <div class="patient-card-heading">
           <div>
             <p class="eyebrow">My exercise plan</p>
-            <h2 id="patientPlanTitle">Today’s programme</h2>
+            <h2 id="patientPlanTitle">Your weekly programme</h2>
           </div>
           <span class="status-pill" id="patientPlanStatus">Loading plan…</span>
         </div>
         <p class="patient-card-intro" id="patientPlanIntro">
           We are loading the exercises available for your care pathway.
+        </p>
+        <p
+          class="patient-plan-schedule-help"
+          id="patientPlanScheduleHelp"
+          hidden
+        >
+          Each card is one scheduled day. A repeated exercise is the same
+          movement scheduled again on another day.
         </p>
         <aside class="patient-demo-notice" id="patientDemoNotice" hidden>
           <strong>Prototype display programme—not a personal prescription</strong>
@@ -1192,9 +1200,10 @@
 
         <aside class="panel">
           <div class="panel-step">
-            <span>Exercise 1 of 3</span>
-            <span>Today</span>
+            <span id="liveSessionDay">Current session</span>
+            <span id="liveSessionProgress">Exercise 1 of 1</span>
           </div>
+          <p id="liveSessionFocus" class="live-session-focus hidden"></p>
           <div class="personalization-card" id="personalizationCard">
             <div class="personalization-icon" aria-hidden="true">✦</div>
             <div>
@@ -2881,13 +2890,13 @@
   <script src="runtime-config.js"></script>
   <p id="textSizeStatus" class="sr-only" role="status" aria-live="polite"></p>
   <script type="module" src="text-size.js?v=1"></script>
-  <script type="module" src="i18n.js?v=31"></script>
+  <script type="module" src="i18n.js?v=32"></script>
   <script type="module" src="auth.js?v=33"></script>
   <script type="module" src="ui.js?v=34"></script>
-  <script type="module" src="patient-dashboard.js?v=58"></script>
+  <script type="module" src="patient-dashboard.js?v=59"></script>
   <script type="module" src="therapist.js?v=42"></script>
   <script type="module" src="exercise-library.js?v=20"></script>
-  <script type="module" src="main.js?v=139"></script>
+  <script type="module" src="main.js?v=140"></script>
   <script type="module" src="agent-chat.js?v=41"></script>
   <script type="module" src="care-workflow.js?v=19"></script>
 </body>

@@ -2525,6 +2525,17 @@ body.fall-safety-open {
   text-transform: uppercase;
 }
 
+.live-session-focus {
+  margin: -14px 0 18px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  color: #365957;
+  background: #edf6f1;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .personalization-card {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -5379,6 +5390,21 @@ details.metrics summary {
   background: var(--cream);
 }
 
+.patient-plan-schedule-help {
+  margin: -6px 0 18px;
+  padding: 12px 14px;
+  border-left: 4px solid #4d9d70;
+  border-radius: 0 10px 10px 0;
+  color: #365957;
+  background: #edf6f1;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.patient-plan-schedule-help[hidden] {
+  display: none;
+}
+
 .patient-plan-row .patient-plan-marker {
   display: grid;
   width: 40px;
@@ -5407,6 +5433,37 @@ details.metrics summary {
   margin-top: 3px;
   color: var(--muted);
   font-size: 1rem;
+}
+
+.patient-plan-row .patient-plan-exercise-heading {
+  margin-top: 9px;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.patient-plan-exercise-list {
+  display: grid;
+  gap: 5px;
+  margin: 6px 0 0;
+  padding-left: 24px;
+  color: var(--ink);
+}
+
+.patient-plan-exercise-list li {
+  padding-left: 3px;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.patient-plan-row .patient-plan-session-focus,
+.patient-plan-row .patient-plan-dose {
+  margin-top: 7px;
+  color: #536b69;
+  font-size: 1rem;
+  line-height: 1.4;
 }
 
 .patient-plan-row small {

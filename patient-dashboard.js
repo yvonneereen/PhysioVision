@@ -27,7 +27,7 @@ import {
   walkingConfidencePlanNeedsRefresh,
 } from "./patient-dashboard-state.js?v=13";
 import { saveProfile } from "./personalization.js?v=13";
-import { getLocale, translateText } from "./i18n.js?v=31";
+import { getLocale, translateText } from "./i18n.js?v=32";
 import { voiceGuidance } from "./voice-guidance.js?v=41";
 import { EXERCISE_MAP } from "./exercises/registry.js?v=61";
 
@@ -43,7 +43,9 @@ const primaryActions = document.getElementById(
   "patientDashboardPrimaryActions",
 );
 const planStatus = document.getElementById("patientPlanStatus");
+const planTitle = document.getElementById("patientPlanTitle");
 const planIntro = document.getElementById("patientPlanIntro");
+const planScheduleHelp = document.getElementById("patientPlanScheduleHelp");
 const planList = document.getElementById("patientPlanList");
 const planStart = document.getElementById("patientPlanStart");
 const planChange = document.getElementById("patientPlanChange");
@@ -142,6 +144,8 @@ let currentUser = null;
 let currentData = null;
 let firstExerciseId = null;
 let firstSessionExerciseIds = [];
+let firstSessionDay = "";
+let firstSessionTitle = "";
 let pendingPhysiotherapistRefresh = null;
 let primaryAction = "plan";
 let toastTimer = null;
@@ -183,6 +187,21 @@ function localizableAiPlanSource(value, fallback) {
   if (!source) return fallbackText;
   if (getLocale() === "en-SG" || translateText(source) !== source) return source;
   return fallbackText;
+}
+
+const WEEKDAY_NAMES = Object.freeze({
+  mon: "Monday",
+  tue: "Tuesday",
+  wed: "Wednesday",
+  thu: "Thursday",
+  fri: "Friday",
+  sat: "Saturday",
+  sun: "Sunday",
+});
+
+function fullWeekdayName(value, fallback = "") {
+  const day = String(value ?? "").trim();
+  return WEEKDAY_NAMES[day.slice(0, 3).toLowerCase()] ?? (day || fallback);
 }
 
 function setView(mode) {
@@ -250,7 +269,12 @@ function unavailableWellnessExercises(plan) {
   });
 }
 
-function startExercise(exerciseId = firstExerciseId, plannedExerciseIds = []) {
+function startExercise(
+  exerciseId = firstExerciseId,
+  plannedExerciseIds = [],
+  sessionDay = "",
+  sessionTitle = "",
+) {
   if (!exerciseId) {
     if (primaryAction === "ai") {
       openAiCompanion();
@@ -282,6 +306,8 @@ function startExercise(exerciseId = firstExerciseId, plannedExerciseIds = []) {
     profile: Object.keys(patientProfile).length ? patientProfile : null,
     exerciseId,
     plannedExerciseIds: sessionExerciseIds,
+    ...(sessionDay ? { sessionDay } : {}),
+    ...(sessionTitle ? { sessionTitle } : {}),
   };
 
   window.physioVisionPendingPracticeRequest = practiceRequest;
@@ -311,6 +337,12 @@ function planRow({
   detail,
   exerciseId = null,
   plannedExerciseIds = [],
+  exerciseNames = [],
+  sessionFocus = "",
+  dose = "",
+  startLabel = "Start",
+  sessionDay = "",
+  sessionTitle = "",
   note = "",
 }) {
   const row = document.createElement("article");
@@ -325,7 +357,33 @@ function planRow({
   heading.textContent = title;
   const description = document.createElement("span");
   description.textContent = detail;
-  copy.append(heading, description);
+  copy.appendChild(heading);
+  if (detail) copy.appendChild(description);
+  if (exerciseNames.length) {
+    const exerciseHeading = document.createElement("span");
+    exerciseHeading.className = "patient-plan-exercise-heading";
+    exerciseHeading.textContent = translateText("Exercises for this day");
+    const exerciseList = document.createElement("ol");
+    exerciseList.className = "patient-plan-exercise-list";
+    exerciseNames.forEach((exerciseName) => {
+      const item = document.createElement("li");
+      item.textContent = translateText(exerciseName);
+      exerciseList.appendChild(item);
+    });
+    copy.append(exerciseHeading, exerciseList);
+  }
+  if (sessionFocus) {
+    const focus = document.createElement("small");
+    focus.className = "patient-plan-session-focus";
+    focus.textContent = `${translateText("Session focus")}: ${translateText(sessionFocus)}`;
+    copy.appendChild(focus);
+  }
+  if (dose) {
+    const dosage = document.createElement("small");
+    dosage.className = "patient-plan-dose";
+    dosage.textContent = `${translateText("Dose for each exercise")}: ${translateText(dose)}`;
+    copy.appendChild(dosage);
+  }
   if (note) {
     const notes = document.createElement("small");
     notes.textContent = note;
@@ -337,9 +395,14 @@ function planRow({
     const start = document.createElement("button");
     start.className = "text-link";
     start.type = "button";
-    start.textContent = "Start";
+    start.textContent = startLabel;
     start.addEventListener("click", () => (
-      startExercise(exerciseId, plannedExerciseIds)
+      startExercise(
+        exerciseId,
+        plannedExerciseIds,
+        sessionDay,
+        sessionTitle,
+      )
     ));
     row.appendChild(start);
   }
@@ -402,6 +465,10 @@ function renderClinicianPlan(prescriptions) {
   const activeExerciseIds = active.map((item) => String(item.exercise));
   firstExerciseId = active[0]?.exercise ?? null;
   firstSessionExerciseIds = activeExerciseIds;
+  firstSessionDay = "";
+  firstSessionTitle = "";
+  planTitle.textContent = translateText("Specialist-assigned programme");
+  planScheduleHelp.hidden = true;
   dashboard.classList.remove("wellness-dashboard");
   primaryActions.hidden = false;
   dashboardSide.hidden = false;
@@ -468,6 +535,10 @@ function renderClinicianPlan(prescriptions) {
 
 function renderWellnessPlan(profile) {
   firstSessionExerciseIds = [];
+  firstSessionDay = "";
+  firstSessionTitle = "";
+  planTitle.textContent = translateText("Your weekly programme");
+  planScheduleHelp.hidden = true;
   const screeningStatus =
     profile?.wellness_screening_status ??
     profile?.wellnessScreening?.status;
@@ -582,8 +653,14 @@ function renderWellnessPlan(profile) {
     ?? []
   ).map((exerciseId) => String(exerciseId));
   firstExerciseId = firstSessionExerciseIds[0] ?? null;
+  firstSessionDay = fullWeekdayName(plan.days[0]?.day, "Session 1");
+  firstSessionTitle = localizableAiPlanSource(
+    plan.days[0]?.title,
+    plan.days[0]?.exercises || "",
+  );
   planStatus.textContent = "AI plan accepted";
   planStatus.className = "status-pill";
+  planScheduleHelp.hidden = false;
   planIntro.textContent = localizableAiPlanSource(
     plan.summary,
     `A gradual plan focused on ${plan.goal ?? "Stay active"}.`,
@@ -592,17 +669,24 @@ function renderWellnessPlan(profile) {
     const exerciseIds = day.exercise_ids ?? day.exerciseIds ?? [];
     const exerciseNames = exerciseIds
       .map((exerciseId) => EXERCISE_MAP[exerciseId]?.name)
-      .filter(Boolean)
-      .join(" · ");
+      .filter(Boolean);
+    const dayName = fullWeekdayName(day.day, `Session ${index + 1}`);
     const sessionFallback = day.exercises
-      || exerciseNames
+      || exerciseNames.join(" · ")
       || `Session ${index + 1}`;
+    const sessionTitle = localizableAiPlanSource(day.title, sessionFallback);
     planList.appendChild(planRow({
-      label: day.day,
-      title: localizableAiPlanSource(day.title, sessionFallback),
-      detail: `${day.exercises} · ${day.dosage || WELLNESS_DOSAGE_LABEL}`,
+      label: translateText(day.day),
+      title: `${translateText(dayName)} ${translateText("session")}`,
+      detail: "",
       exerciseId: exerciseIds[0],
       plannedExerciseIds: exerciseIds,
+      exerciseNames,
+      sessionFocus: sessionTitle,
+      dose: day.dosage || WELLNESS_DOSAGE_LABEL,
+      startLabel: `${translateText("Start")} ${translateText(dayName)}`,
+      sessionDay: dayName,
+      sessionTitle,
       note:
         "AI draft accepted by you. Stop if you feel unwell or develop new or concerning symptoms.",
     }));
@@ -614,6 +698,7 @@ function renderWellnessPlan(profile) {
 
 function renderPlan(user, prescriptions) {
   planList.innerHTML = "";
+  planScheduleHelp.hidden = true;
   if (planChange) planChange.hidden = true;
   const profile = user.profile ?? {};
   if (isClinicianGuidedProfile(profile)) {
@@ -1383,7 +1468,12 @@ document
 document
   .querySelectorAll("[data-patient-start]")
   .forEach((button) => button.addEventListener("click", () => (
-    startExercise(firstExerciseId, firstSessionExerciseIds)
+    startExercise(
+      firstExerciseId,
+      firstSessionExerciseIds,
+      firstSessionDay,
+      firstSessionTitle,
+    )
   )));
 
 pathwayModal

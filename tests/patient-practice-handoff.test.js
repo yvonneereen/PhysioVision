@@ -86,6 +86,11 @@ assert.match(
   /plannedExerciseIds:\s*exerciseIds/,
   "each wellness-plan row should pass all exercises from that specific day",
 );
+assert.match(
+  dashboardSource,
+  /sessionDay:\s*dayName[\s\S]*?sessionTitle/,
+  "each wellness-plan row should identify its selected day and session focus",
+);
 
 const handlerStart = mainSource.indexOf("function handlePracticeRequest(");
 assert.ok(
@@ -127,6 +132,16 @@ assert.match(
   handlerSource,
   /activeSessionExerciseIds[\s\S]*?detail\.plannedExerciseIds/,
   "the live guide should retain the selected plan session's exercise order",
+);
+assert.match(
+  handlerSource,
+  /activeSessionDay[\s\S]*?detail\.sessionDay[\s\S]*?activeSessionTitle[\s\S]*?detail\.sessionTitle/,
+  "the live guide should retain the selected day and session title",
+);
+assert.match(
+  mainSource,
+  /function renderLiveSessionContext[\s\S]*?liveSessionDayEl[\s\S]*?Exercise \$\{currentPosition\} of \$\{totalExercises\}[\s\S]*?Session focus/,
+  "the live guide should visibly identify the selected day, exercise position, and session focus",
 );
 assert.match(
   mainSource,
@@ -306,7 +321,12 @@ const makeStartExercise = new Function(
     FakeEvent,
   );
 
-  startExercise("half-squats", ["half-squats", "calf-raises"]);
+  startExercise(
+    "half-squats",
+    ["half-squats", "calf-raises"],
+    "Monday",
+    "Leg Strength & Ankle Balance",
+  );
 
   assert.deepEqual(viewCalls, ["practice"]);
   assert.equal(bridgeCalls.length, 1);
@@ -320,6 +340,8 @@ const makeStartExercise = new Function(
     },
     exerciseId: "half-squats",
     plannedExerciseIds: ["half-squats", "calf-raises"],
+    sessionDay: "Monday",
+    sessionTitle: "Leg Strength & Ankle Balance",
   });
   assert.equal(practiceDocument.exerciseSelect.value, "half-squats");
   assert.equal(practiceDocument.selectEvents.length, 1);

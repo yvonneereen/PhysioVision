@@ -43,6 +43,7 @@ import {
 } from "./api.js?v=32";
 import { analysePatientTrend } from "./patient-dashboard-state.js?v=13";
 import { DRAFT_EXERCISES } from "./exercises/catalog.js?v=3";
+import { translateText } from "./i18n.js?v=32";
 import {
   parseConfirmationResponse,
   parsePainLevel,
@@ -142,6 +143,9 @@ const exerciseCompletionNotYetBtn = document.getElementById(
   "exerciseCompletionNotYet"
 );
 const cameraSessionHintEl = document.getElementById("cameraSessionHint");
+const liveSessionDayEl = document.getElementById("liveSessionDay");
+const liveSessionProgressEl = document.getElementById("liveSessionProgress");
+const liveSessionFocusEl = document.getElementById("liveSessionFocus");
 const movementAiStatusEl = document.getElementById("movementAiStatus");
 const fpsEl       = document.getElementById("fps");
 const exSelect    = document.getElementById("exerciseSelect");
@@ -302,6 +306,8 @@ let authenticatedPatientProfile =
     : null;
 let practiceIdentityOverride = null;
 let activeSessionExerciseIds = [];
+let activeSessionDay = "";
+let activeSessionTitle = "";
 let prescriptionsLoaded =
   authenticatedRole !== "patient" ||
   window.sessionStorage.getItem("physiovision.prescriptions.v1") !== null;
@@ -2344,6 +2350,35 @@ function firstAccessibleExercise() {
   });
 }
 
+function renderLiveSessionContext(exerciseId = engine?.exercise?.id) {
+  const normalizedExerciseId = String(exerciseId ?? "");
+  const sessionExerciseIds = activeSessionExerciseIds.length
+    ? activeSessionExerciseIds
+    : normalizedExerciseId
+      ? [normalizedExerciseId]
+      : [];
+  const selectedIndex = sessionExerciseIds.indexOf(normalizedExerciseId);
+  const currentPosition = selectedIndex >= 0 ? selectedIndex + 1 : 1;
+  const totalExercises = Math.max(1, sessionExerciseIds.length);
+
+  if (liveSessionDayEl) {
+    liveSessionDayEl.textContent = activeSessionDay
+      ? `${translateText(activeSessionDay)} ${translateText("session")}`
+      : translateText("Current session");
+  }
+  if (liveSessionProgressEl) {
+    liveSessionProgressEl.textContent = translateText(
+      `Exercise ${currentPosition} of ${totalExercises}`
+    );
+  }
+  if (liveSessionFocusEl) {
+    liveSessionFocusEl.textContent = activeSessionTitle
+      ? `${translateText("Session focus")}: ${translateText(activeSessionTitle)}`
+      : "";
+    liveSessionFocusEl.classList.toggle("hidden", !activeSessionTitle);
+  }
+}
+
 refreshExerciseAccess();
 
 sideSelect.value = profile.focusSide;
@@ -2361,6 +2396,7 @@ renderStaticPhaseFlow(engine);
 renderPersonalization();
 renderExerciseImage(engine.exercise);
 configureFallMonitoring(engine.exercise);
+renderLiveSessionContext(engine.exercise.id);
 
 exSelect.addEventListener("change", () => {
   cancelCameraSetupCountdown({ announce: false });
@@ -2400,6 +2436,7 @@ exSelect.addEventListener("change", () => {
   setFeedbackBanner("ready");
   renderPersonalization();
   configureFallMonitoring(engine.exercise);
+  renderLiveSessionContext(engine.exercise.id);
 });
 
 sideSelect.addEventListener("change", () => {
@@ -2493,6 +2530,8 @@ function handlePracticeRequest(detail = {}) {
       .map((item) => String(item))
       .filter(Boolean)
   )];
+  activeSessionDay = String(detail.sessionDay ?? "").trim();
+  activeSessionTitle = String(detail.sessionTitle ?? "").trim();
 
   practiceIdentityOverride = requestedRole
     ? {
@@ -2515,6 +2554,7 @@ function handlePracticeRequest(detail = {}) {
   }
 
   syncPracticeAccess();
+  renderLiveSessionContext(detail.exerciseId ?? engine?.exercise?.id);
 }
 
 window.physioVisionOpenPractice = handlePracticeRequest;
@@ -2527,6 +2567,10 @@ const pendingPracticeRequest = window.physioVisionPendingPracticeRequest;
 if (pendingPracticeRequest) {
   handlePracticeRequest(pendingPracticeRequest);
 }
+
+window.addEventListener("physiovision:language-change", () => {
+  renderLiveSessionContext(engine?.exercise?.id);
+});
 
 window.addEventListener("physiovision:prescriptions-updated", (event) => {
   preExerciseCheckinCompleted = false;

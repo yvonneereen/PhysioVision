@@ -256,7 +256,7 @@ class PatientProfile(TimestampedModel):
 
 
 class EmergencyContactVerificationChallenge(TimestampedModel):
-    """Short-lived SMS code used to verify an emergency-contact number."""
+    """Short-lived spoken code used to verify an emergency-contact number."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     patient = models.OneToOneField(
@@ -370,6 +370,102 @@ class ClinicianProfile(TimestampedModel):
 
     def __str__(self) -> str:
         return f"Clinician: {self.user}"
+
+
+class ClinicianAiSession(TimestampedModel):
+    """A durable, private assistant conversation owned by one clinician."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    clinician = models.ForeignKey(
+        ClinicianProfile,
+        on_delete=models.CASCADE,
+        related_name="ai_sessions",
+    )
+    title = models.CharField(max_length=120, default="New AI session")
+
+    class Meta:
+        db_table = "core_clinicianaisession"
+        ordering = ["-updated_at"]
+        indexes = [
+            models.Index(
+                fields=["clinician", "updated_at"],
+                name="core_ai_sess_clin_upd_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.clinician.user})"
+
+
+class ClinicianAiMessageRole(models.TextChoices):
+    USER = "user", _("Clinician")
+    ASSISTANT = "assistant", _("AI assistant")
+    ERROR = "error", _("Assistant error")
+
+
+class ClinicianAiMessage(TimestampedModel):
+    """One question or response in a clinician's saved AI session."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    session = models.ForeignKey(
+        ClinicianAiSession,
+        on_delete=models.CASCADE,
+        related_name="messages",
+    )
+    role = models.CharField(
+        max_length=10,
+        choices=ClinicianAiMessageRole.choices,
+    )
+    body = models.TextField()
+    command = models.CharField(max_length=40, blank=True)
+    data = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "core_clinicianaimessage"
+        ordering = ["created_at"]
+        indexes = [
+            models.Index(
+                fields=["session", "created_at"],
+                name="core_ai_msg_sess_created_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.role} message in {self.session.title}"
+
+
+class CareDischarge(TimestampedModel):
+    """Auditable end of a patient's active link to a physiotherapist."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    patient = models.ForeignKey(
+        PatientProfile,
+        on_delete=models.CASCADE,
+        related_name="care_discharges",
+    )
+    clinician = models.ForeignKey(
+        ClinicianProfile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="care_discharges_made",
+    )
+    note = models.TextField(blank=True)
+    prescriptions_ended = models.PositiveSmallIntegerField(default=0)
+    consultations_cancelled = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        db_table = "core_caredischarge"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["patient", "created_at"],
+                name="core_discharge_pat_created_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Care discharge for {self.patient.user}"
 
 
 class SlackLinkCode(TimestampedModel):

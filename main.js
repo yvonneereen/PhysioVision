@@ -661,7 +661,7 @@ function updateFallContactNotice(alert) {
   if (alert.contact_ready && alert.status === "pending") {
     const who = alert.contact_name || "your verified emergency contact";
     fallSafetyContactNotice.textContent =
-      `If you do not respond, PhysioVision will request a call and text to ${who}. It will not call 995.`;
+      `If you do not respond, PhysioVision will request an automated call to ${who}. It will not call 995.`;
     fallSafetyCountdownLabel.textContent =
       `seconds to answer before ${who} is alerted`;
     return;
@@ -723,20 +723,20 @@ function renderFallAlertDelivery(alert) {
   if (alert.status === "notified") {
     setFallAlertStatus(
       "sent",
-      `Call and text requested for ${who}`,
-      "The provider accepted both notification requests. This does not mean the contact answered, and no ambulance was dispatched."
+      `Call requested for ${who}`,
+      "Vonage accepted the call request. This does not mean the contact answered, and no ambulance was dispatched."
     );
   } else if (alert.status === "partial") {
     setFallAlertStatus(
-      "pending",
-      `Only one alert channel reached ${who}`,
-      "Either the call or text request failed. Use Call 995 or another phone if urgent."
+      "error",
+      `The automatic call to ${who} was not confirmed`,
+      "Use Call 995 or another phone if urgent."
     );
   } else if (["pending", "notifying"].includes(alert.status)) {
     setFallAlertStatus(
       "pending",
       `Contacting ${who}…`,
-      "A call and text are being requested. No ambulance has been dispatched."
+      "An automated call is being requested. No ambulance has been dispatched."
     );
   } else {
     setFallAlertStatus(

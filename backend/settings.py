@@ -261,14 +261,17 @@ AUTH_TOKEN_TTL_HOURS = env.int('AUTH_TOKEN_TTL_HOURS', default=12)
 
 # Automatic fall notifications contact only the patient's verified emergency
 # contact. They never dial emergency-service numbers. Keep disabled until a
-# compliant Singapore-capable outbound number and worker are configured.
+# compliant Singapore-capable outbound caller and worker are configured.
 EMERGENCY_ALERT_PROVIDER = env(
     'EMERGENCY_ALERT_PROVIDER',
     default='disabled',
 ).strip().lower()
-TWILIO_ACCOUNT_SID = env('TWILIO_ACCOUNT_SID', default='')
-TWILIO_AUTH_TOKEN = env('TWILIO_AUTH_TOKEN', default='')
-TWILIO_FROM_NUMBER = env('TWILIO_FROM_NUMBER', default='')
+VONAGE_APPLICATION_ID = env('VONAGE_APPLICATION_ID', default='')
+VONAGE_PRIVATE_KEY = env('VONAGE_PRIVATE_KEY', default='')
+VONAGE_FROM_NUMBER = env('VONAGE_FROM_NUMBER', default='')
+# Free Vonage demo accounts may call only a verified number. This allowlist is
+# also a safety control: emergency alerts cannot be redirected to another phone.
+VONAGE_DEMO_TO_NUMBER = env('VONAGE_DEMO_TO_NUMBER', default='')
 EMERGENCY_ALERT_DELAY_SECONDS = env.int(
     'EMERGENCY_ALERT_DELAY_SECONDS',
     default=60,

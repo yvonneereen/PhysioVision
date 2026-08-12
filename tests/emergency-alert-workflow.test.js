@@ -16,7 +16,9 @@ assert.match(markup, /id="fallSafetyCountdown">60</);
 
 assert.match(ui, /startEmergencyContactVerification\(\)/);
 assert.match(ui, /confirmEmergencyContactVerification\(code\)/);
-assert.match(ui, /Your contact must share the texted code/);
+assert.match(ui, /code spoken during the verification call/);
+assert.match(main, /request an automated call/);
+assert.doesNotMatch(main, /call and text/i);
 assert.match(api, /export async function createEmergencyAlert/);
 assert.match(api, /export async function respondEmergencyAlert/);
 

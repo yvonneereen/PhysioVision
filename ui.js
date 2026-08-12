@@ -205,7 +205,7 @@ const WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions";
       emergencyContactVerificationTitle.textContent =
         "Verified and ready for automatic alerts";
       emergencyContactVerificationDetail.textContent =
-        "After a possible fall, no response can trigger both a call and text to this contact.";
+        "After a possible fall, no response can trigger an automated call to this contact.";
     } else if (verified) {
       emergencyContactVerificationTitle.textContent = "Phone number verified";
       emergencyContactVerificationDetail.textContent =
@@ -214,7 +214,7 @@ const WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions";
       emergencyContactVerificationTitle.textContent =
         "Phone verification required";
       emergencyContactVerificationDetail.textContent =
-        "Your contact must share the texted code before automatic fall alerts can call or text them.";
+        "Your contact must share the code spoken during the verification call before automatic fall alerts can call them.";
     }
     emergencyContactSendCode.textContent = verified
       ? "Send new code"
@@ -848,12 +848,12 @@ const WELLNESS_DOSAGE_LABEL = "1 set of 6–10 repetitions";
       await startEmergencyContactVerification();
       emergencyContactCodeEntry.hidden = false;
       emergencyContactVerificationStatus.textContent =
-        "Code sent. Ask your contact to share the 6-digit code with you.";
+        "Verification call requested. Ask your contact to share the 6-digit code spoken during the call.";
       emergencyContactCode.value = "";
       emergencyContactCode.focus();
     } catch (error) {
       emergencyContactVerificationStatus.textContent =
-        error.message || "The verification code could not be sent.";
+        error.message || "The verification call could not be requested.";
     } finally {
       renderEmergencyContactVerification(loadProfile());
     }

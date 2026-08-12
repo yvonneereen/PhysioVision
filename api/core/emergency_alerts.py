@@ -1,13 +1,14 @@
-import base64
 import json
 import logging
 import math
 import secrets
+import time
+import uuid
 from datetime import timedelta
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
 from urllib.request import Request, urlopen
-from xml.sax.saxutils import escape
+
+import jwt
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class EmergencyNotificationError(Exception):
-    """Raised when an SMS or voice notification cannot be requested."""
+    """Raised when an emergency-contact call cannot be requested."""
 
 
 class EmergencyVerificationCooldown(Exception):
@@ -42,10 +43,11 @@ class EmergencyVerificationDeliveryError(Exception):
 
 def emergency_provider_ready():
     return (
-        settings.EMERGENCY_ALERT_PROVIDER == "twilio"
-        and bool(settings.TWILIO_ACCOUNT_SID)
-        and bool(settings.TWILIO_AUTH_TOKEN)
-        and bool(settings.TWILIO_FROM_NUMBER)
+        settings.EMERGENCY_ALERT_PROVIDER == "vonage"
+        and bool(settings.VONAGE_APPLICATION_ID)
+        and bool(settings.VONAGE_PRIVATE_KEY)
+        and bool(settings.VONAGE_FROM_NUMBER)
+        and bool(settings.VONAGE_DEMO_TO_NUMBER)
     )
 
 
@@ -56,33 +58,80 @@ def emergency_contact_ready(profile):
         and profile.emergency_contact_name
         and profile.emergency_contact_phone
         and profile.emergency_contact_verified_at
+        and vonage_demo_recipient_allowed(profile.emergency_contact_phone)
     )
 
 
 def normalize_outbound_phone(phone):
     digits = "".join(character for character in phone if character.isdigit())
-    return f"+{digits}"
+    return digits
 
 
-def _twilio_post(resource, payload):
+def vonage_demo_recipient_allowed(phone):
+    configured_digits = normalize_outbound_phone(
+        settings.VONAGE_DEMO_TO_NUMBER,
+    )
+    return bool(
+        configured_digits
+        and normalize_outbound_phone(phone) == configured_digits
+    )
+
+
+def _vonage_private_key():
+    # Render preserves multiline secret values. Replacing escaped newlines also
+    # supports keys pasted as a single-line environment variable.
+    return settings.VONAGE_PRIVATE_KEY.strip().replace("\\n", "\n")
+
+
+def _vonage_access_token():
+    now = int(time.time())
+    try:
+        return jwt.encode(
+            {
+                "application_id": settings.VONAGE_APPLICATION_ID,
+                "iat": now,
+                "nbf": now,
+                "exp": now + 300,
+                "jti": str(uuid.uuid4()),
+            },
+            _vonage_private_key(),
+            algorithm="RS256",
+        )
+    except (jwt.PyJWTError, ValueError, TypeError) as exc:
+        raise EmergencyNotificationError(
+            "The Vonage application ID or private key is invalid."
+        ) from exc
+
+
+def _vonage_call(phone, message):
     if not emergency_provider_ready():
         raise EmergencyNotificationError(
             "Automatic contact alerts are not configured on this server."
         )
-    account_sid = settings.TWILIO_ACCOUNT_SID
-    url = (
-        "https://api.twilio.com/2010-04-01/Accounts/"
-        f"{account_sid}/{resource}.json"
-    )
-    token = base64.b64encode(
-        f"{account_sid}:{settings.TWILIO_AUTH_TOKEN}".encode("utf-8")
-    ).decode("ascii")
+    if not vonage_demo_recipient_allowed(phone):
+        raise EmergencyNotificationError(
+            "This Vonage demo can call only the verified demo number."
+        )
+    payload = {
+        "to": [{
+            "type": "phone",
+            "number": normalize_outbound_phone(phone),
+        }],
+        "from": {
+            "type": "phone",
+            "number": normalize_outbound_phone(settings.VONAGE_FROM_NUMBER),
+        },
+        "ncco": [{
+            "action": "talk",
+            "text": message,
+        }],
+    }
     request = Request(
-        url,
-        data=urlencode(payload).encode("utf-8"),
+        "https://api.nexmo.com/v1/calls",
+        data=json.dumps(payload).encode("utf-8"),
         headers={
-            "Authorization": f"Basic {token}",
-            "Content-Type": "application/x-www-form-urlencoded",
+            "Authorization": f"Bearer {_vonage_access_token()}",
+            "Content-Type": "application/json",
         },
         method="POST",
     )
@@ -98,39 +147,22 @@ def _twilio_post(resource, payload):
         raise EmergencyNotificationError(
             "The notification provider could not be reached."
         ) from exc
-    message_id = str(result.get("sid", "")).strip()
-    if not message_id:
+    call_id = str(result.get("uuid", "")).strip()
+    if not call_id:
         raise EmergencyNotificationError(
-            "The notification provider did not return a request ID."
+            "Vonage did not return a call ID."
         )
-    return message_id
-
-
-def send_emergency_sms(phone, message):
-    return _twilio_post("Messages", {
-        "To": normalize_outbound_phone(phone),
-        "From": settings.TWILIO_FROM_NUMBER,
-        "Body": message,
-    })
+    return call_id
 
 
 def place_emergency_voice_call(phone, message):
-    # Twilio calls the saved contact, never an emergency-service number.
+    # Vonage calls the saved contact, never an emergency-service number.
     digits = "".join(character for character in phone if character.isdigit())
     if digits in {"995", "999", "112", "911"}:
         raise EmergencyNotificationError(
             "Emergency-service numbers cannot be used as saved contacts."
         )
-    twiml = (
-        "<Response><Say voice=\"alice\">"
-        f"{escape(message)}"
-        "</Say></Response>"
-    )
-    return _twilio_post("Calls", {
-        "To": normalize_outbound_phone(phone),
-        "From": settings.TWILIO_FROM_NUMBER,
-        "Twiml": twiml,
-    })
+    return _vonage_call(phone, message)
 
 
 def issue_emergency_contact_verification(profile):
@@ -144,6 +176,11 @@ def issue_emergency_contact_verification(profile):
         and profile.emergency_contact_phone
     ):
         raise ValueError("Save complete, consented contact details first.")
+    if not vonage_demo_recipient_allowed(profile.emergency_contact_phone):
+        raise ValueError(
+            "For this Vonage demo, use the verified phone number configured "
+            "on the server."
+        )
 
     with transaction.atomic():
         profile = PatientProfile.objects.select_for_update().get(pk=profile.pk)
@@ -174,16 +211,15 @@ def issue_emergency_contact_verification(profile):
             ),
         )
 
-    patient_name = profile.user.get_full_name().strip() or "A PhysioVision user"
     try:
-        send_emergency_sms(
+        place_emergency_voice_call(
             profile.emergency_contact_phone,
             (
-                f"{patient_name} asked to list this number as their "
-                "PhysioVision emergency contact. Verification code: "
-                f"{code}. Sharing this code confirms that automated fall "
-                "alerts may call or text this number. PhysioVision does not "
-                "call emergency services."
+                "PhysioVision emergency contact verification. Your six digit "
+                f"code is {', '.join(code)}. I repeat, {', '.join(code)}. "
+                "Share this code with the PhysioVision user to confirm that "
+                "automated possible-fall alerts may call this number. "
+                "PhysioVision does not call emergency services."
             ),
         )
     except EmergencyNotificationError as exc:
@@ -247,13 +283,6 @@ def deliver_emergency_notification(alert):
     message = emergency_alert_message(alert)
     results = {"sms_message_id": "", "voice_call_id": ""}
     errors = []
-    try:
-        results["sms_message_id"] = send_emergency_sms(
-            alert.contact_phone,
-            message,
-        )
-    except EmergencyNotificationError as exc:
-        errors.append(f"SMS: {exc}")
     try:
         results["voice_call_id"] = place_emergency_voice_call(
             alert.contact_phone,

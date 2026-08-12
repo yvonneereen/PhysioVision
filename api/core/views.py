@@ -2,6 +2,7 @@ import hashlib
 import logging
 import secrets
 import string
+import uuid
 from datetime import timedelta
 
 from django.conf import settings
@@ -16,6 +17,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
+from rest_framework.decorators import action
 
 from .ai import generate_agent_reply
 from .clinician_assistant import dispatch_clinician_command
@@ -41,8 +43,12 @@ from .login_verification import (
     verify_login_code,
 )
 from .models import (
+    CareDischarge,
     CareInvitation,
     CarePath,
+    ClinicianAiMessage,
+    ClinicianAiMessageRole,
+    ClinicianAiSession,
     EmergencyAlert,
     EmergencyAlertResponse,
     EmergencyAlertStatus,
@@ -71,12 +77,15 @@ from .serializers import (
     CareInvitationAcceptSerializer,
     CareInvitationSerializer,
     ClinicianProfileSerializer,
+    ClinicianAiSessionDetailSerializer,
+    ClinicianAiSessionSerializer,
     EmergencyAlertCreateSerializer,
     EmergencyAlertResponseSerializer,
     EmergencyAlertSerializer,
     EmergencyContactVerificationCodeSerializer,
     ForgotPasswordSerializer,
     LoginSerializer,
+    PatientDischargeSerializer,
     PatientListSerializer,
     PatientPathwayChoiceSerializer,
     PatientProfileSerializer,
@@ -160,6 +169,135 @@ class PatientViewSet(ReadOnlyModelViewSet):
             .select_related('user')
             .prefetch_related('sessions', 'escalations', 'prescriptions', 'prescriptions__exercise', 'pain_checkins')
         )
+
+    @action(detail=True, methods=['post'])
+    def discharge(self, request, pk=None):
+        """End active clinical care without deleting the patient or history."""
+        serializer = PatientDischargeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        clinician = request.user.clinician_profile
+
+        with transaction.atomic():
+            patient = (
+                PatientProfile.objects.select_for_update()
+                .select_related('user')
+                .filter(
+                    pk=pk,
+                    primary_clinician=clinician,
+                    user__role=UserRole.PATIENT,
+                )
+                .first()
+            )
+            if not patient:
+                return Response(
+                    {'detail': 'This patient is not in your active roster.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            from api.catalogue.models import Prescription
+            from api.consultations.models import (
+                CareMessage,
+                Consultation,
+                ConsultationStatus,
+                EscalationStatus,
+                MessageSender,
+            )
+
+            if patient.escalations.filter(status=EscalationStatus.OPEN).exists():
+                return Response(
+                    {
+                        'detail': (
+                            'Resolve the patient’s open safety-review flags '
+                            'before discharging them.'
+                        )
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            prescriptions_ended = Prescription.objects.filter(
+                patient=patient,
+                clinician=clinician,
+                is_active=True,
+            ).update(is_active=False)
+            consultations_cancelled = Consultation.objects.filter(
+                patient=patient,
+                clinician=clinician,
+                status__in=[
+                    ConsultationStatus.REQUESTED,
+                    ConsultationStatus.CONFIRMED,
+                ],
+            ).update(status=ConsultationStatus.CANCELLED)
+
+            note = serializer.validated_data.get('note', '')
+            discharge = CareDischarge.objects.create(
+                patient=patient,
+                clinician=clinician,
+                note=note,
+                prescriptions_ended=prescriptions_ended,
+                consultations_cancelled=consultations_cancelled,
+            )
+
+            clinician_name = (
+                request.user.get_full_name().strip() or request.user.email
+            )
+            notification_body = (
+                f'{clinician_name} has discharged you from active '
+                'physiotherapy care. Your exercise and care history remain '
+                'saved, and you can request physiotherapist support again '
+                'later if needed.'
+            )
+            if note:
+                notification_body += f' Discharge note: {note}'
+            CareMessage.objects.create(
+                patient=patient,
+                clinician=clinician,
+                sender=MessageSender.CLINICIAN,
+                body=notification_body,
+            )
+
+            patient.primary_clinician = None
+            patient.pathway_choice = PatientPathwayChoice.UNSELECTED
+            patient.pathway_selected_at = None
+            patient.physiotherapist_requested_at = None
+            patient.care_path = CarePath.WELLNESS
+            patient.slack_thread_ts = ''
+            patient.save(update_fields=[
+                'primary_clinician',
+                'pathway_choice',
+                'pathway_selected_at',
+                'physiotherapist_requested_at',
+                'care_path',
+                'slack_thread_ts',
+                'updated_at',
+            ])
+
+        email_sent = False
+        try:
+            deliver_email(
+                subject='Your PhysioVision physiotherapy care has ended',
+                message=(
+                    f'Hello {patient.user.first_name or "there"},\n\n'
+                    f'{notification_body}\n\n'
+                    'Sign in to PhysioVision whenever you want to choose your '
+                    'next pathway.'
+                ),
+                recipient=patient.user.email,
+            )
+            email_sent = True
+        except EmailDeliveryError:
+            logger.exception(
+                'Discharge email could not be delivered for patient %s',
+                patient.id,
+            )
+
+        return Response({
+            'id': str(discharge.id),
+            'patient': str(patient.id),
+            'detail': 'Patient discharged from active physiotherapy care.',
+            'prescriptions_ended': prescriptions_ended,
+            'consultations_cancelled': consultations_cancelled,
+            'email_sent': email_sent,
+        })
 
 
 class RegisterView(APIView):
@@ -715,7 +853,8 @@ class EmergencyContactVerificationStartView(APIView):
             )
         return Response({
             'detail': (
-                'A verification code was texted to your emergency contact.'
+                'A verification call was requested. Ask your emergency '
+                'contact for the six-digit code spoken during the call.'
             ),
             'expires_at': challenge.expires_at,
         })
@@ -1046,6 +1185,7 @@ class AgentChatView(APIView):
     def post(self, request):
         message = str(request.data.get('message', '')).strip()
         raw_history = request.data.get('history', [])
+        requested_session_id = str(request.data.get('session_id', '')).strip()
 
         if not message:
             return Response(
@@ -1074,6 +1214,60 @@ class AgentChatView(APIView):
                 if role in {'user', 'assistant'} and content:
                     history.append({'role': role, 'content': content})
 
+        clinician_session = None
+        clinician = getattr(request.user, 'clinician_profile', None)
+        if request.user.role == UserRole.CLINICIAN and clinician is not None:
+            if requested_session_id:
+                try:
+                    parsed_session_id = uuid.UUID(requested_session_id)
+                except (ValueError, AttributeError):
+                    return Response(
+                        {'detail': 'Assistant session not found.'},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+                clinician_session = ClinicianAiSession.objects.filter(
+                    id=parsed_session_id,
+                    clinician=clinician,
+                ).first()
+                if clinician_session is None:
+                    return Response(
+                        {'detail': 'Assistant session not found.'},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+            else:
+                compact_title = ' '.join(message.split())
+                title = (
+                    f'{compact_title[:77]}…'
+                    if len(compact_title) > 80
+                    else compact_title
+                )
+                clinician_session = ClinicianAiSession.objects.create(
+                    clinician=clinician,
+                    title=title or 'New AI session',
+                )
+
+            # The server-owned transcript is authoritative for clinician
+            # sessions. This prevents another browser from supplying a false
+            # or mismatched conversation history.
+            previous_messages = list(
+                clinician_session.messages.filter(
+                    role__in=[
+                        ClinicianAiMessageRole.USER,
+                        ClinicianAiMessageRole.ASSISTANT,
+                    ],
+                ).order_by('-created_at')[:8]
+            )
+            history = [
+                {'role': item.role, 'content': item.body[:2000]}
+                for item in reversed(previous_messages)
+            ]
+            ClinicianAiMessage.objects.create(
+                session=clinician_session,
+                role=ClinicianAiMessageRole.USER,
+                body=message,
+            )
+            clinician_session.save(update_fields=['updated_at'])
+
         try:
             command_result = (
                 dispatch_clinician_command(request.user, message)
@@ -1092,8 +1286,17 @@ class AgentChatView(APIView):
             )
         except Exception:
             logger.exception('Gemini request failed')
+            error_data = {'detail': 'The assistant is unavailable.'}
+            if clinician_session is not None:
+                ClinicianAiMessage.objects.create(
+                    session=clinician_session,
+                    role=ClinicianAiMessageRole.ERROR,
+                    body='The assistant is unavailable. Your question was saved; please try again later.',
+                )
+                clinician_session.save(update_fields=['updated_at'])
+                error_data['session_id'] = str(clinician_session.id)
             return Response(
-                {'detail': 'The assistant is unavailable.'},
+                error_data,
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
@@ -1108,7 +1311,65 @@ class AgentChatView(APIView):
             })
             if 'data' in command_result:
                 response_data['data'] = command_result['data']
+        if clinician_session is not None:
+            ClinicianAiMessage.objects.create(
+                session=clinician_session,
+                role=ClinicianAiMessageRole.ASSISTANT,
+                body=reply,
+                command=(command_result or {}).get('command', ''),
+                data=(command_result or {}).get('data') or {},
+            )
+            clinician_session.save(update_fields=['updated_at'])
+            response_data['session_id'] = str(clinician_session.id)
+            response_data['session'] = ClinicianAiSessionSerializer(
+                ClinicianAiSession.objects.prefetch_related('messages').get(
+                    pk=clinician_session.pk,
+                )
+            ).data
         return Response(response_data)
+
+
+class ClinicianAiSessionListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        clinician = getattr(request.user, 'clinician_profile', None)
+        if request.user.role != UserRole.CLINICIAN or clinician is None:
+            return Response(
+                {'detail': 'Clinician access is required.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        sessions = (
+            ClinicianAiSession.objects.filter(clinician=clinician)
+            .prefetch_related('messages')
+        )
+        return Response(ClinicianAiSessionSerializer(sessions, many=True).data)
+
+
+class ClinicianAiSessionDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, session_id):
+        clinician = getattr(request.user, 'clinician_profile', None)
+        if request.user.role != UserRole.CLINICIAN or clinician is None:
+            return Response(
+                {'detail': 'Clinician access is required.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        session = (
+            ClinicianAiSession.objects.filter(
+                id=session_id,
+                clinician=clinician,
+            )
+            .prefetch_related('messages')
+            .first()
+        )
+        if session is None:
+            return Response(
+                {'detail': 'Assistant session not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(ClinicianAiSessionDetailSerializer(session).data)
 
 
 class SafetyLanguageInterpretationView(APIView):

@@ -11,3 +11,4 @@ google-genai>=2.3.0
 google-api-python-client>=2.170
 google-auth>=2.40
 pypdf>=5.0
+PyJWT[crypto]>=2.10,<3.0

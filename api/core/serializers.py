@@ -9,6 +9,8 @@ from .analytics import adherence_pct, parse_days_per_week, session_quality_trend
 from .models import (
     ActivityLevel,
     CareInvitation,
+    ClinicianAiMessage,
+    ClinicianAiSession,
     ClinicianProfile,
     CueStyle,
     EmergencyAlert,
@@ -493,6 +495,60 @@ class ClinicianProfileSerializer(serializers.ModelSerializer):
         return bool(obj.slack_user_id)
 
 
+class ClinicianAiMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ClinicianAiMessage
+        fields = [
+            'id', 'role', 'body', 'command', 'data',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = fields
+
+
+class ClinicianAiSessionSerializer(serializers.ModelSerializer):
+    message_count = serializers.SerializerMethodField()
+    preview = serializers.SerializerMethodField()
+    contains_plan = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ClinicianAiSession
+        fields = [
+            'id', 'title', 'preview', 'message_count', 'contains_plan',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = fields
+
+    def _messages(self, obj):
+        prefetched = getattr(obj, '_prefetched_objects_cache', {}).get('messages')
+        if prefetched is not None:
+            return list(prefetched)
+        return list(obj.messages.all())
+
+    def get_message_count(self, obj):
+        return len(self._messages(obj))
+
+    def get_preview(self, obj):
+        messages = self._messages(obj)
+        if not messages:
+            return ''
+        body = ' '.join(messages[-1].body.split())
+        return f'{body[:117]}…' if len(body) > 120 else body
+
+    def get_contains_plan(self, obj):
+        return any(
+            message.command in {'build_plan', 'revise_plan'}
+            and bool(message.data)
+            for message in self._messages(obj)
+        )
+
+
+class ClinicianAiSessionDetailSerializer(ClinicianAiSessionSerializer):
+    messages = ClinicianAiMessageSerializer(many=True, read_only=True)
+
+    class Meta(ClinicianAiSessionSerializer.Meta):
+        fields = ClinicianAiSessionSerializer.Meta.fields + ['messages']
+
+
 class PatientListSerializer(serializers.ModelSerializer):
     full_name             = serializers.SerializerMethodField()
     email                 = serializers.EmailField(source='user.email', read_only=True)
@@ -556,3 +612,20 @@ class PatientListSerializer(serializers.ModelSerializer):
             'reps':          rx.reps,
             'days_per_week': rx.days_per_week,
         }
+
+
+class PatientDischargeSerializer(serializers.Serializer):
+    confirmed = serializers.BooleanField()
+    note = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        max_length=500,
+    )
+
+    def validate_confirmed(self, value):
+        if value is not True:
+            raise serializers.ValidationError(
+                'Confirm that you intend to discharge this patient.'
+            )
+        return value

@@ -6829,6 +6829,51 @@ details.metrics summary {
 .detail-head h3 { margin: 0; font-family: var(--font-display); }
 .detail-head p { margin: 2px 0 0; color: var(--muted); font-size: 1rem; }
 .detail-head-right { display: flex; align-items: center; gap: 10px; }
+.button-discharge {
+  color: #fff;
+  background: var(--coral-dark);
+  box-shadow: none;
+}
+.button-discharge:hover { background: #a93625; }
+.discharge-confirm {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(260px, .8fr);
+  gap: 14px 20px;
+  align-items: start;
+  margin: 0 0 16px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--coral) 55%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--coral) 9%, var(--white));
+}
+.discharge-confirm.hidden { display: none; }
+.discharge-confirm p { margin: 5px 0 0; color: var(--muted); }
+.discharge-confirm label { display: grid; gap: 6px; font-weight: 700; }
+.discharge-confirm textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+  resize: vertical;
+}
+.discharge-confirm-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.discharge-error {
+  grid-column: 1 / -1;
+  margin: 0 !important;
+  color: var(--coral-dark) !important;
+  font-weight: 700;
+}
+.discharge-error[hidden] { display: none; }
+.discharge-success { display: flex; align-items: center; gap: 14px; }
+.discharge-success p { flex: 1; margin: 0; color: var(--muted); }
 .detail-metrics {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -6950,6 +6995,80 @@ details.metrics summary {
   font-weight: 700;
 }
 .messaging-list-empty { margin: 2px 4px; color: var(--muted); font-size: .9rem; }
+.ai-session-history {
+  margin: -3px 0 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--paper) 72%, var(--white));
+}
+.ai-session-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: .78rem;
+}
+.ai-session-history-head strong,
+.messaging-list-section-label {
+  text-transform: uppercase;
+  letter-spacing: .055em;
+}
+.ai-session-history-head button {
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--green);
+  background: var(--white);
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+.ai-session-history-head button:hover { background: var(--green-light); }
+.ai-session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 270px;
+  overflow-y: auto;
+}
+.ai-session-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--ink);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ai-session-item:hover { border-color: var(--line); background: var(--white); }
+.ai-session-item.is-active { border-color: var(--green); background: var(--green-light); }
+.ai-session-title { display: flex; align-items: center; justify-content: space-between; gap: 7px; min-width: 0; }
+.ai-session-title strong { overflow: hidden; font-size: .88rem; text-overflow: ellipsis; white-space: nowrap; }
+.ai-session-plan-badge {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--green);
+  background: var(--mint);
+  font-size: .68rem;
+  font-weight: 750;
+}
+.ai-session-item .conversation-preview { font-size: .76rem; }
+.ai-session-item .conversation-when { font-size: .69rem; }
+.messaging-list-section-label {
+  margin: 5px 4px 0;
+  color: var(--muted);
+  font-size: .75rem;
+  font-weight: 750;
+}
 
 .conversation-top {
   display: flex;
@@ -6989,6 +7108,7 @@ details.metrics summary {
 }
 .conversation-head { margin-bottom: 16px; font-size: 1rem; }
 .clinical-ai-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.clinical-ai-head-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .clinical-ai-notice {
   margin-bottom: 14px;
   padding: 10px 12px;
@@ -7346,6 +7466,11 @@ details.metrics summary {
 .triage-empty p { margin: 4px 0 0; }
 
 @media (max-width: 780px) {
+  .messaging-layout { grid-template-columns: 1fr; }
+  .messaging-list { max-height: none; }
+  .ai-session-list { max-height: 220px; }
+  .clinical-ai-head { flex-direction: column; }
+  .clinical-ai-head-actions { justify-content: flex-start; }
   .clinical-ai-help { grid-template-columns: 1fr; }
   .clinical-ai-richtext > h3 { padding: 15px; }
   .clinical-ai-richtext > h4,
@@ -7572,6 +7697,9 @@ details.metrics summary {
 
 @media (max-width: 720px) {
   .overview-columns, .programme-grid, .detail-metrics { grid-template-columns: 1fr; }
+  .detail-head, .detail-head-right, .discharge-success { align-items: flex-start; flex-direction: column; }
+  .discharge-confirm { grid-template-columns: 1fr; }
+  .discharge-confirm-actions { grid-column: 1; justify-content: flex-start; flex-wrap: wrap; }
   .consultation-schedule-form { grid-template-columns: 1fr; }
   .consultation-schedule-status { grid-column: 1; }
   .programme-filters { width: 100%; margin-left: 0; }

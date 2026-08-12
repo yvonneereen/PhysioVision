@@ -335,6 +335,13 @@ export async function declineTriagePatient(patientId) {
   return request("POST", `/auth/clinician/triage/${patientId}/decline/`, {});
 }
 
+export async function dischargePatient(patientId, note = "") {
+  return request("POST", `/patients/${encodeURIComponent(patientId)}/discharge/`, {
+    confirmed: true,
+    note,
+  });
+}
+
 export async function getPatientSessions(patientId) {
   return request("GET", `/sessions/?patient=${patientId}`);
 }
@@ -411,8 +418,17 @@ export async function sendCareMessage(body, patientId = null) {
 
 // ── Role-specific AI assistant ───────────────────────────────
 
-export async function sendAgentMessage(message, context = {}, history = []) {
+export async function getClinicianAiSessions() {
+  return request("GET", "/auth/agent/sessions/");
+}
+
+export async function getClinicianAiSession(sessionId) {
+  return request("GET", `/auth/agent/sessions/${encodeURIComponent(sessionId)}/`);
+}
+
+export async function sendAgentMessage(message, context = {}, history = [], sessionId = null) {
   const payload = { message, context };
   if (history.length) payload.history = history;
+  if (sessionId) payload.session_id = sessionId;
   return request("POST", "/auth/agent/chat/", payload);
 }

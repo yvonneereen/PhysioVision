@@ -1,8 +1,7 @@
 # Emergency-contact fall alerts
 
-PhysioVision can request an SMS and a voice call to a patient's verified
-emergency contact after a possible fall. It never calls 995 or dispatches an
-ambulance.
+PhysioVision can request a Vonage voice call to a patient's verified emergency
+contact after a possible fall. It never calls 995 or dispatches an ambulance.
 
 ## What the code now does
 
@@ -15,9 +14,9 @@ ambulance.
 5. No response lets the backend worker request contact notification when the
    countdown expires, even if the browser-side timer stops after the alert was
    registered.
-6. The provider is asked to send both an SMS and a voice call. The UI reports
-   full, partial, failed, or not-configured status without claiming that the
-   contact answered.
+6. Vonage is asked to place a voice call and speak the possible-fall alert. The
+   UI reports requested, failed, or not-configured status without claiming that
+   the contact answered.
 7. A separate **Call 995 now** link opens the device dialler. The user or a
    nearby person must confirm and place that emergency call.
 
@@ -33,33 +32,44 @@ python3 manage.py migrate
 
 This creates the contact-verification and durable emergency-alert records.
 
-### 2. Configure a Singapore-capable Twilio number
+### 2. Create a Vonage Voice application
 
-Create a Twilio account and obtain a number that supports both outbound voice
-and SMS to the contact numbers you intend to support. Confirm Twilio's current
-Singapore regulatory and caller-ID requirements before enabling production
-traffic.
+In the Vonage dashboard, create a Voice application and generate a public and
+private key pair. Keep the application ID and downloaded private key. A Vonage
+demo account can use `123456789` as its caller ID and call the phone number
+verified for that demo account. This is an actual phone call, but it is limited
+by Vonage's trial credit and demo-recipient restrictions.
 
 Do **not** configure 995, 999, 112, or 911 as the saved contact. The code blocks
-those short emergency-service numbers, and Twilio's current Singapore guidance
-does not allow emergency-service calls.
+those short emergency-service numbers.
 
 Add these secrets to the Django API service, not the frontend or Cloudflare
 Pages:
 
 ```text
-EMERGENCY_ALERT_PROVIDER=twilio
-TWILIO_ACCOUNT_SID=AC...
-TWILIO_AUTH_TOKEN=...
-TWILIO_FROM_NUMBER=+65...
+EMERGENCY_ALERT_PROVIDER=vonage
+VONAGE_APPLICATION_ID=your-vonage-application-id
+VONAGE_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----
+VONAGE_FROM_NUMBER=123456789
+VONAGE_DEMO_TO_NUMBER=+6580380208
 EMERGENCY_ALERT_DELAY_SECONDS=60
 EMERGENCY_CONTACT_VERIFICATION_TTL_MINUTES=10
 EMERGENCY_CONTACT_VERIFICATION_COOLDOWN_SECONDS=60
 EMERGENCY_CONTACT_VERIFICATION_MAX_ATTEMPTS=5
 ```
 
-Never expose the Twilio auth token in `runtime-config.js`, browser JavaScript,
-GitHub, or a Pages environment variable that is bundled into frontend assets.
+Replace the example recipient with the phone number verified in your Vonage
+account. `VONAGE_DEMO_TO_NUMBER` is an allowlist: contact verification and fall
+calls will be rejected if the saved contact has a different number.
+
+In Render, add the complete contents of the downloaded `.key` file as the
+`VONAGE_PRIVATE_KEY` secret. It may be a multiline value. Never expose the
+private key in `runtime-config.js`, browser JavaScript, GitHub, or a Pages
+environment variable that is bundled into frontend assets.
+
+The implementation sends an inline NCCO (the spoken call instructions) directly
+to Vonage. It does not require a TwiML Bin, webhook, public answer URL, or Vonage
+Functions service.
 
 ### 3. Run the durable alert worker
 
@@ -73,12 +83,17 @@ python3 manage.py process_emergency_alerts --watch --interval 2
 For Render, create **New → Background Worker**, connect the same repository and
 branch as the API, use `pip install -r requirements.txt` as the build command,
 and use the command above as the start command. Copy the API service's
-`DATABASE_URL`, `SECRET_KEY`, Twilio settings, and other required environment
+`DATABASE_URL`, `SECRET_KEY`, Vonage settings, and other required environment
 variables into the worker. The worker and API must point at the same database.
 
 The frontend also submits the response at the end of its countdown, but the
 worker is required for the unconscious-user case because browser timers can
 stop when a tab, browser, device, or network session stops.
+
+For a short free-trial recording, you can test **I need help** while the page is
+open without creating a paid worker: the Django API requests the call
+immediately. Do not claim that no-response alerts are durable until the worker
+is running continuously.
 
 Do not run multiple development auto-reload workers. In production, use one
 managed worker initially and monitor its health before scaling it.
@@ -90,8 +105,9 @@ managed worker initially and monitor its health before scaling it.
 3. Enter the contact's name, relationship, and complete international phone
    number.
 4. Confirm that the person agreed to receive automated fall alerts.
-5. Select **Send verification code**.
-6. Ask the contact to share the received six-digit code.
+5. Select **Send verification code**. Vonage calls the contact and speaks the
+   code twice.
+6. Ask the contact to share the spoken six-digit code.
 7. Enter it and confirm that the profile says **Verified and ready for
    automatic alerts**.
 
@@ -104,21 +120,20 @@ have agreed to the test. Never use 995 for a test.
 
 Test all of these cases:
 
-- **I'm okay** before expiry: no SMS or call is requested.
-- **I need help**: SMS and voice call are requested immediately.
-- No response: the worker requests both after the countdown.
+- **I'm okay** before expiry: no call is requested.
+- **I need help**: a voice call is requested immediately.
+- No response: the worker requests the call after the countdown.
 - Invalid or missing provider credentials: the UI says no automatic alert was
   sent and continues showing the manual 995 action.
-- SMS succeeds and voice fails, and vice versa: the UI reports partial delivery.
 - Safari loses camera, microphone, network, or page visibility: the product
   continues to describe the feature as an additional safeguard, not guaranteed
   monitoring.
 
 ## Important limitations before real patient use
 
-- A provider request ID means Twilio accepted the request. It does not prove
-  that the SMS was delivered, that the phone rang, or that the contact answered.
-  Add signed Twilio status-callback webhooks before claiming delivery.
+- A provider request ID means Vonage accepted the call request. It does not prove
+  that the phone rang or that the contact answered. Add authenticated Vonage
+  event webhooks and delivery-state handling before claiming delivery.
 - The alert currently contains no live location. If location is added, obtain
   explicit consent, record timestamp and accuracy, and clearly identify stale
   or unavailable positions. SCDF needs an accurate location from the person who

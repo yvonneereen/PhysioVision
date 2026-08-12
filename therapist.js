@@ -4,9 +4,10 @@ import {
   getConsultations, initiateConsultation, updateConsultation, confirmConsultation, cancelConsultation, completeConsultation,
   getPatientSessions, getPatientPainCheckins,
   getCareMessages, sendCareMessage, getCareMessageThreads,
-  sendAgentMessage,
+  getClinicianAiSession, getClinicianAiSessions, sendAgentMessage,
   getTriageQueue, claimTriagePatient, declineTriagePatient,
-} from "./api.js?v=32";
+  dischargePatient,
+} from "./api.js?v=34";
 import { excludeRosterPatientsFromTriage } from "./therapist-triage-state.js?v=1";
 import { formatClinicalAssistantText } from "./clinical-ai-format.js?v=1";
 
@@ -266,9 +267,25 @@ async function showPatientDetail(patientId) {
         </div>
         <div class="detail-head-right">
           <span class="status-pill ${cls}">${label}</span>
+          <button class="button button-discharge button-small" type="button" id="detail-discharge" aria-expanded="false" aria-controls="discharge-confirm">Discharge patient</button>
           <button class="button button-dark button-small" type="button" id="detail-close">Close</button>
         </div>
       </div>
+      <form class="discharge-confirm hidden" id="discharge-confirm">
+        <div>
+          <strong>Discharge ${escapeHtml(patient.full_name)} from your care?</strong>
+          <p>Their active clinician programme and pending appointments will end. Their account, sessions, messages, and care history will remain saved, and they can request support again later.</p>
+        </div>
+        <label>
+          <span>Discharge note for the patient <small>(optional)</small></span>
+          <textarea id="discharge-note" rows="2" maxlength="500" placeholder="For example: You have met the goals we agreed on."></textarea>
+        </label>
+        <div class="discharge-confirm-actions">
+          <button class="button button-light button-small" type="button" id="discharge-cancel">Keep patient</button>
+          <button class="button button-discharge button-small" type="submit">Confirm discharge</button>
+        </div>
+        <p class="discharge-error" id="discharge-error" hidden></p>
+      </form>
       <div class="detail-metrics">
         <div><span>Quality trend</span><code>${qSpark}</code></div>
         <div><span>Pain trend</span><code>${pSpark}</code></div>
@@ -288,12 +305,83 @@ async function showPatientDetail(patientId) {
       </div>`;
 
     panel.querySelector("#detail-close")?.addEventListener("click", () => panel.classList.add("hidden"));
+    wirePatientDischarge(panel, patient);
     wireDetailMessaging(panel, patientId);
     panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
   } catch (err) {
     panel.innerHTML = `<p class="empty-state">Could not load patient detail.</p>`;
     console.error("Patient detail failed:", err);
   }
+}
+
+function wirePatientDischarge(panel, patient) {
+  const openButton = panel.querySelector("#detail-discharge");
+  const form = panel.querySelector("#discharge-confirm");
+  const cancelButton = panel.querySelector("#discharge-cancel");
+  const note = panel.querySelector("#discharge-note");
+  const error = panel.querySelector("#discharge-error");
+  if (!openButton || !form || !cancelButton || !note || !error) return;
+
+  openButton.addEventListener("click", () => {
+    form.classList.remove("hidden");
+    openButton.setAttribute("aria-expanded", "true");
+    note.focus();
+  });
+  cancelButton.addEventListener("click", () => {
+    form.classList.add("hidden");
+    openButton.setAttribute("aria-expanded", "false");
+    error.hidden = true;
+    error.textContent = "";
+  });
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    const submit = form.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    submit.textContent = "Discharging…";
+    error.hidden = true;
+    error.textContent = "";
+    try {
+      const result = await dischargePatient(patient.id, note.value.trim());
+      state.patients = state.patients.filter(
+        item => String(item.id) !== String(patient.id),
+      );
+      state.consultations = state.consultations.map(consultation => (
+        String(consultation.patient) === String(patient.id)
+        && ["requested", "confirmed"].includes(consultation.status)
+          ? { ...consultation, status: "cancelled" }
+          : consultation
+      ));
+      try {
+        const [patientsData, consultationsData] = await Promise.all([
+          getPatients(),
+          getConsultations(),
+        ]);
+        state.patients = Array.isArray(patientsData)
+          ? patientsData
+          : patientsData.results ?? [];
+        state.consultations = Array.isArray(consultationsData)
+          ? consultationsData
+          : consultationsData.results ?? [];
+      } catch (refreshError) {
+        console.warn("Roster refresh after discharge failed:", refreshError);
+      }
+      renderStats(state.patients);
+      renderOverview(state.patients, state.consultations);
+      renderPatientTable(state.patients);
+      panel.innerHTML = `
+        <div class="discharge-success" role="status">
+          <strong>${escapeHtml(patient.full_name)} has been discharged</strong>
+          <p>${escapeHtml(result.detail || "The patient is no longer in your active roster.")} Their care history remains saved.</p>
+          <button class="button button-dark button-small" type="button" id="detail-close">Close</button>
+        </div>`;
+      panel.querySelector("#detail-close")?.addEventListener("click", () => panel.classList.add("hidden"));
+    } catch (requestError) {
+      error.textContent = requestError.message || "Could not discharge this patient.";
+      error.hidden = false;
+      submit.disabled = false;
+      submit.textContent = "Confirm discharge";
+    }
+  });
 }
 
 function careMessageRows(messages) {
@@ -847,25 +935,54 @@ async function declineTriageRequest(button) {
 
 let activeConversation = null;
 const AI_CONVERSATION_ID = "physiovision-ai";
-const aiConversationMessages = [{
-  sender: "assistant",
-  body: "Hello. I’m your PhysioVision AI workspace. I can review your roster, look up patient progress, prepare drafts and run clinician-approved actions. Type “help” for every command; clinical decisions remain yours.",
-}];
+const AI_WELCOME_MESSAGE = "Hello. I’m your PhysioVision AI workspace. I can review your roster, look up patient progress, prepare drafts and run clinician-approved actions. Type “help” for every command; clinical decisions remain yours.";
+let activeAiSessionId = null;
+let aiSessions = [];
+let messagingPatientThreads = [];
+let aiConversationMessages = [{ sender: "assistant", body: AI_WELCOME_MESSAGE }];
 
 async function loadMessaging() {
   const list = document.getElementById("messaging-list");
-  renderMessagingList([]);
-  try {
-    const threads = await getCareMessageThreads();
-    const rows = Array.isArray(threads) ? threads : threads.results ?? [];
-    renderMessagingList(rows);
-    updateMessagingBadge(rows);
-  } catch (err) {
-    console.error("Messaging load failed:", err);
-    if (list) list.insertAdjacentHTML(
+  renderMessagingList(messagingPatientThreads);
+  const [threadResult, sessionResult] = await Promise.allSettled([
+    getCareMessageThreads(),
+    getClinicianAiSessions(),
+  ]);
+  if (threadResult.status === "fulfilled") {
+    const threads = threadResult.value;
+    messagingPatientThreads = Array.isArray(threads) ? threads : threads.results ?? [];
+    updateMessagingBadge(messagingPatientThreads);
+  } else {
+    console.error("Messaging load failed:", threadResult.reason);
+  }
+  if (sessionResult.status === "fulfilled") {
+    const sessions = sessionResult.value;
+    aiSessions = Array.isArray(sessions) ? sessions : sessions.results ?? [];
+  } else {
+    console.error("AI session history load failed:", sessionResult.reason);
+  }
+  renderMessagingList(messagingPatientThreads);
+  if (threadResult.status === "rejected" && list) {
+    list.insertAdjacentHTML(
       "beforeend",
       `<p class="messaging-list-empty">Could not load patient conversations.</p>`,
     );
+  }
+  if (sessionResult.status === "rejected" && list) {
+    list.querySelector(".ai-session-list")?.insertAdjacentHTML(
+      "beforeend",
+      `<p class="messaging-list-empty">Could not load previous AI sessions.</p>`,
+    );
+  }
+}
+
+async function refreshAiSessionList() {
+  try {
+    const result = await getClinicianAiSessions();
+    aiSessions = Array.isArray(result) ? result : result.results ?? [];
+    renderMessagingList(messagingPatientThreads);
+  } catch (error) {
+    console.error("AI session history refresh failed:", error);
   }
 }
 
@@ -888,7 +1005,35 @@ function renderMessagingList(threads) {
         <span class="conversation-pinned">Pinned</span>
       </span>
       <span class="conversation-preview">Clinical thinking and drafting workspace</span>
-    </button>`;
+    </button>
+    <div class="ai-session-history">
+      <div class="ai-session-history-head">
+        <strong>Previous AI sessions</strong>
+        <button type="button" data-new-ai-session>＋ New session</button>
+      </div>
+      <div class="ai-session-list">
+        ${aiSessions.length ? aiSessions.map(session => {
+          const active = (
+            activeConversation === AI_CONVERSATION_ID
+            && String(activeAiSessionId) === String(session.id)
+          ) ? " is-active" : "";
+          const when = new Date(session.updated_at).toLocaleString([], {
+            dateStyle: "medium",
+            timeStyle: "short",
+          });
+          const plan = session.contains_plan
+            ? `<span class="ai-session-plan-badge">Plan</span>`
+            : "";
+          return `
+            <button type="button" class="ai-session-item${active}" data-ai-session="${session.id}">
+              <span class="ai-session-title"><strong>${escapeHtml(session.title)}</strong>${plan}</span>
+              <span class="conversation-preview">${escapeHtml(session.preview || "Saved conversation")}</span>
+              <span class="conversation-when">${when} · ${session.message_count} ${session.message_count === 1 ? "message" : "messages"}</span>
+            </button>`;
+        }).join("") : `<p class="messaging-list-empty">No previous AI sessions yet.</p>`}
+      </div>
+    </div>
+    <div class="messaging-list-section-label">Patient messages</div>`;
   const patientThreads = threads.map(t => {
     const preview = t.last_sender === "clinician" ? `You: ${t.last_body}` : t.last_body;
     const when = new Date(t.last_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" });
@@ -972,7 +1117,7 @@ function aiMessageRows() {
   };
   return aiConversationMessages.map(message => `
     <div class="clinical-ai-message clinical-ai-message-${message.sender}">
-      <span>${message.sender === "assistant" ? "PhysioVision AI" : "You"}</span>
+      <span>${message.sender === "user" ? "You" : "PhysioVision AI"}</span>
       ${message.command === "help"
         ? helpContent
         : ["build_plan", "revise_plan"].includes(message.command) && message.data
@@ -983,16 +1128,32 @@ function aiMessageRows() {
     </div>`).join("");
 }
 
+function currentAiSession() {
+  return aiSessions.find(session => String(session.id) === String(activeAiSessionId)) || null;
+}
+
 function showClinicalAssistant() {
   activeConversation = AI_CONVERSATION_ID;
   document.querySelectorAll(".conversation-item").forEach(el =>
     el.classList.toggle("is-active", el.hasAttribute("data-ai-conversation")));
+  document.querySelectorAll("[data-ai-session]").forEach(el =>
+    el.classList.toggle(
+      "is-active",
+      String(el.getAttribute("data-ai-session")) === String(activeAiSessionId),
+    ));
   const panel = document.getElementById("messaging-conversation");
   if (!panel) return;
+  const savedSession = currentAiSession();
   panel.innerHTML = `
     <div class="conversation-head clinical-ai-head">
-      <div><strong>PhysioVision AI</strong><span>Private assistant workspace · not visible to patients</span></div>
-      <span class="clinical-ai-label">AI assistant</span>
+      <div>
+        <strong>${escapeHtml(savedSession?.title || "New AI session")}</strong>
+        <span>PhysioVision AI · private workspace · not visible to patients</span>
+      </div>
+      <div class="clinical-ai-head-actions">
+        ${activeAiSessionId ? `<span class="clinical-ai-label">Saved session</span>` : `<span class="clinical-ai-label">New session</span>`}
+        <button type="button" class="button button-light button-small" data-new-ai-session>＋ New AI session</button>
+      </div>
     </div>
     <div class="clinical-ai-notice">
       AI can make mistakes. Verify its output against patient records and use your clinical judgement.
@@ -1012,6 +1173,58 @@ function showClinicalAssistant() {
   const thread = panel.querySelector("#clinical-ai-thread");
   if (thread) thread.scrollTop = thread.scrollHeight;
   panel.querySelector("#clinical-ai-form")?.addEventListener("submit", handleClinicalAssistantMessage);
+}
+
+function startNewClinicalAssistantSession() {
+  activeConversation = AI_CONVERSATION_ID;
+  activeAiSessionId = null;
+  aiConversationMessages = [{ sender: "assistant", body: AI_WELCOME_MESSAGE }];
+  renderMessagingList(messagingPatientThreads);
+  showClinicalAssistant();
+  document.getElementById("clinical-ai-input")?.focus();
+}
+
+async function openClinicalAssistantSession(sessionId) {
+  activeConversation = AI_CONVERSATION_ID;
+  activeAiSessionId = sessionId;
+  const panel = document.getElementById("messaging-conversation");
+  if (panel) panel.innerHTML = `<p class="empty-state">Loading saved AI session…</p>`;
+  renderMessagingList(messagingPatientThreads);
+  try {
+    const session = await getClinicianAiSession(sessionId);
+    const index = aiSessions.findIndex(item => String(item.id) === String(session.id));
+    if (index >= 0) aiSessions[index] = { ...aiSessions[index], ...session };
+    aiConversationMessages = (session.messages || []).map(message => ({
+      sender: message.role,
+      body: message.body,
+      command: message.command || null,
+      data: message.data && Object.keys(message.data).length ? message.data : null,
+    }));
+    if (!aiConversationMessages.length) {
+      aiConversationMessages = [{ sender: "assistant", body: AI_WELCOME_MESSAGE }];
+    }
+    renderMessagingList(messagingPatientThreads);
+    showClinicalAssistant();
+  } catch (error) {
+    console.error("Saved AI session load failed:", error);
+    activeAiSessionId = null;
+    if (panel) {
+      panel.innerHTML = `
+        <p class="empty-state">Could not load that saved AI session.</p>
+        <button type="button" class="button button-light button-small" data-new-ai-session>Start a new AI session</button>`;
+    }
+    renderMessagingList(messagingPatientThreads);
+  }
+}
+
+function openDefaultClinicalAssistant() {
+  if (activeAiSessionId) {
+    showClinicalAssistant();
+  } else if (aiSessions.length) {
+    openClinicalAssistantSession(aiSessions[0].id);
+  } else {
+    startNewClinicalAssistantSession();
+  }
 }
 
 async function handleClinicalAssistantMessage(event) {
@@ -1036,7 +1249,8 @@ async function handleClinicalAssistantMessage(event) {
     thread.scrollTop = thread.scrollHeight;
   }
   try {
-    const result = await sendAgentMessage(message, {}, history);
+    const result = await sendAgentMessage(message, {}, history, activeAiSessionId);
+    activeAiSessionId = result.session_id || activeAiSessionId;
     aiConversationMessages.push({
       sender: "assistant",
       body: result.reply,
@@ -1044,8 +1258,10 @@ async function handleClinicalAssistantMessage(event) {
       data: result.data || null,
     });
   } catch (error) {
+    activeAiSessionId = error.data?.session_id || activeAiSessionId;
     aiConversationMessages.push({ sender: "error", body: error.message || "The assistant is unavailable." });
   } finally {
+    await refreshAiSessionList();
     if (activeConversation === AI_CONVERSATION_ID) showClinicalAssistant();
   }
 }
@@ -1232,7 +1448,18 @@ document.addEventListener("click", (e) => {
   }
 
   if (e.target.closest("[data-ai-conversation]")) {
-    showClinicalAssistant();
+    openDefaultClinicalAssistant();
+    return;
+  }
+
+  if (e.target.closest("[data-new-ai-session]")) {
+    startNewClinicalAssistantSession();
+    return;
+  }
+
+  const aiSession = e.target.closest("[data-ai-session]");
+  if (aiSession) {
+    openClinicalAssistantSession(aiSession.getAttribute("data-ai-session"));
     return;
   }
 

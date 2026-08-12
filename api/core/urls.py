@@ -114,6 +114,16 @@ urlpatterns = [
     ),
     path('agent/chat/', views.AgentChatView.as_view(), name='agent-chat'),
     path(
+        'agent/sessions/',
+        views.ClinicianAiSessionListView.as_view(),
+        name='clinician-agent-sessions',
+    ),
+    path(
+        'agent/sessions/<uuid:session_id>/',
+        views.ClinicianAiSessionDetailView.as_view(),
+        name='clinician-agent-session-detail',
+    ),
+    path(
         'agent/safety-language/',
         views.SafetyLanguageInterpretationView.as_view(),
         name='agent-safety-language',

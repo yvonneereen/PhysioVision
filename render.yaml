@@ -38,12 +38,14 @@ services:
       - key: AUTH_TOKEN_TTL_HOURS
         value: "12"
       - key: EMERGENCY_ALERT_PROVIDER
-        value: twilio
-      - key: TWILIO_ACCOUNT_SID
+        value: vonage
+      - key: VONAGE_APPLICATION_ID
         sync: false
-      - key: TWILIO_AUTH_TOKEN
+      - key: VONAGE_PRIVATE_KEY
         sync: false
-      - key: TWILIO_FROM_NUMBER
+      - key: VONAGE_FROM_NUMBER
+        value: "123456789"
+      - key: VONAGE_DEMO_TO_NUMBER
         sync: false
       - key: EMERGENCY_ALERT_DELAY_SECONDS
         value: "60"

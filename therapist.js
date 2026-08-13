@@ -801,6 +801,126 @@ function switchTab(tab) {
   if (tab === "triage") loadTriage();
 }
 
+function triageRecordedDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString([], { dateStyle: "medium" });
+}
+
+function triageMetric(label, value, detail, modifier = "") {
+  return `
+    <div class="triage-evidence-metric ${modifier}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <small>${escapeHtml(detail)}</small>
+    </div>`;
+}
+
+function renderTriageEvidence(patient) {
+  const summary = patient.review_summary || {};
+  const pain = summary.pain;
+  const quality = summary.movement_quality;
+  const recovery = summary.recovery;
+  const recoveryLabels = {
+    better: "Feeling better",
+    same: "About the same",
+    worse: "Feeling worse",
+    unsure: "Not sure",
+  };
+  const painDetail = !pain
+    ? "No check-ins recorded"
+    : pain.trend === "rising"
+      ? `Up ${pain.change} from previous${pain.location ? ` · ${pain.location}` : ""}`
+      : pain.trend === "falling"
+        ? `Down ${Math.abs(pain.change)} from previous${pain.location ? ` · ${pain.location}` : ""}`
+        : pain.trend === "unchanged"
+          ? `Unchanged from previous${pain.location ? ` · ${pain.location}` : ""}`
+          : `First recorded check-in${pain.location ? ` · ${pain.location}` : ""}`;
+  const qualityDetail = !quality
+    ? "No camera score recorded"
+    : quality.trend === "declining"
+      ? `${quality.exercise} · down ${Math.abs(quality.change)} across ${quality.comparable_sessions} comparable sessions`
+      : quality.trend === "improving"
+        ? `${quality.exercise} · up ${quality.change} across ${quality.comparable_sessions} comparable sessions`
+        : quality.trend === "stable"
+          ? `${quality.exercise} · stable across ${quality.comparable_sessions} comparable sessions`
+          : `${quality.exercise} · first comparable measurement`;
+  const recoveryDetail = !recovery
+    ? "No recovery reports recorded"
+    : recovery.worse_count
+      ? `${recovery.worse_count} worse report${recovery.worse_count === 1 ? "" : "s"} in ${recovery.observations} check-ins`
+      : `${recovery.observations} recent recovery check-in${recovery.observations === 1 ? "" : "s"}`;
+  const signals = Array.isArray(summary.signals) ? summary.signals : [];
+  const statusClass = summary.evidence_status === "recorded_concerns"
+    ? "has-concerns"
+    : summary.evidence_status === "limited_data"
+      ? "has-limited-data"
+      : "has-no-worsening";
+  const statusLabel = summary.evidence_status === "recorded_concerns"
+    ? `${summary.concern_count} recorded concern${summary.concern_count === 1 ? "" : "s"}`
+    : summary.evidence_status === "limited_data"
+      ? "Limited recorded data"
+      : "No worsening signal recorded";
+  const signalMarkup = signals.length
+    ? `<ul class="triage-signal-list">${signals.map(signal => {
+        const recorded = triageRecordedDate(signal.recorded_at);
+        return `
+          <li class="triage-signal is-${escapeHtml(signal.severity || "attention")}">
+            <span class="triage-signal-icon" aria-hidden="true">${signal.severity === "high" ? "!" : "↗"}</span>
+            <span>
+              <strong>${escapeHtml(signal.label)}</strong>
+              <small>${escapeHtml(signal.detail)}${recorded ? ` Recorded ${escapeHtml(recorded)}.` : ""}</small>
+            </span>
+          </li>`;
+      }).join("")}</ul>`
+    : `<div class="triage-evidence-empty ${statusClass}">
+        <strong>${summary.evidence_status === "limited_data" ? "Reason needs confirming" : "Patient still requested a professional review"}</strong>
+        <span>${summary.evidence_status === "limited_data"
+          ? "No recent pain, recovery, movement-quality, or safety record is available. Confirm the patient's reason directly before deciding."
+          : "Available records do not currently show worsening pain, recovery, movement quality, or an open safety flag. This does not rule out a problem the patient has not recorded."}</span>
+      </div>`;
+
+  return `
+    <section class="triage-evidence" aria-label="Recorded reason for physiotherapist review">
+      <header>
+        <div>
+          <strong>Why review is requested</strong>
+          <p>${escapeHtml(summary.request_reason || "The patient requested physiotherapist support.")}</p>
+        </div>
+        <span class="triage-evidence-status ${statusClass}">${escapeHtml(statusLabel)}</span>
+      </header>
+      <div class="triage-evidence-metrics">
+        ${triageMetric(
+          "Latest pain",
+          pain ? `${pain.value}/10` : "Not recorded",
+          painDetail,
+          pain?.value >= 7 || pain?.trend === "rising" ? "needs-attention" : "",
+        )}
+        ${triageMetric(
+          "Movement quality",
+          quality ? `${quality.value}/100` : "Not recorded",
+          qualityDetail,
+          quality?.trend === "declining" || quality?.low_sessions >= 2 ? "needs-attention" : "",
+        )}
+        ${triageMetric(
+          "Recovery",
+          recovery ? (recoveryLabels[recovery.status] || "Recorded") : "Not recorded",
+          recoveryDetail,
+          recovery?.status === "worse" || recovery?.worse_count >= 2 ? "needs-attention" : "",
+        )}
+      </div>
+      ${summary.patient_reported_background
+        ? `<div class="triage-reported-background">
+            <strong>Patient-reported background</strong>
+            <span>${escapeHtml(summary.patient_reported_background)}</span>
+          </div>`
+        : ""}
+      ${signalMarkup}
+      <small class="triage-evidence-disclaimer">Recorded wellness indicators support clinician review; they are not a diagnosis.</small>
+    </section>`;
+}
+
 function renderTriage() {
   const list = document.getElementById("triage-list");
   const badge = document.getElementById("triage-badge");
@@ -822,20 +942,23 @@ function renderTriage() {
       ? new Date(patient.requested_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
       : "Recently";
     return `
-      <article class="triage-card">
-        <div class="triage-card-main">
-          <div class="triage-avatar" aria-hidden="true">${escapeHtml(initials(patient.name))}</div>
-          <div>
-            <div class="triage-card-title"><strong>${escapeHtml(patient.name)}</strong><span>Awaiting clinician</span></div>
-            ${patient.email ? `<small>${escapeHtml(patient.email)}</small>` : ""}
-            <p>Goal: ${escapeHtml(goal)}</p>
-            <div class="triage-meta">
-              ${patient.mobility_status ? `<span>Mobility: ${escapeHtml(profileLabel(patient.mobility_status))}</span>` : ""}
-              ${patient.activity_level ? `<span>Activity: ${escapeHtml(profileLabel(patient.activity_level))}</span>` : ""}
-              ${patient.focus_side ? `<span>Focus: ${escapeHtml(profileLabel(patient.focus_side))}</span>` : ""}
+      <article class="triage-card ${patient.review_summary?.high_concern_count ? "has-high-concern" : ""}">
+        <div class="triage-card-content">
+          <div class="triage-card-main">
+            <div class="triage-avatar" aria-hidden="true">${escapeHtml(initials(patient.name))}</div>
+            <div>
+              <div class="triage-card-title"><strong>${escapeHtml(patient.name)}</strong><span>Awaiting clinician</span></div>
+              ${patient.email ? `<small>${escapeHtml(patient.email)}</small>` : ""}
+              <p>Goal: ${escapeHtml(goal)}</p>
+              <div class="triage-meta">
+                ${patient.mobility_status ? `<span>Mobility: ${escapeHtml(profileLabel(patient.mobility_status))}</span>` : ""}
+                ${patient.activity_level ? `<span>Activity: ${escapeHtml(profileLabel(patient.activity_level))}</span>` : ""}
+                ${patient.focus_side ? `<span>Focus: ${escapeHtml(profileLabel(patient.focus_side))}</span>` : ""}
+              </div>
+              <small>Requested ${requested}</small>
             </div>
-            <small>Requested ${requested}</small>
           </div>
+          ${renderTriageEvidence(patient)}
         </div>
         <div class="triage-card-actions">
           <div class="triage-action-buttons">

@@ -73,6 +73,7 @@ from .safety_language import (
     interpret_safety_language,
 )
 from .speech import GuidanceSpeechUnavailable, generate_guidance_speech
+from .triage import build_triage_review_summary
 from .serializers import (
     CareInvitationAcceptSerializer,
     CareInvitationSerializer,
@@ -1977,25 +1978,40 @@ class ClinicianTriageQueueView(APIView):
             .select_related("user")
             .order_by("pathway_selected_at", "created_at")
         )
-        return Response([{
-            "id": str(patient.id),
-            "name": patient.user.get_full_name().strip() or "Patient",
-            "email": patient.user.email,
-            "goal": patient.goal,
-            "custom_goal": patient.custom_goal,
-            "activity_level": patient.activity_level,
-            "mobility_status": patient.mobility_status,
-            "focus_side": patient.focus_side,
-            "request_kind": (
-                "wellness_self_referral"
-                if patient.physiotherapist_requested_at
-                else "initial_pathway"
-            ),
-            "requested_at": (
-                patient.physiotherapist_requested_at
-                or patient.pathway_selected_at
-            ),
-        } for patient in patients])
+        queue = []
+        for patient in patients:
+            review_summary = build_triage_review_summary(patient)
+            queue.append({
+                "id": str(patient.id),
+                "name": patient.user.get_full_name().strip() or "Patient",
+                "email": patient.user.email,
+                "goal": patient.goal,
+                "custom_goal": patient.custom_goal,
+                "activity_level": patient.activity_level,
+                "mobility_status": patient.mobility_status,
+                "focus_side": patient.focus_side,
+                "request_kind": (
+                    "wellness_self_referral"
+                    if patient.physiotherapist_requested_at
+                    else "initial_pathway"
+                ),
+                "requested_at": (
+                    patient.physiotherapist_requested_at
+                    or patient.pathway_selected_at
+                ),
+                "review_summary": review_summary,
+            })
+
+        # Recorded high-concern signals are surfaced first. This is a review
+        # aid only; it is not a diagnosis or an automated accept/decline rule.
+        queue.sort(
+            key=lambda item: (
+                -item["review_summary"]["high_concern_count"],
+                -item["review_summary"]["concern_count"],
+                item["requested_at"] or timezone.now(),
+            )
+        )
+        return Response(queue)
 
 
 class ClinicianTriageClaimView(APIView):

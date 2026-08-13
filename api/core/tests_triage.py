@@ -1,9 +1,21 @@
 from unittest.mock import patch
+from datetime import timedelta
 
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from api.consultations.models import CareMessage, MessageSender
+from api.catalogue.models import (
+    AffectedSide,
+    CameraDirection,
+    Exercise,
+    ExerciseCategory,
+)
+from api.consultations.models import (
+    CareMessage,
+    Escalation,
+    EscalationTrigger,
+    MessageSender,
+)
 from api.core.email_delivery import EmailDeliveryError
 
 from api.core.models import (
@@ -13,6 +25,12 @@ from api.core.models import (
     PatientProfile,
     User,
     UserRole,
+)
+from api.sessions.models import (
+    PainCheckin,
+    PainCheckinTiming,
+    RecoveryStatus,
+    Session,
 )
 
 
@@ -124,6 +142,154 @@ class ClinicianTriageTests(APITestCase):
             PatientPathwayChoice.WELLNESS,
         )
         self.assertEqual(self.wellness.care_path, CarePath.WELLNESS)
+
+    def test_queue_includes_recorded_patient_problem_signals(self):
+        now = timezone.now()
+        self.wellness.physiotherapist_requested_at = now
+        self.wellness.medical_history = "Recovered right knee injury."
+        self.wellness.wellness_screening_status = "needs_review"
+        self.wellness.wellness_screening_answers = {
+            "not_treating_condition": True,
+            "no_clinician_restrictions": True,
+            "general_wellness_goal": True,
+            "no_concerning_symptoms": False,
+        }
+        self.wellness.wellness_screened_at = now - timedelta(days=6)
+        self.wellness.save(update_fields=[
+            "physiotherapist_requested_at",
+            "medical_history",
+            "wellness_screening_status",
+            "wellness_screening_answers",
+            "wellness_screened_at",
+        ])
+        exercise = Exercise.objects.create(
+            id="triage-half-squats",
+            name="Half Squats",
+            category=ExerciseCategory.STRENGTHENING,
+            camera_direction=CameraDirection.SIDE,
+            rep_rule="standing to squat to standing",
+            tracked_angles_config={},
+            phases_config=[],
+            cues_config={},
+        )
+        newer_exercise = Exercise.objects.create(
+            id="triage-calf-raises",
+            name="Calf Raises",
+            category=ExerciseCategory.STRENGTHENING,
+            camera_direction=CameraDirection.SIDE,
+            rep_rule="standing to raised heels to standing",
+            tracked_angles_config={},
+            phases_config=[],
+            cues_config={},
+        )
+        earlier_session = Session.objects.create(
+            patient=self.wellness,
+            exercise=exercise,
+            started_at=now - timedelta(days=5),
+            ended_at=now - timedelta(days=5) + timedelta(minutes=2),
+            reps_completed=10,
+            reps_target=10,
+            sets_completed=1,
+            sets_target=1,
+            affected_side=AffectedSide.RIGHT,
+            quality_score=76,
+        )
+        latest_session = Session.objects.create(
+            patient=self.wellness,
+            exercise=exercise,
+            started_at=now - timedelta(days=1),
+            ended_at=now - timedelta(days=1) + timedelta(minutes=2),
+            reps_completed=10,
+            reps_target=10,
+            sets_completed=1,
+            sets_target=1,
+            affected_side=AffectedSide.RIGHT,
+            quality_score=45,
+        )
+        Session.objects.create(
+            patient=self.wellness,
+            exercise=newer_exercise,
+            started_at=now - timedelta(hours=12),
+            ended_at=now - timedelta(hours=12) + timedelta(minutes=2),
+            reps_completed=10,
+            reps_target=10,
+            sets_completed=1,
+            sets_target=1,
+            affected_side=AffectedSide.RIGHT,
+            quality_score=90,
+        )
+        PainCheckin.objects.create(
+            patient=self.wellness,
+            session=earlier_session,
+            pain_level=3,
+            timing=PainCheckinTiming.AFTER,
+            recovery_status=RecoveryStatus.WORSE,
+            location_notes="Right knee",
+            checked_at=now - timedelta(days=5),
+        )
+        PainCheckin.objects.create(
+            patient=self.wellness,
+            session=latest_session,
+            pain_level=8,
+            timing=PainCheckinTiming.AFTER,
+            recovery_status=RecoveryStatus.WORSE,
+            location_notes="Right knee",
+            safety_follow_up={"outcome": "professional"},
+            requires_review=True,
+            checked_at=now - timedelta(days=1),
+        )
+        Escalation.objects.create(
+            patient=self.wellness,
+            trigger_type=EscalationTrigger.SYMMETRY_CONCERN,
+            description="Repeated right-left movement difference needs review.",
+            session=latest_session,
+        )
+        self.client.force_authenticate(self.clinician_user)
+
+        response = self.client.get(self.queue_url)
+
+        self.assertEqual(response.status_code, 200)
+        wellness_item = next(
+            item for item in response.data
+            if item["id"] == str(self.wellness.id)
+        )
+        summary = wellness_item["review_summary"]
+        self.assertEqual(summary["evidence_status"], "recorded_concerns")
+        self.assertEqual(summary["pain"]["value"], 8)
+        self.assertEqual(summary["pain"]["previous_value"], 3)
+        self.assertEqual(summary["pain"]["change"], 5)
+        self.assertEqual(summary["pain"]["trend"], "rising")
+        self.assertEqual(summary["recovery"]["worse_count"], 2)
+        self.assertEqual(summary["movement_quality"]["value"], 45)
+        self.assertEqual(summary["movement_quality"]["exercise"], "Half Squats")
+        self.assertEqual(summary["movement_quality"]["previous_value"], 76)
+        self.assertEqual(summary["movement_quality"]["trend"], "declining")
+        self.assertEqual(summary["movement_quality"]["comparable_sessions"], 2)
+        self.assertEqual(
+            summary["patient_reported_background"],
+            "Recovered right knee injury.",
+        )
+        signal_kinds = {signal["kind"] for signal in summary["signals"]}
+        self.assertEqual(
+            signal_kinds,
+            {"screening", "safety", "pain", "recovery", "quality", "symmetry"},
+        )
+        self.assertGreaterEqual(summary["high_concern_count"], 3)
+        self.assertEqual(response.data[0]["id"], str(self.wellness.id))
+
+    def test_queue_reports_limited_data_instead_of_inventing_a_problem(self):
+        self.client.force_authenticate(self.clinician_user)
+
+        response = self.client.get(self.queue_url)
+
+        self.assertEqual(response.status_code, 200)
+        summary = response.data[0]["review_summary"]
+        self.assertEqual(summary["evidence_status"], "limited_data")
+        self.assertEqual(summary["concern_count"], 0)
+        self.assertEqual(summary["signals"], [])
+        self.assertIsNone(summary["pain"])
+        self.assertIsNone(summary["movement_quality"])
+        self.assertIn("selected physiotherapist-guided care", summary["request_reason"])
 
     @patch("api.core.views.deliver_email")
     def test_claim_is_the_event_that_switches_pending_wellness_patient(

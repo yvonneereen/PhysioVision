@@ -1,0 +1,35 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
+const therapist = read("../therapist.js");
+const styles = read("../style.css");
+const page = read("../index.html");
+
+assert.match(
+  therapist,
+  /function renderTriageEvidence[\s\S]*?Latest pain[\s\S]*?Movement quality[\s\S]*?Recovery[\s\S]*?Patient-reported background/,
+  "triage should expose pain, same-exercise movement quality, and recovery evidence",
+);
+assert.match(
+  therapist,
+  /summary\.signals[\s\S]*?triage-signal-list[\s\S]*?signal\.detail/,
+  "the clinician should see the recorded reason behind each concern flag",
+);
+assert.match(
+  therapist,
+  /Limited recorded data[\s\S]*?Reason needs confirming[\s\S]*?does not rule out a problem/,
+  "missing measurements must be identified honestly rather than inventing a problem",
+);
+assert.match(
+  styles,
+  /\.triage-evidence[\s\S]*?\.triage-evidence-metrics[\s\S]*?\.triage-signal-list/,
+  "recorded concerns should be visually grouped inside the patient request",
+);
+assert.match(
+  page,
+  /recorded pain, recovery, movement-quality and safety signals/,
+  "the queue should explain the evidence clinicians are reviewing",
+);
+
+console.log("therapist triage evidence tests passed");

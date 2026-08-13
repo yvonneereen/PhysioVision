@@ -900,8 +900,8 @@ assert.match(
 );
 assert.match(
   source,
-  /"urgent-chest"[\s\S]*?"urgent-breathing"[\s\S]*?"urgent-neurologic"/,
-  "an unsure combined warning-sign answer should be clarified symptom by symptom"
+  /"urgent-chest"[\s\S]*?"urgent-breathing"[\s\S]*?"urgent-neurologic"[\s\S]*?"urgent-fall"/,
+  "a combined warning-sign answer should be clarified symptom by symptom"
 );
 assert.doesNotMatch(
   source,
@@ -910,8 +910,8 @@ assert.doesNotMatch(
 );
 assert.match(
   source,
-  /stageName === "urgent"[\s\S]*?response === "unsure"[\s\S]*?renderPainSafetyStage\("urgent-chest"\)/,
-  "not sure must open clarification instead of immediately showing an urgent outcome"
+  /stageName === "urgent"[\s\S]*?response === "yes" \|\| response === "unsure"[\s\S]*?renderPainSafetyStage\("urgent-chest"\)/,
+  "yes and not sure must open focused questions so the urgent reason is recorded"
 );
 assert.match(
   source,
@@ -927,6 +927,11 @@ assert.match(
   source,
   /language_interpretations: answers\.languageInterpretations/,
   "constrained AI language notes should be recorded with the safety check"
+);
+assert.match(
+  source,
+  /urgent_combined_response: answers\.urgentCombined[\s\S]*?urgent_symptom_details:[\s\S]*?chest: answers\.urgentChest[\s\S]*?breathing: answers\.urgentBreathing[\s\S]*?neurologic: answers\.urgentNeurologic[\s\S]*?fall: answers\.urgentFall/,
+  "the combined answer and focused symptom answers should all be saved for clinician review"
 );
 assert.match(
   source,

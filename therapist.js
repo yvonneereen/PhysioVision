@@ -858,7 +858,9 @@ function renderTriageEvidence(patient) {
       ? "has-limited-data"
       : "has-no-worsening";
   const statusLabel = summary.evidence_status === "recorded_concerns"
-    ? `${summary.concern_count} recorded concern${summary.concern_count === 1 ? "" : "s"}`
+    ? signals.length && signals.every(signal => signal.event_scope === "historical_safety_check")
+      ? `${summary.concern_count} recorded safety event${summary.concern_count === 1 ? "" : "s"}`
+      : `${summary.concern_count} recorded concern${summary.concern_count === 1 ? "" : "s"}`
     : summary.evidence_status === "limited_data"
       ? "Limited recorded data"
       : "No worsening signal recorded";

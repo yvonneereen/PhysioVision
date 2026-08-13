@@ -153,6 +153,82 @@ def _quality_summary(sessions):
     return summaries[0]
 
 
+def _append_unique(items, value):
+    value = " ".join(str(value or "").split())
+    if value and value not in items:
+        items.append(value)
+
+
+def _recorded_safety_reasons(review, safety):
+    """Describe only the answers actually saved by the safety interview."""
+
+    urgent_reasons = []
+    details = safety.get("urgent_symptom_details")
+    details = details if isinstance(details, dict) else {}
+    urgent_labels = {
+        "chest": "chest pressure, tightness, heaviness, or chest pain",
+        "breathing": "unusual shortness of breath or difficulty breathing",
+        "neurologic": (
+            "dizziness, faintness, sudden weakness, or numbness"
+        ),
+        "fall": "a fall before or during the exercise",
+    }
+    for key, label in urgent_labels.items():
+        if details.get(key) == "yes":
+            _append_unique(urgent_reasons, label)
+
+    fact_labels = {
+        "chest_symptom": urgent_labels["chest"],
+        "breathing_difficulty": urgent_labels["breathing"],
+        "dizziness_or_faintness": "dizziness or faintness",
+        "sudden_weakness_or_numbness": "sudden weakness or numbness",
+        "fall": urgent_labels["fall"],
+        "unable_to_move_safely": "being unable to move to a safe position",
+        "needs_help": "needing help to move safely",
+    }
+    interpretations = safety.get("language_interpretations")
+    if isinstance(interpretations, list):
+        for interpretation in interpretations[:8]:
+            if not isinstance(interpretation, dict):
+                continue
+            for fact in interpretation.get("facts", [])[:8]:
+                if fact in fact_labels:
+                    _append_unique(urgent_reasons, fact_labels[fact])
+
+    if safety.get("safe_movement") == "help":
+        _append_unique(urgent_reasons, "needing help to move safely")
+
+    follow_up_reasons = []
+    if review.pain_level >= 7:
+        _append_unique(follow_up_reasons, f"pain of {review.pain_level}/10")
+    if safety.get("urgent_symptoms") == "unsure":
+        _append_unique(
+            follow_up_reasons,
+            "being unsure whether an urgent warning sign was present",
+        )
+    rest_labels = {
+        "same": "pain staying the same after rest",
+        "worse": "pain getting worse after rest",
+        "unsure": "being unsure whether pain changed after rest",
+    }
+    if safety.get("rest_trend") in rest_labels:
+        _append_unique(
+            follow_up_reasons,
+            rest_labels[safety["rest_trend"]],
+        )
+    if safety.get("safe_movement") == "nearby":
+        _append_unique(
+            follow_up_reasons,
+            "needing another person nearby to move safely",
+        )
+
+    combined_yes_without_detail = bool(
+        safety.get("urgent_symptoms") == "yes"
+        and not urgent_reasons
+    )
+    return urgent_reasons, follow_up_reasons, combined_yes_without_detail
+
+
 def _safety_signal(checkins):
     review = next(
         (
@@ -167,16 +243,55 @@ def _safety_signal(checkins):
         return None
     safety = review.safety_follow_up or {}
     outcome = safety.get("outcome")
-    outcome_label = {
-        "urgent": "The saved safety check advised stopping and seeking urgent help.",
-        "professional": "The saved safety check advised professional review before continuing.",
-    }.get(outcome, "A saved pain check-in was marked for professional review.")
+    urgent_reasons, follow_up_reasons, legacy_combined = (
+        _recorded_safety_reasons(review, safety)
+    )
     location = review.location_notes.strip()
+    if outcome == "urgent" and urgent_reasons:
+        detail = (
+            "The urgent advice was triggered because the patient reported "
+            f"{', and '.join(urgent_reasons)}."
+        )
+    elif outcome == "urgent" and legacy_combined:
+        detail = (
+            "The patient answered Yes when asked whether they had chest "
+            "pressure, unusual shortness of breath, dizziness or faintness, "
+            "sudden weakness or numbness, or a fall. This older check did not "
+            "capture which specific warning sign applied."
+        )
+    elif outcome == "professional" and (follow_up_reasons or urgent_reasons):
+        reasons = urgent_reasons + follow_up_reasons
+        detail = (
+            "Professional review was advised because the patient reported "
+            f"{', and '.join(reasons)}."
+        )
+    elif outcome == "professional":
+        detail = (
+            "This check was marked for professional review, but the saved "
+            "record does not contain the answer that triggered it."
+        )
+    else:
+        detail = "A pain safety check was marked for professional review."
+    if location:
+        detail += f" Reported area: {location}."
+    detail += (
+        " This is a dated safety event, separate from the movement-quality "
+        "trend; the record does not show whether the symptom is still present."
+    )
     return {
         "kind": "safety",
         "severity": "high",
-        "label": "Safety follow-up needs review",
-        "detail": f"{outcome_label}{f' Reported area: {location}.' if location else ''}",
+        "event_scope": "historical_safety_check",
+        "label": (
+            "Historical safety check — urgent advice"
+            if outcome == "urgent"
+            else "Historical safety check — professional review"
+        ),
+        "detail": detail,
+        "recorded_reasons": urgent_reasons + follow_up_reasons,
+        "specific_reason_recorded": not legacy_combined and bool(
+            urgent_reasons or follow_up_reasons
+        ),
         "recorded_at": _iso(review.checked_at),
     }
 

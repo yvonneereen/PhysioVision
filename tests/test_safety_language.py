@@ -77,6 +77,19 @@ class SafetyLanguageValidationTests(unittest.TestCase):
         self.assertTrue(result["matched"])
         self.assertEqual(result["response"], "help")
 
+    def test_fall_fact_uses_the_focused_fall_answer(self):
+        result = validate_safety_language_interpretation(
+            "urgent-fall",
+            {
+                "response": "no",
+                "confidence": "high",
+                "facts": ["fall"],
+                "summary": "The speaker reports falling during the exercise.",
+            },
+        )
+        self.assertTrue(result["matched"])
+        self.assertEqual(result["response"], "yes")
+
 
 if __name__ == "__main__":
     unittest.main()

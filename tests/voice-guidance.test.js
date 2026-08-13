@@ -140,6 +140,14 @@ assert.equal(
   parsePainSafetyResponse("urgent-neurologic", "My arm feels numb"),
   "yes"
 );
+assert.equal(
+  parsePainSafetyResponse("urgent-fall", "I fell during the exercise"),
+  "yes"
+);
+assert.equal(
+  parsePainSafetyResponse("urgent-fall", "No, I did not fall"),
+  "no"
+);
 assert.equal(parsePainSafetyResponse("location", "My right knee"), "knee");
 assert.equal(parsePainSafetyResponse("location", "我的膝盖"), "knee");
 assert.equal(parsePainSafetyResponse("location", "sakit di buku lali"), "ankle");

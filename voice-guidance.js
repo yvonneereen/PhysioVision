@@ -1,7 +1,7 @@
 import {
   getSpeechLocale,
   translateText,
-} from "./i18n.js?v=33";
+} from "./i18n.js?v=34";
 import { generateGuidanceSpeech } from "./api.js?v=32";
 
 const VOICE_PREFERENCE_KEY = "physiovision.voice.enabled.v1";
@@ -426,6 +426,16 @@ export function parsePainSafetyResponse(stage, transcript) {
           "மயக்கம்",
           "பலவீனம்",
           "உணர்வின்மை",
+        ],
+        "urgent-fall": [
+          "yes",
+          "fell",
+          "fallen",
+          "fall",
+          "跌倒",
+          "摔倒",
+          "jatuh",
+          "விழுந்த",
         ],
       };
       if (includesAny("是", "有", "ya", "ஆம்")) return "yes";

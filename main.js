@@ -43,7 +43,7 @@ import {
 } from "./api.js?v=32";
 import { analysePatientTrend } from "./patient-dashboard-state.js?v=13";
 import { DRAFT_EXERCISES } from "./exercises/catalog.js?v=3";
-import { translateText } from "./i18n.js?v=33";
+import { translateText } from "./i18n.js?v=34";
 import {
   parseConfirmationResponse,
   parsePainLevel,
@@ -53,7 +53,7 @@ import {
   isSafariBrowser,
   readMicrophonePermissionState,
   voiceGuidance,
-} from "./voice-guidance.js?v=41";
+} from "./voice-guidance.js?v=42";
 import {
   PRACTICE_VIEWS,
   acceptedWellnessPlan,
@@ -5129,14 +5129,14 @@ const PAIN_SAFETY_STEPS = Object.freeze({
       "Are you experiencing chest pressure, unusual shortness of breath, "
       + "dizziness, faintness, sudden weakness or numbness, or have you fallen?",
     help:
-      "Choose Yes if any one of these applies. Choose Not sure and I will ask "
-      + "about each warning sign separately.",
+      "Choose Yes if any one of these applies. Choose Yes or Not sure and I "
+      + "will ask about each warning sign separately so the reason is recorded.",
     choices: [
       ["no", "No, none of these"],
       ["yes", "Yes"],
       ["unsure", "Not sure"],
     ],
-    field: "urgentSymptoms",
+    field: "urgentCombined",
     next: "location",
   },
   "urgent-chest": {
@@ -5174,6 +5174,17 @@ const PAIN_SAFETY_STEPS = Object.freeze({
       ["unsure", "Not sure"],
     ],
     field: "urgentNeurologic",
+    next: "urgent-fall",
+  },
+  "urgent-fall": {
+    question: "Did you fall just before or during this exercise?",
+    help: "Choose Yes even if you stood up again without help.",
+    choices: [
+      ["no", "No"],
+      ["yes", "Yes"],
+      ["unsure", "Not sure"],
+    ],
+    field: "urgentFall",
     next: "location",
   },
   location: {
@@ -6128,10 +6139,12 @@ function requiresPainSafetyInterview() {
 
 function createPainSafetyAnswers() {
   return {
+    urgentCombined: "",
     urgentSymptoms: "",
     urgentChest: "",
     urgentBreathing: "",
     urgentNeurologic: "",
+    urgentFall: "",
     painLocation: "",
     painLocationDescription: "",
     painSide: "",
@@ -6336,11 +6349,13 @@ function painSafetyCheckinPayload(state, reportForPhysiotherapist) {
       .filter(Boolean)
       .join(" "),
     safety_follow_up: {
+      urgent_combined_response: answers.urgentCombined,
       urgent_symptoms: answers.urgentSymptoms,
       urgent_symptom_details: {
         chest: answers.urgentChest,
         breathing: answers.urgentBreathing,
         neurologic: answers.urgentNeurologic,
+        fall: answers.urgentFall,
       },
       pain_location: answers.painLocation,
       pain_location_description: answers.painLocationDescription,
@@ -6514,11 +6529,10 @@ function acceptPainSafetyResponse(response) {
   }
   painCheckinState.safetyAnswers[step.field] = response;
   if (stageName === "urgent") {
-    if (response === "yes") {
-      renderPainSafetyOutcome("urgent");
-    } else if (response === "unsure") {
+    if (response === "yes" || response === "unsure") {
       renderPainSafetyStage("urgent-chest");
     } else {
+      painCheckinState.safetyAnswers.urgentSymptoms = "no";
       renderPainSafetyStage(step.next);
     }
     return;
@@ -6534,10 +6548,13 @@ function acceptPainSafetyResponse(response) {
         "urgentChest",
         "urgentBreathing",
         "urgentNeurologic",
+        "urgentFall",
       ].map((field) => painCheckinState.safetyAnswers[field]);
       painCheckinState.safetyAnswers.urgentSymptoms =
         clarificationAnswers.every((answer) => answer === "no")
-          ? "no"
+          ? painCheckinState.safetyAnswers.urgentCombined === "yes"
+            ? "unsure"
+            : "no"
           : "unsure";
     }
     renderPainSafetyStage(step.next);

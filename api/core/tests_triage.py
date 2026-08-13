@@ -291,6 +291,79 @@ class ClinicianTriageTests(APITestCase):
         self.assertIsNone(summary["movement_quality"])
         self.assertIn("selected physiotherapist-guided care", summary["request_reason"])
 
+    def _queue_safety_signal(self, safety_follow_up, *, pain_level=5):
+        now = timezone.now()
+        self.wellness.physiotherapist_requested_at = now
+        self.wellness.save(update_fields=["physiotherapist_requested_at"])
+        PainCheckin.objects.create(
+            patient=self.wellness,
+            pain_level=pain_level,
+            timing=PainCheckinTiming.AFTER,
+            recovery_status=RecoveryStatus.SAME,
+            safety_follow_up=safety_follow_up,
+            requires_review=True,
+            checked_at=now - timedelta(days=1),
+        )
+        self.client.force_authenticate(self.clinician_user)
+        response = self.client.get(self.queue_url)
+        self.assertEqual(response.status_code, 200)
+        item = next(
+            row for row in response.data
+            if row["id"] == str(self.wellness.id)
+        )
+        return next(
+            signal for signal in item["review_summary"]["signals"]
+            if signal["kind"] == "safety"
+        )
+
+    def test_urgent_safety_signal_explains_the_recorded_breathing_answer(self):
+        signal = self._queue_safety_signal({
+            "outcome": "urgent",
+            "urgent_combined_response": "yes",
+            "urgent_symptoms": "yes",
+            "urgent_symptom_details": {
+                "chest": "no",
+                "breathing": "yes",
+                "neurologic": "",
+                "fall": "",
+            },
+        })
+
+        self.assertEqual(signal["event_scope"], "historical_safety_check")
+        self.assertEqual(signal["label"], "Historical safety check — urgent advice")
+        self.assertTrue(signal["specific_reason_recorded"])
+        self.assertIn("shortness of breath", signal["detail"])
+        self.assertIn("does not show whether the symptom is still present", signal["detail"])
+        self.assertEqual(
+            signal["recorded_reasons"],
+            ["unusual shortness of breath or difficulty breathing"],
+        )
+
+    def test_legacy_combined_urgent_answer_does_not_invent_a_symptom(self):
+        signal = self._queue_safety_signal({
+            "outcome": "urgent",
+            "urgent_symptoms": "yes",
+        })
+
+        self.assertFalse(signal["specific_reason_recorded"])
+        self.assertEqual(signal["recorded_reasons"], [])
+        self.assertIn("answered Yes", signal["detail"])
+        self.assertIn("did not capture which specific warning sign", signal["detail"])
+        self.assertNotIn("reported unusual shortness of breath", signal["detail"])
+
+    def test_professional_review_signal_explains_each_saved_answer(self):
+        signal = self._queue_safety_signal({
+            "outcome": "professional",
+            "urgent_symptoms": "no",
+            "rest_trend": "worse",
+            "safe_movement": "nearby",
+        }, pain_level=7)
+
+        self.assertTrue(signal["specific_reason_recorded"])
+        self.assertIn("pain of 7/10", signal["detail"])
+        self.assertIn("pain getting worse after rest", signal["detail"])
+        self.assertIn("another person nearby", signal["detail"])
+
     @patch("api.core.views.deliver_email")
     def test_claim_is_the_event_that_switches_pending_wellness_patient(
         self,

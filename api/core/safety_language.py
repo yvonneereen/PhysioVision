@@ -62,6 +62,11 @@ STAGES = {
         "allowed": ("yes", "no", "unsure"),
         "retry": "Are you dizzy, faint, suddenly weak, or numb? Say yes, no, or not sure.",
     },
+    "urgent-fall": {
+        "question": "Did the person fall just before or during the exercise?",
+        "allowed": ("yes", "no", "unsure"),
+        "retry": "Did you fall just before or during this exercise? Say yes, no, or not sure.",
+    },
     "location": {
         "question": "Where is the pain?",
         "allowed": ("knee", "hip", "ankle", "back", "shoulder", "other"),
@@ -139,6 +144,7 @@ def _critical_override(stage, facts):
             "dizziness_or_faintness",
             "sudden_weakness_or_numbness",
         },
+        "urgent-fall": {"fall"},
     }
     if concerning & focused_facts.get(stage, set()):
         return "yes"
@@ -163,6 +169,7 @@ def _has_reassuring_conflict(stage, response, facts):
             "dizziness_or_faintness",
             "sudden_weakness_or_numbness",
         },
+        "urgent-fall": {"fall"},
         "mobility": {"unable_to_move_safely", "needs_help"},
         "rest": {"pain_getting_worse"},
         "fall-wellbeing": CONCERNING_FACTS,

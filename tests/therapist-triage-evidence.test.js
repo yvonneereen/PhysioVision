@@ -18,6 +18,11 @@ assert.match(
 );
 assert.match(
   therapist,
+  /signal\.event_scope === "historical_safety_check"[\s\S]*?recorded safety event/,
+  "a dated safety answer should be separated from the current movement trend",
+);
+assert.match(
+  therapist,
   /Limited recorded data[\s\S]*?Reason needs confirming[\s\S]*?does not rule out a problem/,
   "missing measurements must be identified honestly rather than inventing a problem",
 );

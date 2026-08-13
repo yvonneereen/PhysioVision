@@ -7675,6 +7675,7 @@ details.metrics summary {
 .rx-form {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   gap: 12px;
   padding: 20px;
   border: 1px solid var(--line);
@@ -7683,12 +7684,24 @@ details.metrics summary {
 }
 .rx-form label { display: flex; flex-direction: column; gap: 4px; font-size: 1rem; font-weight: 600; }
 .rx-form select, .rx-form input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   font-size: 1rem;
 }
-.rx-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.rx-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: 0;
+  gap: 10px;
+}
+.rx-row label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .rx-status { margin: 0; font-size: 1rem; color: var(--muted); }
 .programme-list-heading {
   gap: 16px;
